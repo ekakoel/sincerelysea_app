@@ -1,0 +1,70 @@
+{
+  "@@locale": "en",
+  "captionMaxLength": "Caption maximum is {count} characters",
+  "@captionMaxLength": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "sharePreview": "Check out a post by @{username} on SincerelySea{previewSection}\n\nOpen post:\n{postLink}\n\nDo not have SincerelySea yet?\nAndroid: {playStoreUrl}\niOS: {appStoreUrl}",
+  "@sharePreview": {
+    "placeholders": {
+      "username": {
+        "type": "String"
+      },
+      "previewSection": {
+        "type": "String"
+      },
+      "postLink": {
+        "type": "String"
+      },
+      "playStoreUrl": {
+        "type": "String"
+      },
+      "appStoreUrl": {
+        "type": "String"
+      }
+    }
+  },
+  "shareSubject": "Check out an interesting post on SincerelySea",
+  "deleteCommentTitle": "Delete comment",
+  "cancelLabel": "Cancel",
+  "deleteLabel": "Delete",
+  "confirmDeleteComment": "Are you sure you want to delete this comment?",
+  "failedToDelete": "Failed to delete: {error}",
+  "@failedToDelete": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "failedToLoadImage": "Failed to load image",
+  "usernameCanOnlyChangeOnce": "Username can only be changed once",
+  "usernameMustBeDifferent": "New username must be different from current username",
+  "usernamePlaceholder": "new_username",
+  "usernameAlreadyChanged": "Username has already been changed",
+  "usernameCanChangeOnce": "Username can be changed only once",
+  "displayNameRequired": "Display name is required",
+  "writeCommentHint": "Write a comment...",
+  "emptyImageUrl": "Image URL is empty",
+  "invalidImageUrl": "Invalid image URL",
+  "forgotPasswordTitle": "Forgot Password",
+  "forgotPasswordDescription": "Enter your registered email to reset your password.",
+  "resetPasswordLinkSent": "Password reset link has been sent to your email",
+  "pleaseEnterEmail": "Please enter your email",
+  "invalidEmailFormat": "Invalid email format",
+  "autoResendIfNotReceived": "Automatically resend if not received",
+  "resendButton": "Resend ({seconds})",
+  "@resendButton": {
+    "placeholders": {
+      "seconds": {
+        "type": "int"
+      }
+    }
+  },
+  "sendResetLink": "Send Reset Link",
+  "backToLogin": "Back to Login"
+}

@@ -1,0 +1,30 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    // Post images are readable by anyone with URL.
+    // Writer is restricted to file name prefixed by own uid: {uid}_{timestamp}.jpg
+    match /post_images/{fileName} {
+      allow read: if true;
+      allow write, delete: if signedIn()
+        && request.resource != null
+        && request.resource.contentType.matches('image/.*')
+        && fileName.matches('^' + request.auth.uid + '_.*$');
+    }
+
+    // Profile image path: profile_images/{uid}.jpg
+    match /profile_images/{fileName} {
+      allow read: if true;
+      allow write, delete: if signedIn()
+        && fileName == request.auth.uid + '.jpg';
+    }
+
+    // Deny other storage paths by default.
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

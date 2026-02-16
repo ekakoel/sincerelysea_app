@@ -1,0 +1,272 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(uid) {
+      return isSignedIn() && request.auth.uid == uid;
+    }
+
+    function onlyChanges(allowedKeys) {
+      return request.resource.data.diff(resource.data).changedKeys().hasOnly(allowedKeys);
+    }
+
+    function isValidImageUrl(v) {
+      return v == null
+        || (v is string
+          && (v.size() == 0
+            || v.matches('^gs://.*$')
+            || v.matches('^https://firebasestorage.googleapis.com/.*$')
+            || v.matches('^https://storage.googleapis.com/.*$')));
+    }
+
+    function isValidUsername(v) {
+      return v is string
+        && v.matches('^[a-z0-9_]{3,20}$');
+    }
+
+    function isFollower(ownerUid) {
+      return isSignedIn()
+        && exists(/databases/$(database)/documents/users/$(ownerUid)/followers/$(request.auth.uid));
+    }
+
+    function canReadPost() {
+      return isSignedIn();
+    }
+
+    function canReadPostById(postId) {
+      return isSignedIn();
+    }
+
+    function usernameUnchanged() {
+      return onlyChanges([
+          'displayName',
+          'bio',
+          'location',
+          'website',
+          'photoUrl',
+          'email',
+          'isPrivate',
+          'allowComments',
+          'updatedAt'
+        ])
+        && request.resource.data.username == resource.data.username
+        && request.resource.data.usernameLower == resource.data.usernameLower
+        && request.resource.data.usernameChangedOnce == resource.data.usernameChangedOnce;
+    }
+
+    function usernameChangedOneTime() {
+      return onlyChanges([
+          'username',
+          'usernameLower',
+          'usernameChangedOnce',
+          'updatedAt'
+        ])
+        && isValidUsername(request.resource.data.usernameLower)
+        && request.resource.data.username == request.resource.data.usernameLower
+        && request.resource.data.usernameLower != resource.data.usernameLower
+        && !(resource.data.usernameChangedOnce == true)
+        && request.resource.data.usernameChangedOnce == true;
+    }
+
+    function shareCountIncrementedByOne() {
+      return request.resource.data.shareCount is int
+        && (
+          (resource.data.shareCount is int
+            && request.resource.data.shareCount == resource.data.shareCount + 1)
+          || (!(resource.data.shareCount is int)
+            && request.resource.data.shareCount == 1)
+        );
+    }
+
+    function shareActorValid() {
+      return request.resource.data.lastShareActorUid is string
+        && request.resource.data.lastShareActorUid == request.auth.uid;
+    }
+
+    match /posts/{postId} {
+      allow read: if canReadPost();
+
+      allow create: if isSignedIn()
+        && request.resource.data.uid == request.auth.uid
+        && isValidImageUrl(request.resource.data.imageUrl)
+        && (request.resource.data.visibility in ['public', 'followers', 'private'])
+        && (
+          request.resource.data.allowComments == null
+          || request.resource.data.allowComments in ['everyone', 'followers', 'none']
+        );
+
+      // Owner can edit any post fields but cannot transfer ownership.
+      allow update: if (isOwner(resource.data.uid)
+          && request.resource.data.uid == resource.data.uid)
+          && isValidImageUrl(request.resource.data.imageUrl)
+        // Non-owner updates are limited to engagement fields.
+        || (isSignedIn()
+          && request.resource.data.uid == resource.data.uid
+          && (
+            onlyChanges(['likes'])
+            || (
+              onlyChanges(['shareCount', 'lastShareActorUid'])
+              && shareCountIncrementedByOne()
+              && shareActorValid()
+            )
+          ));
+
+      allow delete: if isOwner(resource.data.uid);
+
+      match /comments/{commentId} {
+        allow read: if canReadPostById(postId);
+
+        allow create: if isSignedIn()
+          && request.resource.data.uid == request.auth.uid;
+
+        // Owner can edit/delete own comment, others can only toggle likes.
+        allow update: if (isOwner(resource.data.uid)
+            && request.resource.data.uid == resource.data.uid)
+          || (isSignedIn()
+            && request.resource.data.uid == resource.data.uid
+            && onlyChanges(['likes']));
+
+        allow delete: if isOwner(resource.data.uid);
+
+        match /replies/{replyId} {
+          allow read: if canReadPostById(postId);
+
+          allow create: if isSignedIn()
+            && request.resource.data.uid == request.auth.uid
+            && request.resource.data.content is string
+            && request.resource.data.content.size() > 0
+            && request.resource.data.content.size() <= 500;
+
+          allow update: if (isOwner(resource.data.uid)
+              && request.resource.data.uid == resource.data.uid)
+            || (isSignedIn()
+              && request.resource.data.uid == resource.data.uid
+              && onlyChanges(['likes']));
+
+          allow delete: if isOwner(resource.data.uid);
+        }
+      }
+    }
+
+    match /usernames/{usernameLower} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn()
+        && isValidUsername(usernameLower)
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.username == usernameLower
+        && !exists(/databases/$(database)/documents/usernames/$(usernameLower));
+      allow delete: if isSignedIn()
+        && resource.data.uid == request.auth.uid;
+      allow update: if false;
+    }
+
+    match /users/{uid} {
+      allow read: if isSignedIn();
+      allow create, delete: if isOwner(uid);
+      allow update: if isOwner(uid)
+        && (usernameUnchanged() || usernameChangedOneTime());
+
+      // uid is the profile owner, followerUid is the authenticated follower id.
+      match /followers/{followerUid} {
+        allow read: if isSignedIn();
+        allow create, update: if isSignedIn()
+          && followerUid == request.auth.uid
+          && uid != request.auth.uid
+          && request.resource.data.uid == request.auth.uid;
+        allow delete: if isSignedIn()
+          && followerUid == request.auth.uid
+          && uid != request.auth.uid;
+      }
+
+      match /follow_requests/{requestUid} {
+        allow read: if isOwner(uid) || requestUid == request.auth.uid;
+        allow create: if isSignedIn()
+          && requestUid == request.auth.uid
+          && uid != request.auth.uid;
+        allow delete: if isOwner(uid) || requestUid == request.auth.uid;
+        allow update: if isOwner(uid) || requestUid == request.auth.uid;
+      }
+
+      // uid is the authenticated user, targetUid is who they follow.
+      match /following/{targetUid} {
+        allow read: if isOwner(uid);
+        allow create, update: if isOwner(uid)
+          && targetUid != request.auth.uid
+          && request.resource.data.uid == targetUid;
+        allow delete: if isOwner(uid)
+          && targetUid != request.auth.uid;
+      }
+
+      match /blocks/{targetUid} {
+        allow read, create, update, delete: if isOwner(uid);
+      }
+
+      match /hidden_posts/{postId} {
+        allow read, create, update, delete: if isOwner(uid);
+      }
+
+      match /notifications/{notificationId} {
+        allow read, update, delete: if isOwner(uid);
+        allow create: if isSignedIn()
+          && request.resource.data.type is string
+          && request.resource.data.actorUid == request.auth.uid;
+      }
+
+      match /saved_posts/{postId} {
+        allow read: if isOwner(uid);
+        allow create, update: if isOwner(uid)
+          && request.resource.data.postId == postId;
+        allow delete: if isOwner(uid);
+      }
+
+      match /collections/{collectionId} {
+        allow read: if isOwner(uid);
+        allow create, update: if isOwner(uid)
+          && request.resource.data.uid == request.auth.uid
+          && request.resource.data.title is string
+          && request.resource.data.title.size() > 0
+          && request.resource.data.title.size() <= 120
+          && isValidImageUrl(request.resource.data.imageUrl)
+          && (
+            request.resource.data.postId == null
+            || request.resource.data.postId is string
+          );
+        allow delete: if isOwner(uid);
+      }
+
+      match /wishlists/{wishlistId} {
+        allow read: if isOwner(uid);
+
+        allow create: if isOwner(uid)
+          && request.resource.data.uid == request.auth.uid
+          && request.resource.data.title is string
+          && request.resource.data.title.size() > 0
+          && request.resource.data.title.size() <= 80
+          && request.resource.data.status in ['active', 'fulfilled'];
+
+        allow update: if isOwner(uid)
+          && request.resource.data.uid == resource.data.uid
+          && request.resource.data.title is string
+          && request.resource.data.title.size() > 0
+          && request.resource.data.title.size() <= 80
+          && request.resource.data.status in ['active', 'fulfilled'];
+
+        allow delete: if isOwner(uid);
+      }
+    }
+
+    match /reports/{reportId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn()
+        && request.resource.data.reporterUid == request.auth.uid
+        && request.resource.data.type in ['post', 'user']
+        && request.resource.data.reason is string
+        && request.resource.data.reason.size() > 0
+        && request.resource.data.reason.size() <= 120;
+      allow update, delete: if false;
+    }
+  }
+}
