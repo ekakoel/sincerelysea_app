@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'dart:async';
 import 'dart:math' as math;
+import 'dart:ui' as ui;
 
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -66,6 +67,96 @@ class CreatePostRequest {
   final List<String> hashtags;
 }
 
+Future<ui.Size> _decodeImageSize(File file) async {
+  final Uint8List bytes = await file.readAsBytes();
+  final ui.Codec codec = await ui.instantiateImageCodec(bytes);
+  final ui.FrameInfo frame = await codec.getNextFrame();
+  final ui.Image image = frame.image;
+  final ui.Size size = ui.Size(image.width.toDouble(), image.height.toDouble());
+  image.dispose();
+  return size;
+}
+
+ui.Size _coverSizeForSquareFrame({
+  required ui.Size imageSize,
+  required double frameSize,
+}) {
+  final double imageRatio = imageSize.width / imageSize.height;
+  if (imageRatio >= 1) {
+    final double height = frameSize;
+    final double width = height * imageRatio;
+    return ui.Size(width, height);
+  }
+  final double width = frameSize;
+  final double height = width / imageRatio;
+  return ui.Size(width, height);
+}
+
+Future<File> _renderSquarePreviewImage({
+  required File originalFile,
+  required ui.Size baseImageSizeInPreview,
+  required Matrix4 transform,
+  required double previewFrameSize,
+  int outputSize = 1080,
+}) async {
+  final Uint8List sourceBytes = await originalFile.readAsBytes();
+  final ui.Codec codec = await ui.instantiateImageCodec(sourceBytes);
+  final ui.FrameInfo sourceFrame = await codec.getNextFrame();
+  final ui.Image sourceImage = sourceFrame.image;
+
+  final ui.PictureRecorder recorder = ui.PictureRecorder();
+  final Canvas canvas = Canvas(
+    recorder,
+    Rect.fromLTWH(0, 0, outputSize.toDouble(), outputSize.toDouble()),
+  );
+  final Paint paint = Paint()..filterQuality = FilterQuality.high;
+
+  canvas.clipRect(
+    Rect.fromLTWH(0, 0, outputSize.toDouble(), outputSize.toDouble()),
+  );
+
+  final double ratio = outputSize / previewFrameSize;
+  canvas.scale(ratio, ratio);
+  canvas.transform(transform.storage);
+  canvas.drawImageRect(
+    sourceImage,
+    Rect.fromLTWH(
+      0,
+      0,
+      sourceImage.width.toDouble(),
+      sourceImage.height.toDouble(),
+    ),
+    Rect.fromLTWH(
+      0,
+      0,
+      baseImageSizeInPreview.width,
+      baseImageSizeInPreview.height,
+    ),
+    paint,
+  );
+
+  final ui.Image rendered = await recorder.endRecording().toImage(
+    outputSize,
+    outputSize,
+  );
+  final ByteData? bytes = await rendered.toByteData(
+    format: ui.ImageByteFormat.png,
+  );
+
+  sourceImage.dispose();
+  rendered.dispose();
+
+  if (bytes == null) {
+    throw Exception('Failed to render preview image.');
+  }
+
+  final File output = File(
+    '${Directory.systemTemp.path}/post_preview_square_${DateTime.now().microsecondsSinceEpoch}.png',
+  );
+  await output.writeAsBytes(bytes.buffer.asUint8List(), flush: true);
+  return output;
+}
+
 Future<void> showCreatePostDialog(
   BuildContext rootContext, {
   required Future<void> Function(CreatePostRequest request) onSubmit,
@@ -92,302 +183,586 @@ Future<void> showCreatePostDialog(
           final TextEditingController hashtagController =
               TextEditingController();
           File? selectedImage;
+          ui.Size? selectedImageSize;
+          ui.Size? previewBaseSize;
+          double previewFrameSize = 220;
+          bool isPreviewTransformInitialized = false;
+          final TransformationController previewTransformController =
+              TransformationController();
+          double currentPreviewScale = 1;
           GeoPoint? selectedGeoPoint;
           bool isUploading = false;
           bool isFetchingLocation = false;
 
           return StatefulBuilder(
             builder: (BuildContext context, StateSetter setState) {
-              return AlertDialog(
-                title: const Text('New Post'),
-                content: SingleChildScrollView(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: <Widget>[
-                      GestureDetector(
-                        onTap: () async {
-                          final ImagePicker picker = ImagePicker();
-                          final XFile? pickedFile = await picker.pickImage(
-                            source: ImageSource.gallery,
-                          );
-                          if (pickedFile != null) {
-                            setState(
-                              () => selectedImage = File(pickedFile.path),
-                            );
-                          }
-                        },
-                        child: Container(
-                          width: double.infinity,
-                          height: 220,
-                          decoration: BoxDecoration(
-                            color: AppColors.gray100,
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(color: AppColors.gray400),
+              return Dialog(
+                insetPadding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 20,
+                ),
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(
+                    maxWidth: 560,
+                    maxHeight: MediaQuery.of(context).size.height * 0.82,
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 14, 16, 12),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: <Widget>[
+                        const Align(
+                          alignment: Alignment.centerLeft,
+                          child: Text(
+                            'New Post',
+                            style: TextStyle(
+                              fontSize: 20,
+                              fontWeight: FontWeight.w600,
+                            ),
                           ),
-                          child: selectedImage != null
-                              ? ClipRRect(
-                                  borderRadius: BorderRadius.circular(12),
-                                  child: Stack(
-                                    fit: StackFit.expand,
-                                    children: <Widget>[
-                                      Image.file(
-                                        selectedImage!,
-                                        fit: BoxFit.cover,
-                                      ),
-                                      Align(
-                                        alignment: Alignment.topRight,
-                                        child: Container(
-                                          margin: const EdgeInsets.all(8),
-                                          decoration: BoxDecoration(
-                                            color: AppColors.black54,
-                                            borderRadius: BorderRadius.circular(
-                                              20,
-                                            ),
+                        ),
+                        const SizedBox(height: 8),
+                        Expanded(
+                          child: SingleChildScrollView(
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: <Widget>[
+                                GestureDetector(
+                                  onTap: () async {
+                                    final ImagePicker picker = ImagePicker();
+                                    final XFile? pickedFile = await picker
+                                        .pickImage(source: ImageSource.gallery);
+                                    if (pickedFile == null) {
+                                      return;
+                                    }
+
+                                    final File file = File(pickedFile.path);
+                                    try {
+                                      final ui.Size imageSize =
+                                          await _decodeImageSize(file);
+                                      if (!context.mounted) {
+                                        return;
+                                      }
+                                      setState(() {
+                                        selectedImage = file;
+                                        selectedImageSize = imageSize;
+                                        previewBaseSize = null;
+                                        isPreviewTransformInitialized = false;
+                                        currentPreviewScale = 1;
+                                        previewTransformController.value =
+                                            Matrix4.identity();
+                                      });
+                                    } catch (e) {
+                                      if (!rootContext.mounted) {
+                                        return;
+                                      }
+                                      ScaffoldMessenger.of(
+                                        rootContext,
+                                      ).showSnackBar(
+                                        SnackBar(
+                                          content: Text(
+                                            'Failed to read image: $e',
                                           ),
-                                          child: const Padding(
-                                            padding: EdgeInsets.all(6.0),
-                                            child: Icon(
-                                              Icons.edit,
-                                              color: AppColors.white,
-                                              size: 16,
+                                        ),
+                                      );
+                                    }
+                                  },
+                                  child: AspectRatio(
+                                    aspectRatio: 1,
+                                    child: Container(
+                                      width: double.infinity,
+                                      decoration: BoxDecoration(
+                                        color: AppColors.gray100,
+                                        borderRadius: BorderRadius.circular(12),
+                                        border: Border.all(
+                                          color: AppColors.gray400,
+                                        ),
+                                      ),
+                                      child:
+                                          selectedImage != null &&
+                                              selectedImageSize != null
+                                          ? ClipRRect(
+                                              borderRadius:
+                                                  BorderRadius.circular(12),
+                                              child: LayoutBuilder(
+                                                builder:
+                                                    (
+                                                      BuildContext context,
+                                                      BoxConstraints
+                                                      constraints,
+                                                    ) {
+                                                      previewFrameSize =
+                                                          constraints.maxWidth
+                                                              .clamp(1, 3000);
+                                                      final ui.Size baseSize =
+                                                          _coverSizeForSquareFrame(
+                                                            imageSize:
+                                                                selectedImageSize!,
+                                                            frameSize:
+                                                                previewFrameSize,
+                                                          );
+                                                      previewBaseSize =
+                                                          baseSize;
+
+                                                      if (!isPreviewTransformInitialized) {
+                                                        final double tx =
+                                                            (previewFrameSize -
+                                                                baseSize
+                                                                    .width) /
+                                                            2;
+                                                        final double ty =
+                                                            (previewFrameSize -
+                                                                baseSize
+                                                                    .height) /
+                                                            2;
+                                                        previewTransformController
+                                                                .value =
+                                                            Matrix4.identity()
+                                                              ..setTranslationRaw(
+                                                                tx,
+                                                                ty,
+                                                                0,
+                                                              );
+                                                        isPreviewTransformInitialized =
+                                                            true;
+                                                        currentPreviewScale = 1;
+                                                      }
+
+                                                      return Stack(
+                                                        fit: StackFit.expand,
+                                                        children: <Widget>[
+                                                          InteractiveViewer(
+                                                            minScale: 1,
+                                                            maxScale: 4,
+                                                            constrained: true,
+                                                            boundaryMargin:
+                                                                EdgeInsets.zero,
+                                                            clipBehavior:
+                                                                Clip.hardEdge,
+                                                            transformationController:
+                                                                previewTransformController,
+                                                            onInteractionUpdate: (_) {
+                                                              final double
+                                                              scale = previewTransformController
+                                                                  .value
+                                                                  .getMaxScaleOnAxis();
+                                                              setState(
+                                                                () => currentPreviewScale =
+                                                                    scale.clamp(
+                                                                      1,
+                                                                      4,
+                                                                    ),
+                                                              );
+                                                            },
+                                                            child: SizedBox(
+                                                              width: baseSize
+                                                                  .width,
+                                                              height: baseSize
+                                                                  .height,
+                                                              child: Image.file(
+                                                                selectedImage!,
+                                                                fit:
+                                                                    BoxFit.fill,
+                                                              ),
+                                                            ),
+                                                          ),
+                                                          Align(
+                                                            alignment: Alignment
+                                                                .topRight,
+                                                            child: Container(
+                                                              margin:
+                                                                  const EdgeInsets.all(
+                                                                    8,
+                                                                  ),
+                                                              decoration: BoxDecoration(
+                                                                color: AppColors
+                                                                    .black54,
+                                                                borderRadius:
+                                                                    BorderRadius.circular(
+                                                                      20,
+                                                                    ),
+                                                              ),
+                                                              child: const Padding(
+                                                                padding:
+                                                                    EdgeInsets.all(
+                                                                      6.0,
+                                                                    ),
+                                                                child: Icon(
+                                                                  Icons
+                                                                      .open_with,
+                                                                  color:
+                                                                      AppColors
+                                                                          .white,
+                                                                  size: 16,
+                                                                ),
+                                                              ),
+                                                            ),
+                                                          ),
+                                                          Align(
+                                                            alignment: Alignment
+                                                                .bottomCenter,
+                                                            child: Container(
+                                                              margin:
+                                                                  const EdgeInsets.only(
+                                                                    bottom: 8,
+                                                                  ),
+                                                              padding:
+                                                                  const EdgeInsets.symmetric(
+                                                                    horizontal:
+                                                                        10,
+                                                                    vertical: 4,
+                                                                  ),
+                                                              decoration: BoxDecoration(
+                                                                color: AppColors
+                                                                    .black54,
+                                                                borderRadius:
+                                                                    BorderRadius.circular(
+                                                                      20,
+                                                                    ),
+                                                              ),
+                                                              child: Text(
+                                                                'Drag to move • Pinch to zoom (${currentPreviewScale.toStringAsFixed(2)}x)',
+                                                                style: const TextStyle(
+                                                                  color:
+                                                                      AppColors
+                                                                          .white,
+                                                                  fontSize: 11,
+                                                                ),
+                                                              ),
+                                                            ),
+                                                          ),
+                                                        ],
+                                                      );
+                                                    },
+                                              ),
+                                            )
+                                          : Column(
+                                              mainAxisAlignment:
+                                                  MainAxisAlignment.center,
+                                              children: const <Widget>[
+                                                Icon(
+                                                  Icons
+                                                      .add_photo_alternate_outlined,
+                                                  size: 40,
+                                                  color: AppColors.gray500,
+                                                ),
+                                                SizedBox(height: 8),
+                                                Text(
+                                                  'Select image to post',
+                                                  style: TextStyle(
+                                                    color: AppColors.gray500,
+                                                  ),
+                                                ),
+                                              ],
                                             ),
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(height: 16),
+                                TextField(
+                                  controller: contentController,
+                                  decoration: const InputDecoration(
+                                    hintText: 'Add caption',
+                                  ),
+                                  maxLength: maxCaptionLength,
+                                  inputFormatters: <TextInputFormatter>[
+                                    LengthLimitingTextInputFormatter(
+                                      maxCaptionLength,
+                                    ),
+                                  ],
+                                  maxLines: 3,
+                                ),
+                                const SizedBox(height: 6),
+                                Align(
+                                  alignment: Alignment.centerLeft,
+                                  child: Wrap(
+                                    spacing: 6,
+                                    runSpacing: 6,
+                                    children: <Widget>[
+                                      TextButton.icon(
+                                        onPressed: isFetchingLocation
+                                            ? null
+                                            : () async {
+                                                setState(
+                                                  () =>
+                                                      isFetchingLocation = true,
+                                                );
+                                                try {
+                                                  final Position position =
+                                                      await _getCurrentPosition();
+                                                  if (!context.mounted) {
+                                                    return;
+                                                  }
+
+                                                  setState(() {
+                                                    selectedGeoPoint = GeoPoint(
+                                                      position.latitude,
+                                                      position.longitude,
+                                                    );
+                                                    locationController.text =
+                                                        '${position.latitude.toStringAsFixed(5)}, ${position.longitude.toStringAsFixed(5)}';
+                                                  });
+                                                } catch (e) {
+                                                  if (rootContext.mounted) {
+                                                    ScaffoldMessenger.of(
+                                                      rootContext,
+                                                    ).showSnackBar(
+                                                      SnackBar(
+                                                        content: Text(
+                                                          'Failed to get location: $e',
+                                                        ),
+                                                      ),
+                                                    );
+                                                  }
+                                                } finally {
+                                                  if (context.mounted) {
+                                                    setState(
+                                                      () => isFetchingLocation =
+                                                          false,
+                                                    );
+                                                  }
+                                                }
+                                              },
+                                        icon: isFetchingLocation
+                                            ? const SizedBox(
+                                                width: 16,
+                                                height: 16,
+                                                child:
+                                                    CircularProgressIndicator(
+                                                      strokeWidth: 2,
+                                                    ),
+                                              )
+                                            : const Icon(
+                                                Icons.my_location,
+                                                size: 18,
+                                              ),
+                                        label: Text(
+                                          isFetchingLocation
+                                              ? 'Getting location...'
+                                              : 'Use current location',
+                                        ),
+                                      ),
+                                      TextButton.icon(
+                                        onPressed: () async {
+                                          final MapPickerResult? picked =
+                                              await Navigator.of(
+                                                rootContext,
+                                              ).push<MapPickerResult>(
+                                                MaterialPageRoute<
+                                                  MapPickerResult
+                                                >(
+                                                  builder: (_) =>
+                                                      const MapPickerScreen(),
+                                                ),
+                                              );
+                                          if (picked == null ||
+                                              !context.mounted) {
+                                            return;
+                                          }
+
+                                          setState(() {
+                                            selectedGeoPoint = GeoPoint(
+                                              picked.point.latitude,
+                                              picked.point.longitude,
+                                            );
+                                            locationController.text =
+                                                picked.label;
+                                          });
+                                        },
+                                        icon: const Icon(
+                                          Icons.map_outlined,
+                                          size: 18,
+                                        ),
+                                        label: const Text('Pick on map'),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                const SizedBox(height: 8),
+                                Container(
+                                  width: double.infinity,
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 12,
+                                    vertical: 10,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: AppColors.gray100,
+                                    borderRadius: BorderRadius.circular(10),
+                                    border: Border.all(
+                                      color: AppColors.gray300,
+                                    ),
+                                  ),
+                                  child: Row(
+                                    children: <Widget>[
+                                      const Icon(
+                                        Icons.location_on_outlined,
+                                        size: 18,
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Expanded(
+                                        child: Text(
+                                          locationController.text.isEmpty
+                                              ? 'No location selected'
+                                              : locationController.text,
+                                          style: TextStyle(
+                                            color:
+                                                locationController.text.isEmpty
+                                                ? AppColors.gray600
+                                                : AppColors.black87,
                                           ),
                                         ),
                                       ),
                                     ],
                                   ),
-                                )
-                              : Column(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: const <Widget>[
-                                    Icon(
-                                      Icons.add_photo_alternate_outlined,
-                                      size: 40,
-                                      color: AppColors.gray500,
-                                    ),
-                                    SizedBox(height: 8),
-                                    Text(
-                                      'Select image to post',
-                                      style: TextStyle(
-                                        color: AppColors.gray500,
-                                      ),
-                                    ),
-                                  ],
                                 ),
+                                const SizedBox(height: 8),
+                                TextField(
+                                  controller: hashtagController,
+                                  decoration: const InputDecoration(
+                                    hintText: 'Hashtags (e.g. #sea #sun)',
+                                    prefixIcon: Icon(Icons.tag),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
                         ),
-                      ),
-                      const SizedBox(height: 16),
-                      TextField(
-                        controller: contentController,
-                        decoration: const InputDecoration(
-                          hintText: 'Add caption',
-                        ),
-                        maxLength: maxCaptionLength,
-                        inputFormatters: <TextInputFormatter>[
-                          LengthLimitingTextInputFormatter(maxCaptionLength),
-                        ],
-                        maxLines: 3,
-                      ),
-                      const SizedBox(height: 6),
-                      Align(
-                        alignment: Alignment.centerLeft,
-                        child: Wrap(
-                          spacing: 6,
-                          runSpacing: 6,
+                        const SizedBox(height: 10),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.end,
                           children: <Widget>[
-                            TextButton.icon(
-                              onPressed: isFetchingLocation
+                            TextButton(
+                              onPressed: isUploading
+                                  ? null
+                                  : () => Navigator.pop(context),
+                              child: const Text('Cancel'),
+                            ),
+                            const SizedBox(width: 8),
+                            ElevatedButton(
+                              onPressed: isUploading
                                   ? null
                                   : () async {
-                                      setState(() => isFetchingLocation = true);
-                                      try {
-                                        final Position position =
-                                            await _getCurrentPosition();
-                                        if (!context.mounted) {
-                                          return;
-                                        }
-
-                                        setState(() {
-                                          selectedGeoPoint = GeoPoint(
-                                            position.latitude,
-                                            position.longitude,
-                                          );
-                                          locationController.text =
-                                              '${position.latitude.toStringAsFixed(5)}, ${position.longitude.toStringAsFixed(5)}';
-                                        });
-                                      } catch (e) {
-                                        if (rootContext.mounted) {
-                                          ScaffoldMessenger.of(
-                                            rootContext,
-                                          ).showSnackBar(
-                                            SnackBar(
-                                              content: Text(
-                                                'Failed to get location: $e',
+                                      final String trimmedContent =
+                                          contentController.text.trim();
+                                      if (trimmedContent.length >
+                                          maxCaptionLength) {
+                                        final AppLocalizations l10n =
+                                            AppLocalizations.of(rootContext);
+                                        ScaffoldMessenger.of(
+                                          rootContext,
+                                        ).showSnackBar(
+                                          SnackBar(
+                                            content: Text(
+                                              l10n.captionMaxLength(
+                                                maxCaptionLength,
                                               ),
                                             ),
+                                          ),
+                                        );
+                                        return;
+                                      }
+                                      if (selectedImage == null) {
+                                        ScaffoldMessenger.of(
+                                          rootContext,
+                                        ).showSnackBar(
+                                          const SnackBar(
+                                            content: Text(
+                                              'Please add an image first',
+                                            ),
+                                          ),
+                                        );
+                                        return;
+                                      }
+                                      setState(() => isUploading = true);
+
+                                      final List<String> hashtags =
+                                          hashtagController.text
+                                              .trim()
+                                              .split(' ')
+                                              .where(
+                                                (String tag) => tag.isNotEmpty,
+                                              )
+                                              .map(
+                                                (String tag) =>
+                                                    tag.startsWith('#')
+                                                    ? tag
+                                                    : '#$tag',
+                                              )
+                                              .toList();
+
+                                      final CreatePostRequest request =
+                                          CreatePostRequest(
+                                            caption: trimmedContent,
+                                            imageFile: selectedImage!,
+                                            location: locationController.text
+                                                .trim(),
+                                            geoPoint: selectedGeoPoint,
+                                            hashtags: hashtags,
                                           );
-                                        }
-                                      } finally {
-                                        if (context.mounted) {
-                                          setState(
-                                            () => isFetchingLocation = false,
-                                          );
+
+                                      if (selectedImage != null &&
+                                          previewBaseSize != null &&
+                                          previewFrameSize > 0) {
+                                        try {
+                                          final File renderedImage =
+                                              await _renderSquarePreviewImage(
+                                                originalFile: selectedImage!,
+                                                baseImageSizeInPreview:
+                                                    previewBaseSize!,
+                                                transform:
+                                                    previewTransformController
+                                                        .value,
+                                                previewFrameSize:
+                                                    previewFrameSize,
+                                              );
+                                          if (context.mounted) {
+                                            selectedImage = renderedImage;
+                                          }
+                                        } catch (e) {
+                                          if (rootContext.mounted) {
+                                            ScaffoldMessenger.of(
+                                              rootContext,
+                                            ).showSnackBar(
+                                              SnackBar(
+                                                content: Text(
+                                                  'Failed to apply preview crop. Uploading original image. ($e)',
+                                                ),
+                                              ),
+                                            );
+                                          }
                                         }
                                       }
+
+                                      final CreatePostRequest finalRequest =
+                                          CreatePostRequest(
+                                            caption: request.caption,
+                                            imageFile: selectedImage!,
+                                            location: request.location,
+                                            geoPoint: request.geoPoint,
+                                            hashtags: request.hashtags,
+                                          );
+
+                                      if (context.mounted) {
+                                        Navigator.pop(context);
+                                      }
+                                      unawaited(onSubmit(finalRequest));
                                     },
-                              icon: isFetchingLocation
+                              child: isUploading
                                   ? const SizedBox(
-                                      width: 16,
-                                      height: 16,
+                                      width: 20,
+                                      height: 20,
                                       child: CircularProgressIndicator(
                                         strokeWidth: 2,
                                       ),
                                     )
-                                  : const Icon(Icons.my_location, size: 18),
-                              label: Text(
-                                isFetchingLocation
-                                    ? 'Getting location...'
-                                    : 'Use current location',
-                              ),
-                            ),
-                            TextButton.icon(
-                              onPressed: () async {
-                                final MapPickerResult? picked =
-                                    await Navigator.of(
-                                      rootContext,
-                                    ).push<MapPickerResult>(
-                                      MaterialPageRoute<MapPickerResult>(
-                                        builder: (_) => const MapPickerScreen(),
-                                      ),
-                                    );
-                                if (picked == null || !context.mounted) {
-                                  return;
-                                }
-
-                                setState(() {
-                                  selectedGeoPoint = GeoPoint(
-                                    picked.point.latitude,
-                                    picked.point.longitude,
-                                  );
-                                  locationController.text = picked.label;
-                                });
-                              },
-                              icon: const Icon(Icons.map_outlined, size: 18),
-                              label: const Text('Pick on map'),
+                                  : const Text('Post'),
                             ),
                           ],
                         ),
-                      ),
-                      const SizedBox(height: 8),
-                      Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 10,
-                        ),
-                        decoration: BoxDecoration(
-                          color: AppColors.gray100,
-                          borderRadius: BorderRadius.circular(10),
-                          border: Border.all(color: AppColors.gray300),
-                        ),
-                        child: Row(
-                          children: <Widget>[
-                            const Icon(Icons.location_on_outlined, size: 18),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: Text(
-                                locationController.text.isEmpty
-                                    ? 'No location selected'
-                                    : locationController.text,
-                                style: TextStyle(
-                                  color: locationController.text.isEmpty
-                                      ? AppColors.gray600
-                                      : AppColors.black87,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      TextField(
-                        controller: hashtagController,
-                        decoration: const InputDecoration(
-                          hintText: 'Hashtags (e.g. #sea #sun)',
-                          prefixIcon: Icon(Icons.tag),
-                        ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                 ),
-                actions: <Widget>[
-                  TextButton(
-                    onPressed: isUploading
-                        ? null
-                        : () => Navigator.pop(context),
-                    child: const Text('Cancel'),
-                  ),
-                  ElevatedButton(
-                    onPressed: isUploading
-                        ? null
-                        : () async {
-                            final String trimmedContent = contentController.text
-                                .trim();
-                            if (trimmedContent.length > maxCaptionLength) {
-                              final AppLocalizations l10n = AppLocalizations.of(
-                                rootContext,
-                              );
-                              ScaffoldMessenger.of(rootContext).showSnackBar(
-                                SnackBar(
-                                  content: Text(
-                                    l10n.captionMaxLength(maxCaptionLength),
-                                  ),
-                                ),
-                              );
-                              return;
-                            }
-                            if (selectedImage == null) {
-                              ScaffoldMessenger.of(rootContext).showSnackBar(
-                                const SnackBar(
-                                  content: Text('Please add an image first'),
-                                ),
-                              );
-                              return;
-                            }
-                            setState(() => isUploading = true);
-
-                            final List<String> hashtags = hashtagController.text
-                                .trim()
-                                .split(' ')
-                                .where((String tag) => tag.isNotEmpty)
-                                .map(
-                                  (String tag) =>
-                                      tag.startsWith('#') ? tag : '#$tag',
-                                )
-                                .toList();
-
-                            final CreatePostRequest request = CreatePostRequest(
-                              caption: trimmedContent,
-                              imageFile: selectedImage!,
-                              location: locationController.text.trim(),
-                              geoPoint: selectedGeoPoint,
-                              hashtags: hashtags,
-                            );
-
-                            if (context.mounted) {
-                              Navigator.pop(context);
-                            }
-                            unawaited(onSubmit(request));
-                          },
-                    child: isUploading
-                        ? const SizedBox(
-                            width: 20,
-                            height: 20,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : const Text('Post'),
-                  ),
-                ],
               );
             },
           );
@@ -419,7 +794,6 @@ class HomeScreen extends StatefulWidget {
 
 class HomeScreenState extends State<HomeScreen> {
   final ScrollController _scrollController = ScrollController();
-  final PageController _pageController = PageController();
   final List<QueryDocumentSnapshot<Map<String, dynamic>>> _posts =
       <QueryDocumentSnapshot<Map<String, dynamic>>>[];
   final Set<String> _prefetchedImageUrls = <String>{};
@@ -436,6 +810,10 @@ class HomeScreenState extends State<HomeScreen> {
   DocumentSnapshot<Object?>? _lastDocument;
   static const int _pageSize = 10;
 
+  bool _isGeneratedSquarePreview(File file) {
+    return file.path.contains('/post_preview_square_');
+  }
+
   @override
   void initState() {
     super.initState();
@@ -447,7 +825,6 @@ class HomeScreenState extends State<HomeScreen> {
   void dispose() {
     _scrollController.removeListener(_onScroll);
     _scrollController.dispose();
-    _pageController.dispose();
     _paginationDebounceTimer?.cancel();
     super.dispose();
   }
@@ -463,16 +840,6 @@ class HomeScreenState extends State<HomeScreen> {
           _fetchMorePosts();
         }
       });
-    }
-  }
-
-  void _onSnapPageChanged(int index) {
-    if (index >= _posts.length) {
-      return;
-    }
-    _prefetchUpcomingImages(index);
-    if (index >= _posts.length - 2 && !_isFetchingMore && _hasMore) {
-      _fetchMorePosts();
     }
   }
 
@@ -616,34 +983,38 @@ class HomeScreenState extends State<HomeScreen> {
     try {
       currentStage = 'upload:start';
       logStage('Uploading image to Storage...');
-      final String? imageUrl = await postService.uploadImage(
-        request.imageFile,
-        onProgress: (double progress) {
-          final int percent = (progress * 100).round().clamp(0, 100).toInt();
-          if (mounted) {
-            setState(() => _uploadProgress = progress);
-          }
-          if (kDebugMode &&
-              (_lastDebugLoggedPercent < 0 ||
-                  percent >= _lastDebugLoggedPercent + 25 ||
-                  percent == 100)) {
-            _lastDebugLoggedPercent = percent;
-            logStage('Upload progress: $percent%');
-          }
-          final bool shouldNotify =
-              _lastNotifiedUploadPercent < 0 ||
-              percent >= _lastNotifiedUploadPercent + 5 ||
-              percent == 100;
-          if (shouldNotify) {
-            _lastNotifiedUploadPercent = percent;
-            unawaited(
-              LocalNotificationService.instance.showUploadProgressNotification(
-                progress: percent,
-              ),
-            );
-          }
-        },
-      ).timeout(const Duration(seconds: 60));
+      final String? imageUrl = await postService
+          .uploadImage(
+            request.imageFile,
+            onProgress: (double progress) {
+              final int percent = (progress * 100)
+                  .round()
+                  .clamp(0, 100)
+                  .toInt();
+              if (mounted) {
+                setState(() => _uploadProgress = progress);
+              }
+              if (kDebugMode &&
+                  (_lastDebugLoggedPercent < 0 ||
+                      percent >= _lastDebugLoggedPercent + 25 ||
+                      percent == 100)) {
+                _lastDebugLoggedPercent = percent;
+                logStage('Upload progress: $percent%');
+              }
+              final bool shouldNotify =
+                  _lastNotifiedUploadPercent < 0 ||
+                  percent >= _lastNotifiedUploadPercent + 5 ||
+                  percent == 100;
+              if (shouldNotify) {
+                _lastNotifiedUploadPercent = percent;
+                unawaited(
+                  LocalNotificationService.instance
+                      .showUploadProgressNotification(progress: percent),
+                );
+              }
+            },
+          )
+          .timeout(const Duration(seconds: 60));
       currentStage = 'upload:done';
       logStage('Upload finished');
       if (imageUrl == null || imageUrl.trim().isEmpty) {
@@ -661,13 +1032,15 @@ class HomeScreenState extends State<HomeScreen> {
       );
       currentStage = 'firestore:write:start';
       logStage('Writing post document to Firestore...');
-      await postService.addPost(
-        request.caption,
-        imageUrl: imageUrl,
-        location: request.location,
-        geo: request.geoPoint,
-        hashtags: request.hashtags,
-      ).timeout(const Duration(seconds: 30));
+      await postService
+          .addPost(
+            request.caption,
+            imageUrl: imageUrl,
+            location: request.location,
+            geo: request.geoPoint,
+            hashtags: request.hashtags,
+          )
+          .timeout(const Duration(seconds: 30));
       currentStage = 'firestore:write:done';
       logStage('Firestore write success');
       isSuccess = true;
@@ -734,6 +1107,11 @@ class HomeScreenState extends State<HomeScreen> {
       await LocalNotificationService.instance
           .cancelUploadProgressNotification();
       _lastNotifiedUploadPercent = -1;
+      if (_isGeneratedSquarePreview(request.imageFile)) {
+        try {
+          await request.imageFile.delete();
+        } catch (_) {}
+      }
       if (mounted) {
         if (isSuccess) {
           setState(() => _uploadProgress = 1);
@@ -800,20 +1178,21 @@ class HomeScreenState extends State<HomeScreen> {
       );
     }
 
-    return PageView.builder(
-      key: const ValueKey<String>('list_snap'),
-      controller: _pageController,
-      scrollDirection: Axis.vertical,
-      pageSnapping: true,
-      physics: const AlwaysScrollableScrollPhysics(
-        parent: PageScrollPhysics(),
-      ),
+    return ListView.builder(
+      key: const ValueKey<String>('list'),
+      controller: _scrollController,
+      physics: const AlwaysScrollableScrollPhysics(),
+      cacheExtent: 1200,
       itemCount: _posts.length + (_isFetchingMore ? 1 : 0),
-      onPageChanged: _onSnapPageChanged,
       itemBuilder: (BuildContext context, int index) {
         if (index == _posts.length) {
-          return const Center(child: CircularProgressIndicator());
+          return const Padding(
+            padding: EdgeInsets.all(16.0),
+            child: Center(child: CircularProgressIndicator()),
+          );
         }
+
+        _prefetchUpcomingImages(index);
         final QueryDocumentSnapshot<Map<String, dynamic>> doc = _posts[index];
         return PostCard(post: doc.data(), postId: doc.id, currentUser: user);
       },
@@ -1073,9 +1452,7 @@ class _PostCardState extends State<PostCard>
           ),
         );
       } on PlatformException {
-        return SharePlus.instance.share(
-          ShareParams(text: message),
-        );
+        return SharePlus.instance.share(ShareParams(text: message));
       }
     }
   }
@@ -1104,7 +1481,10 @@ class _PostCardState extends State<PostCard>
           '${Directory.systemTemp.path}/share_${widget.postId}_${DateTime.now().microsecondsSinceEpoch}.$ext';
       final File file = File(path);
       await file.writeAsBytes(response.bodyBytes, flush: true);
-      return XFile(file.path, mimeType: contentType.isEmpty ? null : contentType);
+      return XFile(
+        file.path,
+        mimeType: contentType.isEmpty ? null : contentType,
+      );
     } catch (_) {
       return null;
     }
@@ -1243,10 +1623,7 @@ class _PostCardState extends State<PostCard>
                 title: const Text('Copy link'),
                 onTap: () {
                   Navigator.of(sheetContext).pop();
-                  _copyPostLink(
-                    postId: postId,
-                    postOwnerUid: postOwnerUid,
-                  );
+                  _copyPostLink(postId: postId, postOwnerUid: postOwnerUid);
                 },
               ),
             ],
@@ -1953,14 +2330,14 @@ class _PostCardState extends State<PostCard>
                           onPressed: _isSharing
                               ? null
                               : () {
-                            _showShareActionsSheet(
-                              username: username,
-                              caption: content,
-                              postId: widget.postId,
-                              imageUrl: imageUrl,
-                              postOwnerUid: postOwnerUid,
-                            );
-                          },
+                                  _showShareActionsSheet(
+                                    username: username,
+                                    caption: content,
+                                    postId: widget.postId,
+                                    imageUrl: imageUrl,
+                                    postOwnerUid: postOwnerUid,
+                                  );
+                                },
                         ),
                         if (shareCount > 0)
                           Padding(
@@ -2970,7 +3347,7 @@ class _SkeletonPostCardState extends State<SkeletonPostCard>
               ),
               const SizedBox(height: 12),
               AspectRatio(
-                aspectRatio: 4 / 5,
+                aspectRatio: 1,
                 child: Container(
                   margin: const EdgeInsets.fromLTRB(12, 0, 12, 12),
                   decoration: BoxDecoration(
@@ -3034,7 +3411,7 @@ class _SmoothPostImageState extends State<_SmoothPostImage> {
   Widget build(BuildContext context) {
     final String imageUrl = widget.imageUrl;
     return AspectRatio(
-      aspectRatio: 4 / 5,
+      aspectRatio: 1,
       child: ClipRRect(
         borderRadius: BorderRadius.circular(10),
         child: _useFallbackNetwork

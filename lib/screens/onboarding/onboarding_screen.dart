@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:sincerelysea/theme/app_colors.dart';
 import 'onboarding_data.dart';
-import '../auth/login_screen.dart';
+import '../auth/auth_wrapper.dart';
 import '../../utils/onboarding_helper.dart';
 
 class OnboardingScreen extends StatefulWidget {
@@ -35,7 +35,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       context,
       PageRouteBuilder(
         transitionDuration: const Duration(milliseconds: 400),
-        pageBuilder: (_, _, _) => const LoginScreen(),
+        pageBuilder: (_, _, _) => const AuthWrapper(),
         transitionsBuilder: (_, animation, _, child) {
           return FadeTransition(
             opacity: animation,

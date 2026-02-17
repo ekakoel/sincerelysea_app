@@ -219,12 +219,16 @@ class PostService {
               ? hashtag.trim()
               : '#${hashtag.trim()}');
 
-    Query<Map<String, dynamic>> query = _firestore.collection('posts');
+    Query<Map<String, dynamic>> query = _firestore
+        .collection('posts')
+        .orderBy('timestamp', descending: true);
     if (normalized.isNotEmpty) {
       query = query.where('hashtags', arrayContains: normalized);
     }
 
-    return query.limit(200).snapshots();
+    // Keep dataset bounded for map performance while still wide enough
+    // to support Top 10/20/50 in the visible area.
+    return query.limit(500).snapshots();
   }
 
   // Like a post

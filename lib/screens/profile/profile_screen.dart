@@ -10,7 +10,7 @@ import 'package:sincerelysea/theme/app_semantic_colors.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 import 'package:sincerelysea/l10n/app_localizations.dart';
-import 'package:sincerelysea/screens/profile/profile_settings_screen.dart';
+import 'package:sincerelysea/screens/profile/profile_settings_menu_screen.dart';
 import 'package:sincerelysea/services/auth_service.dart';
 import 'package:sincerelysea/services/follow_service.dart';
 import 'package:sincerelysea/services/post_service.dart';
@@ -123,8 +123,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                 itemBuilder: (BuildContext context) =>
                                     const <PopupMenuEntry<String>>[
                                       PopupMenuItem<String>(
-                                        value: 'edit_profile',
-                                        child: Text('Edit Profile'),
+                                        value: 'settings',
+                                        child: Text('Settings'),
                                       ),
                                       PopupMenuItem<String>(
                                         value: 'logout',
@@ -210,9 +210,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   void _onSettingsSelected(String value, AuthService authService) {
-    if (value == 'edit_profile') {
+    if (value == 'settings') {
       Navigator.of(context).push(
-        MaterialPageRoute<void>(builder: (_) => const ProfileSettingsScreen()),
+        MaterialPageRoute<void>(
+          builder: (_) => const ProfileSettingsMenuScreen(),
+        ),
       );
       return;
     }

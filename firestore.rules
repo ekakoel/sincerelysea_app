@@ -215,6 +215,53 @@ service cloud.firestore {
           && request.resource.data.actorUid == request.auth.uid;
       }
 
+      match /support_tickets/{ticketId} {
+        allow read, delete: if isOwner(uid);
+
+        allow create: if isOwner(uid)
+          && request.resource.data.uid == request.auth.uid
+          && request.resource.data.category is string
+          && request.resource.data.category.size() > 0
+          && request.resource.data.category.size() <= 32
+          && request.resource.data.subject is string
+          && request.resource.data.subject.size() > 0
+          && request.resource.data.subject.size() <= 100
+          && request.resource.data.description is string
+          && request.resource.data.description.size() > 0
+          && request.resource.data.description.size() <= 1000
+          && request.resource.data.contactEmail is string
+          && request.resource.data.contactEmail.size() > 0
+          && request.resource.data.contactEmail.size() <= 120
+          && request.resource.data.status in ['open', 'in_progress', 'resolved', 'closed']
+          && request.resource.data.priority in ['low', 'normal', 'high']
+          && (request.resource.data.attachmentName == null
+            || request.resource.data.attachmentName is string)
+          && isValidImageUrl(request.resource.data.attachmentUrl);
+
+        allow update: if isOwner(uid)
+          && request.resource.data.uid == resource.data.uid
+          && request.resource.data.category == resource.data.category
+          && request.resource.data.subject == resource.data.subject
+          && request.resource.data.description == resource.data.description
+          && request.resource.data.contactEmail == resource.data.contactEmail
+          && request.resource.data.attachmentName == resource.data.attachmentName
+          && request.resource.data.attachmentUrl == resource.data.attachmentUrl
+          && request.resource.data.status == resource.data.status
+          && request.resource.data.priority == resource.data.priority
+          && request.resource.data.createdAt == resource.data.createdAt;
+
+        match /messages/{messageId} {
+          allow read: if isOwner(uid);
+          allow create: if isOwner(uid)
+            && request.resource.data.uid == request.auth.uid
+            && request.resource.data.senderType == 'user'
+            && request.resource.data.message is string
+            && request.resource.data.message.size() > 0
+            && request.resource.data.message.size() <= 1000;
+          allow update, delete: if false;
+        }
+      }
+
       match /saved_posts/{postId} {
         allow read: if isOwner(uid);
         allow create, update: if isOwner(uid)

@@ -1,10 +1,13 @@
 import 'dart:async';
 
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:sincerelysea/theme/app_colors.dart';
 import 'package:sincerelysea/theme/app_semantic_colors.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/services.dart';
+import 'package:sincerelysea/screens/legal/privacy_policy_screen.dart';
+import 'package:sincerelysea/screens/legal/terms_of_service_screen.dart';
 import 'package:sincerelysea/utils/username_text_input_formatter.dart';
 import 'package:sincerelysea/utils/auth_exception_handler.dart';
 import '../../services/auth_service.dart';
@@ -26,10 +29,13 @@ class _RegisterPageState extends State<RegisterPage> {
       TextEditingController();
   final AuthService _auth = AuthService();
   Timer? _usernameDebounce;
+  late final TapGestureRecognizer _privacyPolicyRecognizer;
+  late final TapGestureRecognizer _termsOfServiceRecognizer;
   bool _loading = false;
   bool _obscurePassword = true;
   bool _obscureConfirmPassword = true;
   bool _usernameChecking = false;
+  bool _acceptedPolicies = false;
   bool? _usernameAvailable;
   String? _usernameStatusText;
   int _usernameCheckRequestId = 0;
@@ -38,12 +44,18 @@ class _RegisterPageState extends State<RegisterPage> {
   void initState() {
     super.initState();
     _usernameController.addListener(_onUsernameChanged);
+    _privacyPolicyRecognizer = TapGestureRecognizer()
+      ..onTap = _openPrivacyPolicy;
+    _termsOfServiceRecognizer = TapGestureRecognizer()
+      ..onTap = _openTermsOfService;
   }
 
   @override
   void dispose() {
     _usernameDebounce?.cancel();
     _usernameController.removeListener(_onUsernameChanged);
+    _privacyPolicyRecognizer.dispose();
+    _termsOfServiceRecognizer.dispose();
     _emailController.dispose();
     _usernameController.dispose();
     _passwordController.dispose();
@@ -140,6 +152,16 @@ class _RegisterPageState extends State<RegisterPage> {
 
   Future<void> _register() async {
     if (!_formKey.currentState!.validate()) return;
+    if (!_acceptedPolicies) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Please accept the Privacy Policy and Terms of Service to continue',
+          ),
+        ),
+      );
+      return;
+    }
     if (_usernameChecking) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Please wait for username check')),
@@ -243,6 +265,18 @@ class _RegisterPageState extends State<RegisterPage> {
     Navigator.pushReplacement(
       context,
       MaterialPageRoute(builder: (_) => const LoginScreen()),
+    );
+  }
+
+  void _openPrivacyPolicy() {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(builder: (_) => const PrivacyPolicyScreen()),
+    );
+  }
+
+  void _openTermsOfService() {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(builder: (_) => const TermsOfServiceScreen()),
     );
   }
 
@@ -427,11 +461,64 @@ class _RegisterPageState extends State<RegisterPage> {
                       return null;
                     },
                   ),
+                  const SizedBox(height: 8),
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: <Widget>[
+                      Checkbox(
+                        value: _acceptedPolicies,
+                        onChanged: _loading
+                            ? null
+                            : (bool? value) {
+                                setState(() => _acceptedPolicies = value ?? false);
+                              },
+                      ),
+                      Expanded(
+                        child: Padding(
+                          padding: const EdgeInsets.only(top: 12),
+                          child: RichText(
+                            text: TextSpan(
+                              style: Theme.of(context).textTheme.bodyMedium,
+                              children: <TextSpan>[
+                                const TextSpan(text: 'I agree to the '),
+                                TextSpan(
+                                  text: 'Privacy Policy',
+                                  recognizer: _privacyPolicyRecognizer,
+                                  style: TextStyle(
+                                    color: isDark
+                                        ? AppColors.white
+                                        : AppColors.black,
+                                    fontWeight: FontWeight.w700,
+                                    decoration: TextDecoration.underline,
+                                  ),
+                                ),
+                                const TextSpan(text: ' and '),
+                                TextSpan(
+                                  text: 'Terms of Service',
+                                  recognizer: _termsOfServiceRecognizer,
+                                  style: TextStyle(
+                                    color: isDark
+                                        ? AppColors.white
+                                        : AppColors.black,
+                                    fontWeight: FontWeight.w700,
+                                    decoration: TextDecoration.underline,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
                   const SizedBox(height: 24),
                   SizedBox(
                     height: 50,
                     child: ElevatedButton(
-                      onPressed: (_loading || _usernameChecking)
+                      onPressed:
+                          (_loading ||
+                              _usernameChecking ||
+                              !_acceptedPolicies)
                           ? null
                           : _register,
                       style: ElevatedButton.styleFrom(

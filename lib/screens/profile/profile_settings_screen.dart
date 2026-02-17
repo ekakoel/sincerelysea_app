@@ -6,17 +6,13 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:sincerelysea/theme/app_colors.dart';
-import 'package:sincerelysea/theme/app_semantic_colors.dart';
 import 'package:flutter/services.dart';
-import 'package:geolocator/geolocator.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:permission_handler/permission_handler.dart' as ph;
 import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:sincerelysea/l10n/app_localizations.dart';
 import 'package:sincerelysea/services/account_lifecycle_service.dart';
 import 'package:sincerelysea/services/auth_service.dart';
-import 'package:sincerelysea/services/local_notification_service.dart';
 import 'package:sincerelysea/services/user_profile_service.dart';
 import 'package:sincerelysea/utils/auth_exception_handler.dart';
 import 'package:sincerelysea/utils/username_text_input_formatter.dart';
@@ -37,20 +33,6 @@ class _ProfileSettingsScreenState extends State<ProfileSettingsScreen> {
   bool _saving = false;
   bool _uploadingAvatar = false;
   bool _deletingAccount = false;
-  bool _isPrivate = false;
-  String _allowComments = 'everyone';
-  bool _loadingPermissions = false;
-  LocationPermission _locationPermission = LocationPermission.unableToDetermine;
-  bool _locationServiceEnabled = false;
-  bool? _notificationEnabled;
-  ph.PermissionStatus _cameraPermission = ph.PermissionStatus.denied;
-  ph.PermissionStatus _galleryPermission = ph.PermissionStatus.denied;
-
-  @override
-  void initState() {
-    super.initState();
-    unawaited(_refreshPermissionStatus());
-  }
 
   @override
   void dispose() {
@@ -70,8 +52,6 @@ class _ProfileSettingsScreenState extends State<ProfileSettingsScreen> {
         displayName: _displayNameController.text,
         bio: _bioController.text,
         location: _locationController.text,
-        isPrivate: _isPrivate,
-        allowComments: _allowComments,
       );
       if (mounted) {
         ScaffoldMessenger.of(
@@ -292,165 +272,6 @@ class _ProfileSettingsScreenState extends State<ProfileSettingsScreen> {
     }
   }
 
-  Future<void> _refreshPermissionStatus() async {
-    if (!mounted) {
-      return;
-    }
-    setState(() => _loadingPermissions = true);
-    try {
-      final bool locationServiceEnabled =
-          await Geolocator.isLocationServiceEnabled();
-      final LocationPermission locationPermission =
-          await Geolocator.checkPermission();
-      final bool? notificationEnabled = await LocalNotificationService.instance
-          .areNotificationsEnabled();
-      final ph.PermissionStatus cameraPermission =
-          await ph.Permission.camera.status;
-      final ph.PermissionStatus galleryPermission =
-          await ph.Permission.photos.status;
-      if (!mounted) {
-        return;
-      }
-      setState(() {
-        _locationServiceEnabled = locationServiceEnabled;
-        _locationPermission = locationPermission;
-        _notificationEnabled = notificationEnabled;
-        _cameraPermission = cameraPermission;
-        _galleryPermission = galleryPermission;
-      });
-    } finally {
-      if (mounted) {
-        setState(() => _loadingPermissions = false);
-      }
-    }
-  }
-
-  Future<void> _requestNotificationPermission() async {
-    final bool granted = await LocalNotificationService.instance
-        .requestNotificationPermission();
-    if (!mounted) {
-      return;
-    }
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          granted
-              ? 'Notification permission granted'
-              : 'Notification permission denied',
-        ),
-      ),
-    );
-    await _refreshPermissionStatus();
-  }
-
-  Future<void> _requestLocationPermission() async {
-    final bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
-    if (!serviceEnabled) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Please enable location service first.'),
-          ),
-        );
-      }
-      await Geolocator.openLocationSettings();
-      await _refreshPermissionStatus();
-      return;
-    }
-
-    final LocationPermission permission = await Geolocator.requestPermission();
-    if (!mounted) {
-      return;
-    }
-    final bool granted =
-        permission == LocationPermission.whileInUse ||
-        permission == LocationPermission.always;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          granted
-              ? 'Location permission granted'
-              : 'Location permission denied',
-        ),
-      ),
-    );
-    await _refreshPermissionStatus();
-  }
-
-  Future<void> _openAppSettings() async {
-    await ph.openAppSettings();
-  }
-
-  String _locationPermissionLabel() {
-    if (!_locationServiceEnabled) {
-      return 'Service Off';
-    }
-    switch (_locationPermission) {
-      case LocationPermission.always:
-        return 'Allowed Always';
-      case LocationPermission.whileInUse:
-        return 'Allowed While Using';
-      case LocationPermission.denied:
-        return 'Denied';
-      case LocationPermission.deniedForever:
-        return 'Denied Permanently';
-      case LocationPermission.unableToDetermine:
-        return 'Not Determined';
-    }
-  }
-
-  String _notificationPermissionLabel() {
-    if (_notificationEnabled == null) {
-      return 'Status Unavailable';
-    }
-    return _notificationEnabled! ? 'Allowed' : 'Denied';
-  }
-
-  Future<void> _requestCameraPermission() async {
-    final ph.PermissionStatus status = await ph.Permission.camera.request();
-    if (!mounted) {
-      return;
-    }
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('Camera permission: ${_permissionStatusLabel(status)}'),
-      ),
-    );
-    await _refreshPermissionStatus();
-  }
-
-  Future<void> _requestGalleryPermission() async {
-    final ph.PermissionStatus status = await ph.Permission.photos.request();
-    if (!mounted) {
-      return;
-    }
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('Gallery permission: ${_permissionStatusLabel(status)}'),
-      ),
-    );
-    await _refreshPermissionStatus();
-  }
-
-  String _permissionStatusLabel(ph.PermissionStatus status) {
-    if (status.isGranted) {
-      return 'Allowed';
-    }
-    if (status.isLimited) {
-      return 'Limited';
-    }
-    if (status.isPermanentlyDenied) {
-      return 'Denied Permanently';
-    }
-    if (status.isRestricted) {
-      return 'Restricted';
-    }
-    if (status.isProvisional) {
-      return 'Provisional';
-    }
-    return 'Denied';
-  }
-
   Future<String?> _askPasswordForReauth() async {
     final TextEditingController passwordController = TextEditingController();
     return showDialog<String>(
@@ -484,7 +305,6 @@ class _ProfileSettingsScreenState extends State<ProfileSettingsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final AppSemanticColors semantic = context.semanticColors;
     final User? user = context.watch<User?>();
     if (user == null) {
       return const Scaffold(body: Center(child: Text('Please login first.')));
@@ -522,8 +342,6 @@ class _ProfileSettingsScreenState extends State<ProfileSettingsScreen> {
               _displayNameController.text = displayName;
               _bioController.text = bio;
               _locationController.text = location;
-              _isPrivate = data['isPrivate'] == true;
-              _allowComments = data['allowComments']?.toString() ?? 'everyone';
               _initialized = true;
             }
 
@@ -644,111 +462,7 @@ class _ProfileSettingsScreenState extends State<ProfileSettingsScreen> {
                       maxLength: 80,
                       decoration: const InputDecoration(labelText: 'Location'),
                     ),
-                    const SizedBox(height: 12),
-                    SwitchListTile(
-                      value: _isPrivate,
-                      title: const Text('Private account'),
-                      subtitle: const Text(
-                        'Only approved followers can follow private accounts.',
-                      ),
-                      onChanged: (bool value) {
-                        setState(() => _isPrivate = value);
-                      },
-                    ),
-                    const SizedBox(height: 8),
-                    DropdownButtonFormField<String>(
-                      initialValue: _allowComments,
-                      decoration: const InputDecoration(
-                        labelText: 'Who can comment on your posts',
-                      ),
-                      items: const <DropdownMenuItem<String>>[
-                        DropdownMenuItem<String>(
-                          value: 'everyone',
-                          child: Text('Everyone'),
-                        ),
-                        DropdownMenuItem<String>(
-                          value: 'followers',
-                          child: Text('Followers only'),
-                        ),
-                        DropdownMenuItem<String>(
-                          value: 'none',
-                          child: Text('No one'),
-                        ),
-                      ],
-                      onChanged: (String? value) {
-                        if (value == null) {
-                          return;
-                        }
-                        setState(() => _allowComments = value);
-                      },
-                    ),
                     const SizedBox(height: 24),
-                    Row(
-                      children: <Widget>[
-                        Text(
-                          'App Permissions',
-                          style: Theme.of(context).textTheme.titleMedium,
-                        ),
-                        if (_loadingPermissions) ...<Widget>[
-                          const SizedBox(width: 10),
-                          const SizedBox(
-                            width: 14,
-                            height: 14,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          ),
-                        ],
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                    Card(
-                      child: Column(
-                        children: <Widget>[
-                          ListTile(
-                            leading: const Icon(Icons.notifications_outlined),
-                            title: const Text('Notifications'),
-                            subtitle: Text(_notificationPermissionLabel()),
-                            trailing: _PermissionTileActions(
-                              onRequest: _requestNotificationPermission,
-                              onOpenSettings: _openAppSettings,
-                            ),
-                          ),
-                          Divider(height: 1, color: semantic.divider),
-                          ListTile(
-                            leading: const Icon(Icons.location_on_outlined),
-                            title: const Text('Location'),
-                            subtitle: Text(_locationPermissionLabel()),
-                            trailing: _PermissionTileActions(
-                              onRequest: _requestLocationPermission,
-                              onOpenSettings: _openAppSettings,
-                            ),
-                          ),
-                          Divider(height: 1, color: semantic.divider),
-                          ListTile(
-                            leading: const Icon(Icons.camera_alt_outlined),
-                            title: const Text('Camera'),
-                            subtitle: Text(
-                              _permissionStatusLabel(_cameraPermission),
-                            ),
-                            trailing: _PermissionTileActions(
-                              onRequest: _requestCameraPermission,
-                              onOpenSettings: _openAppSettings,
-                            ),
-                          ),
-                          Divider(height: 1, color: semantic.divider),
-                          ListTile(
-                            leading: const Icon(Icons.photo_library_outlined),
-                            title: const Text('Gallery'),
-                            subtitle: Text(
-                              _permissionStatusLabel(_galleryPermission),
-                            ),
-                            trailing: _PermissionTileActions(
-                              onRequest: _requestGalleryPermission,
-                              onOpenSettings: _openAppSettings,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
                     const SizedBox(height: 16),
                     Row(
                       children: <Widget>[
@@ -886,59 +600,11 @@ class _ProfileSettingsScreenState extends State<ProfileSettingsScreen> {
                         ),
                       ],
                     ),
-                    const SizedBox(height: 8),
-                    const ListTile(
-                      contentPadding: EdgeInsets.zero,
-                      leading: Icon(Icons.devices_outlined),
-                      title: Text('Session management'),
-                      subtitle: Text(
-                        'Current release keeps one active session per device. Full multi-device session controls can be added via backend token registry.',
-                      ),
-                    ),
                   ],
                 ),
               ),
             );
           },
-    );
-  }
-}
-
-class _PermissionTileActions extends StatelessWidget {
-  const _PermissionTileActions({
-    required this.onRequest,
-    required this.onOpenSettings,
-  });
-
-  final VoidCallback onRequest;
-  final VoidCallback onOpenSettings;
-
-  @override
-  Widget build(BuildContext context) {
-    return FittedBox(
-      fit: BoxFit.scaleDown,
-      alignment: Alignment.centerRight,
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: <Widget>[
-          TextButton(
-            onPressed: onRequest,
-            style: TextButton.styleFrom(
-              padding: const EdgeInsets.symmetric(horizontal: 8),
-              minimumSize: const Size(0, 36),
-              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-            ),
-            child: const Text('Request'),
-          ),
-          IconButton(
-            tooltip: 'Open app settings',
-            onPressed: onOpenSettings,
-            icon: const Icon(Icons.settings_outlined),
-            visualDensity: VisualDensity.compact,
-            constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
-          ),
-        ],
-      ),
     );
   }
 }

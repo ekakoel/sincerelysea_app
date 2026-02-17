@@ -15,6 +15,7 @@ import 'package:sincerelysea/services/local_notification_service.dart';
 import 'package:sincerelysea/services/moderation_service.dart';
 import 'package:sincerelysea/services/notification_center_service.dart';
 import 'package:sincerelysea/services/post_service.dart';
+import 'package:sincerelysea/services/support_service.dart';
 import 'package:sincerelysea/services/theme_service.dart';
 import 'package:sincerelysea/services/user_profile_service.dart';
 import 'package:sincerelysea/services/wishlist_service.dart';
@@ -41,6 +42,7 @@ class MyApp extends StatelessWidget {
           create: (_) => DeepLinkService()..start(),
         ),
         Provider<PostService>(create: (_) => PostService()),
+        Provider<SupportService>(create: (_) => SupportService()),
         Provider<FollowService>(create: (_) => FollowService()),
         Provider<UserProfileService>(create: (_) => UserProfileService()),
         Provider<WishlistService>(create: (_) => WishlistService()),

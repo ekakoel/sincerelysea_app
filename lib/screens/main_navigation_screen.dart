@@ -20,13 +20,6 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
   DeepLinkService? _deepLinkService;
   bool _isOpeningDeepLink = false;
 
-  final List<Widget> _pages = const <Widget>[
-    HomeScreen(),
-    DiscoveryScreen(),
-    MapPostsScreen(),
-    ProfileScreen(),
-  ];
-
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
@@ -76,8 +69,14 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
   @override
   Widget build(BuildContext context) {
     final ColorScheme colorScheme = Theme.of(context).colorScheme;
+    final List<Widget> pages = <Widget>[
+      const HomeScreen(),
+      const DiscoveryScreen(),
+      _currentIndex == 2 ? const MapPostsScreen() : const SizedBox.shrink(),
+      const ProfileScreen(),
+    ];
     return Scaffold(
-      body: IndexedStack(index: _currentIndex, children: _pages),
+      body: IndexedStack(index: _currentIndex, children: pages),
       bottomNavigationBar: BottomNavigationBar(
         type: BottomNavigationBarType.fixed,
         backgroundColor: colorScheme.surface,

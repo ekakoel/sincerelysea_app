@@ -70,6 +70,23 @@ class UserProfileService {
     await userRef.set(payload, SetOptions(merge: true));
   }
 
+  Future<void> updatePrivacySettings({
+    required bool isPrivate,
+    required String allowComments,
+  }) async {
+    final User? user = _auth.currentUser;
+    if (user == null) {
+      throw Exception('User not authenticated');
+    }
+    await _firestore.collection('users').doc(user.uid).set({
+      'isPrivate': isPrivate,
+      'allowComments': allowComments.trim().isEmpty
+          ? 'everyone'
+          : allowComments.trim(),
+      'updatedAt': FieldValue.serverTimestamp(),
+    }, SetOptions(merge: true));
+  }
+
   Future<void> changeUsernameOnce(String username) async {
     final User? user = _auth.currentUser;
     if (user == null) {

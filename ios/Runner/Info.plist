@@ -58,7 +58,7 @@
 		<key>NSPhotoLibraryAddUsageDescription</key>
 		<string>Photo library write access is used when saving shared media.</string>
 		<key>GoogleMapsAPIKey</key>
-		<string>YOUR_GOOGLE_MAPS_API_KEY</string>
+		<string>$(GOOGLE_MAPS_API_KEY)</string>
 		<key>io.flutter.embedded_views_preview</key>
 		<true/>
 		<key>UIApplicationSupportsIndirectInputEvents</key>

@@ -45,9 +45,9 @@ class _SplashRedirectState extends State<SplashRedirect> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: const [
-            Image(image: AssetImage('assets/splash/logo-dark.png'), width: 150),
-            SizedBox(height: 24),
             CircularProgressIndicator(strokeWidth: 2),
+            SizedBox(height: 44),
+            Image(image: AssetImage('assets/splash/logo-dark.png'), width: 300),
           ],
         ),
       ),

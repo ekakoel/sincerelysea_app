@@ -1,14 +1,15 @@
-import 'dart:typed_data';
 import 'dart:ui' as ui;
 import 'dart:async';
+import 'dart:io';
 
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 import 'package:sincerelysea/theme/app_colors.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
-import 'package:http/http.dart' as http;
 import 'package:provider/provider.dart';
 import 'package:sincerelysea/services/post_service.dart';
 
@@ -47,9 +48,15 @@ class _MapPostsScreenState extends State<MapPostsScreen> {
   List<String> _appliedPopularPostIds = <String>[];
   Timer? _cameraIdleDebounceTimer;
   Timer? _markerRefreshDebounceTimer;
+  static const int _maxMarkerIconCacheEntries = 300;
   final Map<String, BitmapDescriptor> _markerIconCache =
       <String, BitmapDescriptor>{};
+  final Map<String, BitmapDescriptor> _markerIconCacheByImageUrl =
+      <String, BitmapDescriptor>{};
   final Set<String> _markerIconLoading = <String>{};
+  List<QueryDocumentSnapshot<Map<String, dynamic>>> _renderedPopularInZone =
+      <QueryDocumentSnapshot<Map<String, dynamic>>>[];
+  Set<Marker> _renderedMarkers = <Marker>{};
   static const TextStyle _panelTitleStyle = TextStyle(
     fontSize: 12,
     fontWeight: FontWeight.w600,
@@ -62,7 +69,7 @@ class _MapPostsScreenState extends State<MapPostsScreen> {
 
   @override
   void dispose() {
-    _mapController?.dispose();
+    _mapController = null;
     _visibleBoundsNotifier.dispose();
     _cameraIdleDebounceTimer?.cancel();
     _markerRefreshDebounceTimer?.cancel();
@@ -82,21 +89,22 @@ class _MapPostsScreenState extends State<MapPostsScreen> {
               BuildContext context,
               AsyncSnapshot<QuerySnapshot<Map<String, dynamic>>> snapshot,
             ) {
-              if (snapshot.hasError) {
+              if (snapshot.hasError && _latestDocs.isEmpty) {
                 return Center(
-                  child: Text(
-                    'Failed to load map posts: ${snapshot.error}',
-                  ),
+                  child: Text('Failed to load map posts: ${snapshot.error}'),
                 );
               }
 
-              if (snapshot.connectionState == ConnectionState.waiting) {
-                return const Center(child: CircularProgressIndicator());
-              }
+              final bool isRefreshingWithCache =
+                  snapshot.connectionState == ConnectionState.waiting &&
+                  _latestDocs.isNotEmpty;
 
               final List<QueryDocumentSnapshot<Map<String, dynamic>>> docs =
-                  snapshot.data?.docs ??
-                  <QueryDocumentSnapshot<Map<String, dynamic>>>[];
+                  snapshot.data?.docs ?? _latestDocs;
+
+              if (docs.isEmpty && snapshot.connectionState == ConnectionState.waiting) {
+                return const Center(child: CircularProgressIndicator());
+              }
               _latestDocs = docs;
               final LatLngBounds? appliedBounds = _visibleBoundsNotifier.value;
               final Map<String, QueryDocumentSnapshot<Map<String, dynamic>>>
@@ -117,7 +125,17 @@ class _MapPostsScreenState extends State<MapPostsScreen> {
                   limit: _popularLimit,
                 );
               }
-              final Set<Marker> markers = <Marker>{};
+              final bool keepPreviousPopular =
+                  isRefreshingWithCache &&
+                  popularInZone.isEmpty &&
+                  _renderedPopularInZone.isNotEmpty;
+              if (keepPreviousPopular) {
+                popularInZone = _renderedPopularInZone;
+              } else {
+                _renderedPopularInZone = popularInZone;
+              }
+
+              final Set<Marker> nextMarkers = <Marker>{};
               for (final QueryDocumentSnapshot<Map<String, dynamic>> doc
                   in popularInZone) {
                 final Map<String, dynamic> data = doc.data();
@@ -128,7 +146,7 @@ class _MapPostsScreenState extends State<MapPostsScreen> {
                 final String imageUrl = data['imageUrl']?.toString() ?? '';
                 _ensureMarkerIcon(postId: doc.id, imageUrl: imageUrl);
 
-                markers.add(
+                nextMarkers.add(
                   Marker(
                     markerId: MarkerId(doc.id),
                     position: point,
@@ -145,6 +163,16 @@ class _MapPostsScreenState extends State<MapPostsScreen> {
                     onTap: () => _showPostPreview(data),
                   ),
                 );
+              }
+              final bool keepPreviousMarkers =
+                  isRefreshingWithCache &&
+                  nextMarkers.isEmpty &&
+                  _renderedMarkers.isNotEmpty;
+              final Set<Marker> markers = keepPreviousMarkers
+                  ? _renderedMarkers
+                  : nextMarkers;
+              if (!keepPreviousMarkers) {
+                _renderedMarkers = Set<Marker>.from(nextMarkers);
               }
 
               return Column(
@@ -180,16 +208,14 @@ class _MapPostsScreenState extends State<MapPostsScreen> {
                           zoomControlsEnabled: true,
                           zoomGesturesEnabled: true,
                         ),
-                        if (markers.isEmpty)
+                        if (markers.isEmpty && !isRefreshingWithCache)
                           Positioned(
                             left: 16,
                             right: 16,
                             top: 12,
                             child: Material(
                               borderRadius: BorderRadius.circular(10),
-                              color: AppColors.white.withValues(
-                                alpha: 0.92,
-                              ),
+                              color: AppColors.white.withValues(alpha: 0.92),
                               child: const Padding(
                                 padding: EdgeInsets.symmetric(
                                   horizontal: 12,
@@ -200,6 +226,26 @@ class _MapPostsScreenState extends State<MapPostsScreen> {
                                   textAlign: TextAlign.center,
                                 ),
                               ),
+                            ),
+                          ),
+                        if (isRefreshingWithCache)
+                          Positioned(
+                            left: 0,
+                            right: 0,
+                            top: 0,
+                            child: LinearProgressIndicator(
+                              minHeight: 2,
+                              color: AppColors.black.withValues(alpha: 0.8),
+                              backgroundColor: AppColors.gray300,
+                            ),
+                          ),
+                        if (kDebugMode)
+                          Positioned(
+                            left: 10,
+                            bottom: 12,
+                            child: _buildDebugMetricsChip(
+                              visibleMarkerCount: markers.length,
+                              visiblePopularCount: popularInZone.length,
                             ),
                           ),
                         if (_showExploreAreaButton)
@@ -371,48 +417,80 @@ class _MapPostsScreenState extends State<MapPostsScreen> {
     required String postId,
     required String imageUrl,
   }) async {
-    if (imageUrl.isEmpty ||
-        _markerIconCache.containsKey(postId) ||
-        _markerIconLoading.contains(postId)) {
+    if (imageUrl.isEmpty) {
+      return;
+    }
+    final BitmapDescriptor? cachedByImage =
+        _markerIconCacheByImageUrl[imageUrl];
+    if (cachedByImage != null) {
+      _touchImageUrlCacheEntry(imageUrl);
+      _markerIconCache[postId] = cachedByImage;
+      return;
+    }
+    if (_markerIconCache.containsKey(postId) ||
+        _markerIconLoading.contains(imageUrl)) {
       return;
     }
 
-    _markerIconLoading.add(postId);
+    _markerIconLoading.add(imageUrl);
     try {
       final BitmapDescriptor icon = await _createCustomMarkerIcon(imageUrl);
       if (!mounted) {
         return;
       }
+      _markerIconCacheByImageUrl[imageUrl] = icon;
+      _enforceMarkerIconCacheLru();
       _markerIconCache[postId] = icon;
       _scheduleMarkerRefresh();
     } catch (_) {
       // Fallback to default marker when image fetch/render fails.
     } finally {
-      _markerIconLoading.remove(postId);
+      _markerIconLoading.remove(imageUrl);
+    }
+  }
+
+  void _touchImageUrlCacheEntry(String imageUrl) {
+    final BitmapDescriptor? icon = _markerIconCacheByImageUrl.remove(imageUrl);
+    if (icon == null) {
+      return;
+    }
+    _markerIconCacheByImageUrl[imageUrl] = icon;
+  }
+
+  void _enforceMarkerIconCacheLru() {
+    while (_markerIconCacheByImageUrl.length > _maxMarkerIconCacheEntries) {
+      final String oldestImageUrl = _markerIconCacheByImageUrl.keys.first;
+      final BitmapDescriptor? evictedIcon = _markerIconCacheByImageUrl.remove(
+        oldestImageUrl,
+      );
+      if (evictedIcon == null) {
+        continue;
+      }
+      final List<String> postIdsToEvict = _markerIconCache.entries
+          .where((MapEntry<String, BitmapDescriptor> entry) {
+            return identical(entry.value, evictedIcon);
+          })
+          .map((MapEntry<String, BitmapDescriptor> entry) => entry.key)
+          .toList();
+      for (final String postId in postIdsToEvict) {
+        _markerIconCache.remove(postId);
+      }
     }
   }
 
   void _scheduleMarkerRefresh() {
     _markerRefreshDebounceTimer?.cancel();
-    _markerRefreshDebounceTimer = Timer(
-      const Duration(milliseconds: 120),
-      () {
-        if (!mounted) {
-          return;
-        }
-        setState(() {});
-      },
-    );
+    _markerRefreshDebounceTimer = Timer(const Duration(milliseconds: 120), () {
+      if (!mounted) {
+        return;
+      }
+      setState(() {});
+    });
   }
 
   Future<BitmapDescriptor> _createCustomMarkerIcon(String imageUrl) async {
-    final Uri uri = Uri.parse(imageUrl);
-    final http.Response response = await http.get(uri);
-    if (response.statusCode != 200) {
-      throw Exception('Failed to download image');
-    }
-
-    final Uint8List bytes = response.bodyBytes;
+    final File imageFile = await DefaultCacheManager().getSingleFile(imageUrl);
+    final Uint8List bytes = await imageFile.readAsBytes();
     final ui.Codec codec = await ui.instantiateImageCodec(
       bytes,
       targetWidth: 60,
@@ -560,10 +638,7 @@ class _MapPostsScreenState extends State<MapPostsScreen> {
 
     await controller.animateCamera(
       CameraUpdate.newCameraPosition(
-        const CameraPosition(
-          target: LatLng(0, 0),
-          zoom: 1,
-        ),
+        const CameraPosition(target: LatLng(0, 0), zoom: 1),
       ),
     );
     _currentTarget = const LatLng(0, 0);
@@ -617,7 +692,9 @@ class _MapPostsScreenState extends State<MapPostsScreen> {
               0.0001) {
         return;
       }
-      if (!applyToPanel && old != null && !_isSignificantBoundsChange(old, bounds)) {
+      if (!applyToPanel &&
+          old != null &&
+          !_isSignificantBoundsChange(old, bounds)) {
         if (mounted && _showExploreAreaButton) {
           setState(() => _showExploreAreaButton = false);
         }
@@ -643,10 +720,9 @@ class _MapPostsScreenState extends State<MapPostsScreen> {
   bool _isValidBounds(LatLngBounds bounds) {
     final double latSpan =
         (bounds.northeast.latitude - bounds.southwest.latitude).abs();
-    final double lngSpan =
-        _wrapLongitudeDelta(
-          bounds.northeast.longitude - bounds.southwest.longitude,
-        ).abs();
+    final double lngSpan = _wrapLongitudeDelta(
+      bounds.northeast.longitude - bounds.southwest.longitude,
+    ).abs();
     if (latSpan < 0.000001 && lngSpan < 0.000001) {
       return false;
     }
@@ -667,16 +743,16 @@ class _MapPostsScreenState extends State<MapPostsScreen> {
         (oldCenterLat - nextCenterLat).abs() +
         (oldCenterLng - nextCenterLng).abs();
 
-    final double oldLatSpan =
-        (old.northeast.latitude - old.southwest.latitude).abs();
-    final double oldLngSpan =
-        _wrapLongitudeDelta(old.northeast.longitude - old.southwest.longitude)
-            .abs();
+    final double oldLatSpan = (old.northeast.latitude - old.southwest.latitude)
+        .abs();
+    final double oldLngSpan = _wrapLongitudeDelta(
+      old.northeast.longitude - old.southwest.longitude,
+    ).abs();
     final double nextLatSpan =
         (next.northeast.latitude - next.southwest.latitude).abs();
-    final double nextLngSpan =
-        _wrapLongitudeDelta(next.northeast.longitude - next.southwest.longitude)
-            .abs();
+    final double nextLngSpan = _wrapLongitudeDelta(
+      next.northeast.longitude - next.southwest.longitude,
+    ).abs();
 
     final double oldSpan = oldLatSpan + oldLngSpan;
     final double nextSpan = nextLatSpan + nextLngSpan;
@@ -895,10 +971,7 @@ class _MapPostsScreenState extends State<MapPostsScreen> {
                     _showPostPreview(data);
                     if (point != null) {
                       _mapController?.animateCamera(
-                        CameraUpdate.newLatLngZoom(
-                          point,
-                          14,
-                        ),
+                        CameraUpdate.newLatLngZoom(point, 14),
                       );
                     }
                   },
@@ -907,6 +980,38 @@ class _MapPostsScreenState extends State<MapPostsScreen> {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildDebugMetricsChip({
+    required int visibleMarkerCount,
+    required int visiblePopularCount,
+  }) {
+    final String debugText =
+        'docs:${_latestDocs.length} '
+        'markers:$visibleMarkerCount '
+        'popular:$visiblePopularCount '
+        'iconUrlCache:${_markerIconCacheByImageUrl.length} '
+        'postIconCache:${_markerIconCache.length} '
+        'loading:${_markerIconLoading.length}';
+
+    return IgnorePointer(
+      child: Container(
+        constraints: const BoxConstraints(maxWidth: 320),
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+        decoration: BoxDecoration(
+          color: AppColors.black.withValues(alpha: 0.72),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Text(
+          debugText,
+          style: const TextStyle(
+            color: AppColors.white,
+            fontSize: 10,
+            fontFeatures: <ui.FontFeature>[ui.FontFeature.tabularFigures()],
+          ),
+        ),
       ),
     );
   }
