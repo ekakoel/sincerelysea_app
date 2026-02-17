@@ -13,6 +13,10 @@ import GoogleMaps
     if let apiKey = Bundle.main.object(forInfoDictionaryKey: "GoogleMapsAPIKey") as? String,
       !apiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
       GMSServices.provideAPIKey(apiKey)
+      #if DEBUG
+        let bundleId = Bundle.main.bundleIdentifier ?? "unknown_bundle"
+        print("[GoogleMaps] API key loaded for bundle: \(bundleId)")
+      #endif
     } else {
       print("[GoogleMaps] Missing GoogleMapsAPIKey. Set GOOGLE_MAPS_API_KEY in ios/Flutter/*.xcconfig")
     }

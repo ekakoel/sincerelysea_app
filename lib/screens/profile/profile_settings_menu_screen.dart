@@ -12,6 +12,7 @@ import 'package:sincerelysea/screens/profile/change_password_screen.dart';
 import 'package:sincerelysea/screens/profile/profile_settings_screen.dart';
 import 'package:sincerelysea/screens/settings/app_permissions_screen.dart';
 import 'package:sincerelysea/screens/settings/app_version_screen.dart';
+import 'package:sincerelysea/screens/settings/hidden_content_screen.dart';
 import 'package:sincerelysea/screens/settings/notification_preferences_screen.dart';
 import 'package:sincerelysea/screens/settings/privacy_controls_screen.dart';
 import 'package:sincerelysea/screens/settings/session_management_screen.dart';
@@ -131,11 +132,10 @@ class _ProfileSettingsMenuScreenState extends State<ProfileSettingsMenuScreen> {
                 icon: Icons.visibility_off_outlined,
                 title: 'Hidden Content',
                 subtitle: 'Manage hidden posts and muted content',
-                onTap: () => _openStub(
-                  context,
-                  title: 'Hidden Content',
-                  description:
-                      'This section is ready. Hidden posts and content preferences can be managed here.',
+                onTap: () => Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                    builder: (_) => const HiddenContentScreen(),
+                  ),
                 ),
               ),
             ],
@@ -250,19 +250,6 @@ class _ProfileSettingsMenuScreenState extends State<ProfileSettingsMenuScreen> {
             label: const Text('Log out'),
           ),
         ],
-      ),
-    );
-  }
-
-  void _openStub(
-    BuildContext context, {
-    required String title,
-    required String description,
-  }) {
-    Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        builder: (_) =>
-            _SettingsStubScreen(title: title, description: description),
       ),
     );
   }
@@ -527,26 +514,6 @@ class _SettingsItem extends StatelessWidget {
       subtitle: Text(subtitle),
       trailing: const Icon(Icons.chevron_right),
       onTap: onTap,
-    );
-  }
-}
-
-class _SettingsStubScreen extends StatelessWidget {
-  const _SettingsStubScreen({required this.title, required this.description});
-
-  final String title;
-  final String description;
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: Text(title)),
-      body: Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Text(description, textAlign: TextAlign.center),
-        ),
-      ),
     );
   }
 }

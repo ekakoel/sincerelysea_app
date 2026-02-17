@@ -19,6 +19,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
   int _currentIndex = 0;
   DeepLinkService? _deepLinkService;
   bool _isOpeningDeepLink = false;
+  static const double _bottomNavIconTopPadding = 4;
 
   @override
   void didChangeDependencies() {
@@ -85,11 +86,35 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
         selectedLabelStyle: const TextStyle(fontWeight: FontWeight.w600),
         currentIndex: _currentIndex,
         onTap: (int value) => setState(() => _currentIndex = value),
-        items: const <BottomNavigationBarItem>[
-          BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Home'),
-          BottomNavigationBarItem(icon: Icon(Icons.search), label: 'Search'),
-          BottomNavigationBarItem(icon: Icon(Icons.explore), label: 'Explore'),
-          BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Profile'),
+        items: <BottomNavigationBarItem>[
+          BottomNavigationBarItem(
+            icon: Padding(
+              padding: const EdgeInsets.only(top: _bottomNavIconTopPadding),
+              child: const Icon(Icons.home),
+            ),
+            label: 'Home',
+          ),
+          BottomNavigationBarItem(
+            icon: Padding(
+              padding: const EdgeInsets.only(top: _bottomNavIconTopPadding),
+              child: const Icon(Icons.search),
+            ),
+            label: 'Search',
+          ),
+          BottomNavigationBarItem(
+            icon: Padding(
+              padding: const EdgeInsets.only(top: _bottomNavIconTopPadding),
+              child: const Icon(Icons.explore),
+            ),
+            label: 'Explore',
+          ),
+          BottomNavigationBarItem(
+            icon: Padding(
+              padding: const EdgeInsets.only(top: _bottomNavIconTopPadding),
+              child: const Icon(Icons.person),
+            ),
+            label: 'Profile',
+          ),
         ],
       ),
     );

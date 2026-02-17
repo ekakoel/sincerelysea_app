@@ -22,10 +22,12 @@ import 'package:sincerelysea/screens/map/map_picker_screen.dart';
 import 'package:sincerelysea/screens/notifications/notifications_screen.dart';
 import 'package:sincerelysea/screens/profile/user_profile_preview_screen.dart';
 import 'package:sincerelysea/services/follow_service.dart';
+import 'package:sincerelysea/services/hidden_content_preferences_service.dart';
 import 'package:sincerelysea/services/local_notification_service.dart';
 import 'package:sincerelysea/services/moderation_service.dart';
 import 'package:sincerelysea/services/notification_center_service.dart';
 import 'package:sincerelysea/services/post_service.dart';
+import 'package:sincerelysea/utils/post_location_label.dart';
 
 Future<Position> _getCurrentPosition() async {
   final bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
@@ -65,6 +67,38 @@ class CreatePostRequest {
   final String location;
   final GeoPoint? geoPoint;
   final List<String> hashtags;
+}
+
+const int maxPostHashtagCount = 8;
+
+List<String> _parseHashtagsInput(String value) {
+  final Set<String> seen = <String>{};
+  final List<String> parsed = <String>[];
+  final List<String> rawTags = value
+      .trim()
+      .split(RegExp(r'[\s,]+'))
+      .where((String tag) => tag.isNotEmpty)
+      .toList();
+  for (final String rawTag in rawTags) {
+    final String normalized = rawTag.startsWith('#') ? rawTag : '#$rawTag';
+    final String key = normalized.toLowerCase();
+    if (key.length <= 1 || !seen.add(key)) {
+      continue;
+    }
+    parsed.add(normalized);
+  }
+  return parsed;
+}
+
+String _formatHashtagsOnComma(String value) {
+  if (!value.contains(',')) {
+    return value;
+  }
+  final List<String> hashtags = _parseHashtagsInput(value);
+  if (hashtags.isEmpty) {
+    return '';
+  }
+  return '${hashtags.join(' ')} ';
 }
 
 Future<ui.Size> _decodeImageSize(File file) async {
@@ -193,6 +227,9 @@ Future<void> showCreatePostDialog(
           GeoPoint? selectedGeoPoint;
           bool isUploading = false;
           bool isFetchingLocation = false;
+          bool isFormattingHashtags = false;
+          String lastAcceptedHashtagInput = '';
+          bool hasShownHashtagLimitWarning = false;
 
           return StatefulBuilder(
             builder: (BuildContext context, StateSetter setState) {
@@ -493,6 +530,16 @@ Future<void> showCreatePostDialog(
                                                   if (!context.mounted) {
                                                     return;
                                                   }
+                                                  final String resolvedLocation =
+                                                      await resolveRegionCountryLabel(
+                                                        latitude:
+                                                            position.latitude,
+                                                        longitude:
+                                                            position.longitude,
+                                                      );
+                                                  if (!context.mounted) {
+                                                    return;
+                                                  }
 
                                                   setState(() {
                                                     selectedGeoPoint = GeoPoint(
@@ -500,7 +547,7 @@ Future<void> showCreatePostDialog(
                                                       position.longitude,
                                                     );
                                                     locationController.text =
-                                                        '${position.latitude.toStringAsFixed(5)}, ${position.longitude.toStringAsFixed(5)}';
+                                                        resolvedLocation;
                                                   });
                                                 } catch (e) {
                                                   if (rootContext.mounted) {
@@ -559,6 +606,16 @@ Future<void> showCreatePostDialog(
                                               !context.mounted) {
                                             return;
                                           }
+                                          final String resolvedLocation =
+                                              await resolveRegionCountryLabel(
+                                                latitude: picked.point.latitude,
+                                                longitude:
+                                                    picked.point.longitude,
+                                                fallback: picked.label,
+                                              );
+                                          if (!context.mounted) {
+                                            return;
+                                          }
 
                                           setState(() {
                                             selectedGeoPoint = GeoPoint(
@@ -566,7 +623,7 @@ Future<void> showCreatePostDialog(
                                               picked.point.longitude,
                                             );
                                             locationController.text =
-                                                picked.label;
+                                                resolvedLocation;
                                           });
                                         },
                                         icon: const Icon(
@@ -618,8 +675,56 @@ Future<void> showCreatePostDialog(
                                 const SizedBox(height: 8),
                                 TextField(
                                   controller: hashtagController,
+                                  onChanged: (String value) {
+                                    if (isFormattingHashtags) {
+                                      return;
+                                    }
+                                    final List<String> hashtags =
+                                        _parseHashtagsInput(value);
+                                    if (hashtags.length > maxPostHashtagCount) {
+                                      isFormattingHashtags = true;
+                                      hashtagController.value = TextEditingValue(
+                                        text: lastAcceptedHashtagInput,
+                                        selection: TextSelection.collapsed(
+                                          offset:
+                                              lastAcceptedHashtagInput.length,
+                                        ),
+                                      );
+                                      isFormattingHashtags = false;
+                                      if (!hasShownHashtagLimitWarning &&
+                                          rootContext.mounted) {
+                                        hasShownHashtagLimitWarning = true;
+                                        ScaffoldMessenger.of(
+                                          rootContext,
+                                        ).showSnackBar(
+                                          const SnackBar(
+                                            content: Text(
+                                              'Maximum 8 hashtags per post.',
+                                            ),
+                                          ),
+                                        );
+                                      }
+                                      return;
+                                    }
+                                    hasShownHashtagLimitWarning = false;
+                                    final String formatted =
+                                        _formatHashtagsOnComma(value);
+                                    if (formatted == value) {
+                                      lastAcceptedHashtagInput = value;
+                                      return;
+                                    }
+                                    isFormattingHashtags = true;
+                                    hashtagController.value = TextEditingValue(
+                                      text: formatted,
+                                      selection: TextSelection.collapsed(
+                                        offset: formatted.length,
+                                      ),
+                                    );
+                                    isFormattingHashtags = false;
+                                    lastAcceptedHashtagInput = formatted;
+                                  },
                                   decoration: const InputDecoration(
-                                    hintText: 'Hashtags (e.g. #sea #sun)',
+                                    hintText: 'Hashtags (e.g. sea, sun)',
                                     prefixIcon: Icon(Icons.tag),
                                   ),
                                 ),
@@ -673,22 +778,24 @@ Future<void> showCreatePostDialog(
                                         );
                                         return;
                                       }
-                                      setState(() => isUploading = true);
-
                                       final List<String> hashtags =
-                                          hashtagController.text
-                                              .trim()
-                                              .split(' ')
-                                              .where(
-                                                (String tag) => tag.isNotEmpty,
-                                              )
-                                              .map(
-                                                (String tag) =>
-                                                    tag.startsWith('#')
-                                                    ? tag
-                                                    : '#$tag',
-                                              )
-                                              .toList();
+                                          _parseHashtagsInput(
+                                            hashtagController.text,
+                                          );
+                                      if (hashtags.length >
+                                          maxPostHashtagCount) {
+                                        ScaffoldMessenger.of(
+                                          rootContext,
+                                        ).showSnackBar(
+                                          const SnackBar(
+                                            content: Text(
+                                              'Maximum 8 hashtags per post.',
+                                            ),
+                                          ),
+                                        );
+                                        return;
+                                      }
+                                      setState(() => isUploading = true);
 
                                       final CreatePostRequest request =
                                           CreatePostRequest(
@@ -890,7 +997,11 @@ class HomeScreenState extends State<HomeScreen> {
     final PostService postService = context.read<PostService>();
     final ModerationService moderationService = context
         .read<ModerationService>();
+    final HiddenContentPreferencesService hiddenContentPreferencesService =
+        HiddenContentPreferencesService();
     final User? currentUser = context.read<User?>();
+    final HiddenContentPreferences hiddenPreferences =
+        await hiddenContentPreferencesService.load();
     final QuerySnapshot<Map<String, dynamic>> snapshot = await postService
         .getPostsPaginated(limit: _pageSize, startAfter: _lastDocument);
 
@@ -921,6 +1032,12 @@ class HomeScreenState extends State<HomeScreen> {
       if (visibility == 'private' &&
           currentUser != null &&
           currentUser.uid != postOwnerUid) {
+        continue;
+      }
+      if (hiddenContentPreferencesService.shouldHidePostByPreferences(
+        data,
+        hiddenPreferences,
+      )) {
         continue;
       }
       visibleDocs.add(doc);
@@ -1172,8 +1289,12 @@ class HomeScreenState extends State<HomeScreen> {
             return const Center(child: CircularProgressIndicator());
           }
           _prefetchUpcomingImages(index);
-          final Map<String, dynamic> data = _posts[index].data();
-          return _HomeGridPostTile(post: data);
+          final QueryDocumentSnapshot<Map<String, dynamic>> doc = _posts[index];
+          return _HomeGridPostTile(
+            post: doc.data(),
+            postId: doc.id,
+            currentUser: user,
+          );
         },
       );
     }
@@ -1339,6 +1460,95 @@ class _PostCardState extends State<PostCard>
   late final Animation<double> _scaleAnimation;
   bool _showHeart = false;
   bool _isSharing = false;
+  bool _isCaptionExpanded = false;
+  static const int _captionPreviewMaxSentences = 2;
+  static const int _captionPreviewMaxChars = 160;
+
+  String _collapsedCaption(String caption) {
+    final String trimmed = caption.trim();
+    if (trimmed.isEmpty) {
+      return '';
+    }
+    final List<String> sentences = trimmed
+        .split(RegExp(r'(?<=[.!?])\s+'))
+        .where((String sentence) => sentence.trim().isNotEmpty)
+        .toList();
+    if (sentences.length > _captionPreviewMaxSentences) {
+      final String limited = sentences
+          .take(_captionPreviewMaxSentences)
+          .join(' ')
+          .trim();
+      if (limited.length <= _captionPreviewMaxChars) {
+        return '$limited...';
+      }
+    }
+    if (trimmed.length > _captionPreviewMaxChars) {
+      return '${trimmed.substring(0, _captionPreviewMaxChars).trimRight()}...';
+    }
+    return trimmed;
+  }
+
+  bool _canExpandCaption(String caption) {
+    return _collapsedCaption(caption) != caption.trim();
+  }
+
+  Widget _buildCaptionSection(
+    String caption, {
+    required EdgeInsetsGeometry padding,
+    required TextStyle style,
+  }) {
+    final String trimmed = caption.trim();
+    if (trimmed.isEmpty) {
+      return const SizedBox.shrink();
+    }
+    final String collapsed = _collapsedCaption(trimmed);
+    final bool canExpand = _canExpandCaption(trimmed);
+    final String visibleText = _isCaptionExpanded ? trimmed : collapsed;
+    return Padding(
+      padding: padding,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Text(visibleText, style: style),
+          if (canExpand)
+            Align(
+              alignment: Alignment.centerLeft,
+              child: TextButton(
+                onPressed: () {
+                  setState(() => _isCaptionExpanded = !_isCaptionExpanded);
+                },
+                style: TextButton.styleFrom(
+                  minimumSize: Size.zero,
+                  padding: const EdgeInsets.only(top: 4, right: 8),
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+                child: Text(_isCaptionExpanded ? 'Read less' : 'Read more'),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  @override
+  void didUpdateWidget(covariant PostCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.postId != widget.postId && _isCaptionExpanded) {
+      _isCaptionExpanded = false;
+    }
+  }
+
+  void _openPostDetailSheet(Map<String, dynamic> postData) {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      builder: (BuildContext context) => _PostDetailActionSheet(
+        postId: widget.postId,
+        initialPost: postData,
+        currentUser: widget.currentUser,
+      ),
+    );
+  }
 
   Future<void> _sharePost({
     required String username,
@@ -1692,15 +1902,21 @@ class _PostCardState extends State<PostCard>
                     : () async {
                         setState(() => isSaving = true);
                         try {
-                          final List<String> hashtags = hashtagController.text
-                              .trim()
-                              .split(' ')
-                              .where((String tag) => tag.isNotEmpty)
-                              .map(
-                                (String tag) =>
-                                    tag.startsWith('#') ? tag : '#$tag',
-                              )
-                              .toList();
+                          final List<String> hashtags = _parseHashtagsInput(
+                            hashtagController.text,
+                          );
+                          if (hashtags.length > maxPostHashtagCount) {
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text(
+                                    'Maximum 8 hashtags per post.',
+                                  ),
+                                ),
+                              );
+                            }
+                            return;
+                          }
 
                           await context.read<PostService>().updatePost(
                             widget.postId,
@@ -1822,6 +2038,9 @@ class _PostCardState extends State<PostCard>
             final String content = postData['content']?.toString() ?? '';
             final String? imageUrl = postData['imageUrl'] as String?;
             final String? location = postData['location'] as String?;
+            final GeoPoint? geo = postData['geo'] is GeoPoint
+                ? postData['geo'] as GeoPoint
+                : null;
             final List<dynamic> hashtags =
                 postData['hashtags'] as List<dynamic>? ?? <dynamic>[];
             final List<dynamic> likes =
@@ -1840,7 +2059,8 @@ class _PostCardState extends State<PostCard>
                 widget.currentUser != null &&
                 likes.contains(widget.currentUser!.uid);
             final bool hasImage = imageUrl != null && imageUrl.isNotEmpty;
-            final bool hasLocation = location != null && location.isNotEmpty;
+            final bool hasLocation =
+                (location != null && location.isNotEmpty) || geo != null;
             final String? postOwnerUid = postData['uid']?.toString();
             final bool isPostOwner =
                 widget.currentUser != null &&
@@ -2082,6 +2302,8 @@ class _PostCardState extends State<PostCard>
                                         await moderationService.hidePost(
                                           postId: widget.postId,
                                           postOwnerUid: postOwnerUid,
+                                          postOwnerUsername: username,
+                                          postCaption: content,
                                         );
                                         if (context.mounted) {
                                           ScaffoldMessenger.of(
@@ -2183,6 +2405,7 @@ class _PostCardState extends State<PostCard>
                   ),
                   if (hasImage)
                     GestureDetector(
+                      onTap: () => _openPostDetailSheet(postData),
                       onDoubleTap: () {
                         context.read<PostService>().toggleLike(
                           widget.postId,
@@ -2212,12 +2435,10 @@ class _PostCardState extends State<PostCard>
                       ),
                     ),
                   if (hasImage && content.isNotEmpty)
-                    Padding(
+                    _buildCaptionSection(
+                      content,
                       padding: const EdgeInsets.fromLTRB(12.0, 12.0, 12.0, 0),
-                      child: Text(
-                        content,
-                        style: const TextStyle(fontSize: 15),
-                      ),
+                      style: const TextStyle(fontSize: 15),
                     ),
                   if (hasImage && hashtags.isNotEmpty)
                     Padding(
@@ -2245,23 +2466,37 @@ class _PostCardState extends State<PostCard>
                             color: AppColors.gray600,
                           ),
                           const SizedBox(width: 4),
-                          Text(
-                            location,
-                            style: TextStyle(
-                              color: AppColors.gray600,
-                              fontSize: 12,
+                          Expanded(
+                            child: FutureBuilder<String>(
+                              future: resolvePostLocationLabel(postData),
+                              builder: (
+                                BuildContext context,
+                                AsyncSnapshot<String> snapshot,
+                              ) {
+                                final String resolved =
+                                    snapshot.data?.trim().isNotEmpty == true
+                                    ? snapshot.data!.trim()
+                                    : (location ?? '-');
+                                return Text(
+                                  resolved,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                    color: AppColors.gray600,
+                                    fontSize: 12,
+                                  ),
+                                );
+                              },
                             ),
                           ),
                         ],
                       ),
                     ),
                   if (!hasImage && content.isNotEmpty)
-                    Padding(
+                    _buildCaptionSection(
+                      content,
                       padding: const EdgeInsets.symmetric(horizontal: 12.0),
-                      child: Text(
-                        content,
-                        style: TextStyle(color: AppColors.gray700),
-                      ),
+                      style: TextStyle(color: AppColors.gray700),
                     ),
                   Padding(
                     padding: const EdgeInsets.symmetric(
@@ -2416,6 +2651,22 @@ class _CommentsSheetState extends State<CommentsSheet> {
   bool _isPosting = false;
   String? _replyingToCommentId;
   String? _replyingToUsername;
+
+  void _openUserProfile({
+    required String? uid,
+    required String username,
+  }) {
+    final String targetUid = uid?.trim() ?? '';
+    if (targetUid.isEmpty) {
+      return;
+    }
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) =>
+            UserProfilePreviewScreen(userId: targetUid, initialUsername: username),
+      ),
+    );
+  }
 
   @override
   void dispose() {
@@ -2610,22 +2861,34 @@ class _CommentsSheetState extends State<CommentsSheet> {
                           child: Column(
                             children: <Widget>[
                               ListTile(
-                                leading: CircleAvatar(
-                                  child: Text(
-                                    username.isNotEmpty
-                                        ? username[0].toUpperCase()
-                                        : '?',
+                                leading: GestureDetector(
+                                  onTap: () => _openUserProfile(
+                                    uid: commentUid,
+                                    username: username,
+                                  ),
+                                  child: CircleAvatar(
+                                    child: Text(
+                                      username.isNotEmpty
+                                          ? username[0].toUpperCase()
+                                          : '?',
+                                    ),
                                   ),
                                 ),
                                 title: Row(
                                   children: <Widget>[
                                     Expanded(
-                                      child: Text(
-                                        username,
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                        style: const TextStyle(
-                                          fontWeight: FontWeight.bold,
+                                      child: GestureDetector(
+                                        onTap: () => _openUserProfile(
+                                          uid: commentUid,
+                                          username: username,
+                                        ),
+                                        child: Text(
+                                          username,
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: const TextStyle(
+                                            fontWeight: FontWeight.bold,
+                                          ),
                                         ),
                                       ),
                                     ),
@@ -2837,6 +3100,8 @@ class _CommentsSheetState extends State<CommentsSheet> {
                                               ) {
                                                 final Map<String, dynamic>
                                                 replyData = replyDoc.data();
+                                                final String? replyUid =
+                                                    replyData['uid']?.toString();
                                                 final String replyUsername =
                                                     replyData['username']
                                                         ?.toString() ??
@@ -2870,38 +3135,47 @@ class _CommentsSheetState extends State<CommentsSheet> {
                                                           10,
                                                         ),
                                                   ),
-                                                  child: RichText(
-                                                    text: TextSpan(
-                                                      style: const TextStyle(
-                                                        color: AppColors.black,
-                                                        fontSize: 13,
-                                                      ),
-                                                      children: <InlineSpan>[
-                                                        TextSpan(
-                                                          text:
-                                                              '$replyUsername ',
+                                                  child: Wrap(
+                                                    spacing: 4,
+                                                    runSpacing: 2,
+                                                    children: <Widget>[
+                                                      GestureDetector(
+                                                        onTap: () =>
+                                                            _openUserProfile(
+                                                              uid: replyUid,
+                                                              username:
+                                                                  replyUsername,
+                                                            ),
+                                                        child: Text(
+                                                          replyUsername,
                                                           style:
                                                               const TextStyle(
+                                                                color:
+                                                                    AppColors
+                                                                        .black,
+                                                                fontSize: 13,
                                                                 fontWeight:
                                                                     FontWeight
                                                                         .w700,
                                                               ),
                                                         ),
-                                                        TextSpan(
-                                                          text: replyContent,
+                                                      ),
+                                                      Text(
+                                                        replyContent,
+                                                        style: const TextStyle(
+                                                          color: AppColors.black,
+                                                          fontSize: 13,
                                                         ),
-                                                        TextSpan(
-                                                          text:
-                                                              '  •  $replyTime',
-                                                          style:
-                                                              const TextStyle(
-                                                                color: AppColors
-                                                                    .gray600,
-                                                                fontSize: 12,
-                                                              ),
+                                                      ),
+                                                      Text(
+                                                        '• $replyTime',
+                                                        style: const TextStyle(
+                                                          color:
+                                                              AppColors.gray600,
+                                                          fontSize: 12,
                                                         ),
-                                                      ],
-                                                    ),
+                                                      ),
+                                                    ],
                                                   ),
                                                 );
                                               }).toList(),
@@ -2981,9 +3255,15 @@ class _CommentsSheetState extends State<CommentsSheet> {
 }
 
 class _HomeGridPostTile extends StatelessWidget {
-  const _HomeGridPostTile({required this.post});
+  const _HomeGridPostTile({
+    required this.post,
+    required this.postId,
+    required this.currentUser,
+  });
 
   final Map<String, dynamic> post;
+  final String postId;
+  final User? currentUser;
 
   @override
   Widget build(BuildContext context) {
@@ -2998,18 +3278,13 @@ class _HomeGridPostTile extends StatelessWidget {
         color: AppColors.white,
         child: InkWell(
           onTap: () {
-            final int likeCount =
-                (post['likes'] as List<dynamic>? ?? <dynamic>[]).length;
-            final int commentCount = post['commentCount'] as int? ?? 0;
-            final int shareCount = post['shareCount'] as int? ?? 0;
             showModalBottomSheet<void>(
               context: context,
               isScrollControlled: true,
-              builder: (BuildContext context) => _HomeGridPostDetailSheet(
-                post: post,
-                likeCount: likeCount,
-                commentCount: commentCount,
-                shareCount: shareCount,
+              builder: (BuildContext context) => _PostDetailActionSheet(
+                postId: postId,
+                initialPost: post,
+                currentUser: currentUser,
               ),
             );
           },
@@ -3081,131 +3356,310 @@ class _HomeGridPostTile extends StatelessWidget {
   }
 }
 
-class _HomeGridPostDetailSheet extends StatelessWidget {
-  const _HomeGridPostDetailSheet({
-    required this.post,
-    required this.likeCount,
-    required this.commentCount,
-    required this.shareCount,
+class _PostDetailActionSheet extends StatelessWidget {
+  const _PostDetailActionSheet({
+    required this.postId,
+    required this.initialPost,
+    required this.currentUser,
   });
 
-  final Map<String, dynamic> post;
-  final int likeCount;
-  final int commentCount;
-  final int shareCount;
+  final String postId;
+  final Map<String, dynamic> initialPost;
+  final User? currentUser;
 
   @override
   Widget build(BuildContext context) {
-    final String imageUrl = post['imageUrl']?.toString() ?? '';
-    final String caption = post['content']?.toString() ?? '';
-    final String location = post['location']?.toString() ?? '-';
-    final List<dynamic> hashtags =
-        post['hashtags'] as List<dynamic>? ?? <dynamic>[];
-    final int totalEngagement = likeCount + commentCount + shareCount;
-
     return DraggableScrollableSheet(
-      initialChildSize: 0.75,
+      initialChildSize: 0.82,
       minChildSize: 0.55,
       maxChildSize: 0.95,
       expand: false,
       builder: (BuildContext context, ScrollController scrollController) {
-        return Padding(
-          padding: const EdgeInsets.all(16),
-          child: ListView(
-            controller: scrollController,
-            children: <Widget>[
-              if (imageUrl.isNotEmpty)
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(12),
-                  child: CachedNetworkImage(
-                    imageUrl: imageUrl,
-                    height: 240,
-                    fit: BoxFit.cover,
-                    placeholder: (BuildContext context, String _) => Container(
-                      height: 240,
-                      color: AppColors.gray200,
-                      child: const Center(
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      ),
-                    ),
-                    errorWidget:
-                        (BuildContext context, String _, Object error) =>
+        return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+          stream: context.read<PostService>().getPost(postId),
+          builder: (
+            BuildContext context,
+            AsyncSnapshot<DocumentSnapshot<Map<String, dynamic>>> snapshot,
+          ) {
+            final Map<String, dynamic> postData =
+                snapshot.data?.data() ?? initialPost;
+            final String imageUrl = postData['imageUrl']?.toString() ?? '';
+            final String caption = postData['content']?.toString() ?? '';
+            final String username = postData['username']?.toString() ?? 'User';
+            final String location = postData['location']?.toString() ?? '-';
+            final String? postOwnerUid = postData['uid']?.toString();
+            final List<dynamic> hashtags =
+                postData['hashtags'] as List<dynamic>? ?? <dynamic>[];
+            final List<dynamic> likes =
+                postData['likes'] as List<dynamic>? ?? <dynamic>[];
+            final int likeCount = likes.length;
+            final int commentCount = postData['commentCount'] as int? ?? 0;
+            final int shareCount = postData['shareCount'] as int? ?? 0;
+            final int totalEngagement = likeCount + commentCount + shareCount;
+            final bool isLiked =
+                currentUser != null && likes.contains(currentUser!.uid);
+            final bool isPostOwner =
+                currentUser != null &&
+                postOwnerUid != null &&
+                currentUser!.uid == postOwnerUid;
+            final Timestamp? postTimestamp = postData['timestamp'] is Timestamp
+                ? postData['timestamp'] as Timestamp
+                : null;
+
+            return Padding(
+              padding: const EdgeInsets.all(16),
+              child: ListView(
+                controller: scrollController,
+                children: <Widget>[
+                  if (imageUrl.isNotEmpty)
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(12),
+                      child: CachedNetworkImage(
+                        imageUrl: imageUrl,
+                        height: 240,
+                        fit: BoxFit.cover,
+                        placeholder: (BuildContext context, String _) =>
                             Container(
                               height: 240,
                               color: AppColors.gray200,
                               child: const Center(
-                                child: Icon(Icons.broken_image_outlined),
+                                child: CircularProgressIndicator(strokeWidth: 2),
                               ),
                             ),
-                  ),
-                ),
-              const SizedBox(height: 12),
-              Text(
-                caption.isEmpty ? 'No caption' : caption,
-                style: const TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                'Location: $location',
-                style: TextStyle(color: AppColors.gray700),
-              ),
-              const SizedBox(height: 8),
-              Wrap(
-                spacing: 6,
-                runSpacing: 6,
-                children: hashtags
-                    .map(
-                      (dynamic tag) => Chip(
-                        label: Text(tag.toString()),
-                        visualDensity: VisualDensity.compact,
+                        errorWidget:
+                            (BuildContext context, String _, Object error) =>
+                                Container(
+                                  height: 240,
+                                  color: AppColors.gray200,
+                                  child: const Center(
+                                    child: Icon(Icons.broken_image_outlined),
+                                  ),
+                                ),
                       ),
-                    )
-                    .toList(),
-              ),
-              const SizedBox(height: 12),
-              const Text(
-                'Insights',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
-              ),
-              const SizedBox(height: 8),
-              Row(
-                children: <Widget>[
-                  Expanded(
-                    child: _InsightTile(
-                      label: 'Likes',
-                      value: likeCount.toString(),
-                      icon: Icons.favorite_border,
+                    ),
+                  const SizedBox(height: 12),
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: CircleAvatar(
+                      backgroundColor: AppColors.gray300,
+                      child: Text(
+                        username.isNotEmpty ? username[0].toUpperCase() : '?',
+                      ),
+                    ),
+                    title: Text(
+                      username,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontWeight: FontWeight.w700),
+                    ),
+                    subtitle: Text(
+                      postOwnerUid == null
+                          ? 'Unknown profile'
+                          : 'Tap to view profile',
+                    ),
+                    onTap: postOwnerUid == null
+                        ? null
+                        : () {
+                            Navigator.of(context).push(
+                              MaterialPageRoute<void>(
+                                builder: (_) => UserProfilePreviewScreen(
+                                  userId: postOwnerUid,
+                                  initialUsername: username,
+                                ),
+                              ),
+                            );
+                          },
+                  ),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: <Widget>[
+                      ActionChip(
+                        avatar: Icon(
+                          isLiked ? Icons.favorite : Icons.favorite_border,
+                          size: 18,
+                          color: isLiked ? AppColors.black : null,
+                        ),
+                        label: Text('Like ($likeCount)'),
+                        onPressed: currentUser == null
+                            ? null
+                            : () {
+                                context.read<PostService>().toggleLike(
+                                  postId,
+                                  isLiked,
+                                );
+                              },
+                      ),
+                      ActionChip(
+                        avatar: const Icon(
+                          Icons.chat_bubble_outline,
+                          size: 18,
+                        ),
+                        label: Text('Comment ($commentCount)'),
+                        onPressed: () {
+                          showModalBottomSheet<void>(
+                            context: context,
+                            isScrollControlled: true,
+                            builder: (BuildContext context) => SizedBox(
+                              height: MediaQuery.of(context).size.height * 0.75,
+                              child: CommentsSheet(postId: postId),
+                            ),
+                          );
+                        },
+                      ),
+                      StreamBuilder<bool>(
+                        stream: context.read<FollowService>().isPostSavedStream(
+                          postId,
+                        ),
+                        builder: (
+                          BuildContext context,
+                          AsyncSnapshot<bool> saveSnapshot,
+                        ) {
+                          final bool isSaved = saveSnapshot.data ?? false;
+                          return ActionChip(
+                            avatar: Icon(
+                              isSaved
+                                  ? Icons.bookmark
+                                  : Icons.bookmark_border_outlined,
+                              size: 18,
+                            ),
+                            label: Text(isSaved ? 'Saved' : 'Save'),
+                            onPressed: currentUser == null
+                                ? null
+                                : () async {
+                                    try {
+                                      await context
+                                          .read<FollowService>()
+                                          .toggleSavePost(
+                                            postId: postId,
+                                            postOwnerUid: postOwnerUid ?? '',
+                                            caption: caption,
+                                            imageUrl: imageUrl,
+                                            timestamp: postTimestamp,
+                                          );
+                                    } catch (e) {
+                                      if (!context.mounted) {
+                                        return;
+                                      }
+                                      ScaffoldMessenger.of(
+                                        context,
+                                      ).showSnackBar(
+                                        SnackBar(
+                                          content: Text(
+                                            'Failed to save post: $e',
+                                          ),
+                                        ),
+                                      );
+                                    }
+                                  },
+                          );
+                        },
+                      ),
+                      ActionChip(
+                        avatar: const Icon(Icons.person_outline, size: 18),
+                        label: const Text('View profile'),
+                        onPressed: postOwnerUid == null
+                            ? null
+                            : () {
+                                Navigator.of(context).push(
+                                  MaterialPageRoute<void>(
+                                    builder: (_) => UserProfilePreviewScreen(
+                                      userId: postOwnerUid,
+                                      initialUsername: username,
+                                    ),
+                                  ),
+                                );
+                              },
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    caption.isEmpty ? 'No caption' : caption,
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w500,
                     ),
                   ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: _InsightTile(
-                      label: 'Comments',
-                      value: commentCount.toString(),
-                      icon: Icons.chat_bubble_outline,
-                    ),
+                  const SizedBox(height: 8),
+                  FutureBuilder<String>(
+                    future: resolvePostLocationLabel(postData),
+                    builder: (
+                      BuildContext context,
+                      AsyncSnapshot<String> snapshot,
+                    ) {
+                      final String resolved =
+                          snapshot.data?.trim().isNotEmpty == true
+                          ? snapshot.data!.trim()
+                          : location;
+                      return Text(
+                        'Location: $resolved',
+                        style: TextStyle(color: AppColors.gray700),
+                      );
+                    },
                   ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: _InsightTile(
-                      label: 'Shares',
-                      value: shareCount.toString(),
-                      icon: Icons.send_outlined,
-                    ),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 6,
+                    children: hashtags
+                        .map(
+                          (dynamic tag) => Chip(
+                            label: Text(tag.toString()),
+                            visualDensity: VisualDensity.compact,
+                          ),
+                        )
+                        .toList(),
                   ),
+                  if (isPostOwner) ...<Widget>[
+                    const SizedBox(height: 12),
+                    const Text(
+                      'Insights',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Row(
+                      children: <Widget>[
+                        Expanded(
+                          child: _InsightTile(
+                            label: 'Likes',
+                            value: likeCount.toString(),
+                            icon: Icons.favorite_border,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: _InsightTile(
+                            label: 'Comments',
+                            value: commentCount.toString(),
+                            icon: Icons.chat_bubble_outline,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: _InsightTile(
+                            label: 'Shares',
+                            value: shareCount.toString(),
+                            icon: Icons.send_outlined,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    _InsightTile(
+                      label: 'Total Engagement',
+                      value: totalEngagement.toString(),
+                      icon: Icons.insights_outlined,
+                    ),
+                  ],
                 ],
               ),
-              const SizedBox(height: 8),
-              _InsightTile(
-                label: 'Total Engagement',
-                value: totalEngagement.toString(),
-                icon: Icons.insights_outlined,
-              ),
-            ],
-          ),
+            );
+          },
         );
       },
     );

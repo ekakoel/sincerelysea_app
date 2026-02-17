@@ -7,6 +7,7 @@ import 'package:flutter_image_compress/flutter_image_compress.dart';
 import 'package:sincerelysea/services/telemetry_service.dart';
 
 class PostService {
+  static const int _maxHashtagCount = 8;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FirebaseStorage _storage = FirebaseStorage.instance;
@@ -78,6 +79,7 @@ class PostService {
       final List<String> locationKeywords = _buildLocationKeywords(
         location?.trim() ?? '',
       );
+      final List<String> sanitizedHashtags = _sanitizeHashtags(hashtags);
       await _firestore.collection('posts').add({
         'content': content.trim(),
         'username': username,
@@ -86,9 +88,7 @@ class PostService {
         'locationName': location?.trim(),
         'locationKeywords': locationKeywords,
         'geo': geo,
-        'hashtags': (hashtags ?? <String>[])
-            .map((String tag) => tag.toLowerCase())
-            .toList(),
+        'hashtags': sanitizedHashtags,
         'uid': user.uid,
         'visibility': normalizedVisibility,
         'allowComments': 'everyone',
@@ -201,13 +201,38 @@ class PostService {
   }) async {
     final user = _auth.currentUser;
     if (user == null) return;
+    final List<String> sanitizedHashtags = _sanitizeHashtags(hashtags);
 
     await _firestore.collection('posts').doc(postId).update({
       'content': content.trim(),
       'location': location?.trim() ?? '',
       'locationName': location?.trim() ?? '',
-      'hashtags': hashtags ?? [],
+      'hashtags': sanitizedHashtags,
     });
+  }
+
+  List<String> _sanitizeHashtags(List<String>? hashtags) {
+    if (hashtags == null || hashtags.isEmpty) {
+      return <String>[];
+    }
+    final Set<String> seen = <String>{};
+    final List<String> sanitized = <String>[];
+    for (final String rawTag in hashtags) {
+      final String trimmed = rawTag.trim();
+      if (trimmed.isEmpty) {
+        continue;
+      }
+      final String normalized = trimmed.startsWith('#') ? trimmed : '#$trimmed';
+      final String lower = normalized.toLowerCase();
+      if (lower.length <= 1 || !seen.add(lower)) {
+        continue;
+      }
+      sanitized.add(lower);
+      if (sanitized.length >= _maxHashtagCount) {
+        break;
+      }
+    }
+    return sanitized;
   }
 
   Stream<QuerySnapshot<Map<String, dynamic>>> getPostsForMap({

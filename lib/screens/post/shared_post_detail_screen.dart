@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:sincerelysea/theme/app_colors.dart';
 import 'package:provider/provider.dart';
 import 'package:sincerelysea/services/post_service.dart';
+import 'package:sincerelysea/utils/post_location_label.dart';
 
 class SharedPostDetailScreen extends StatelessWidget {
   const SharedPostDetailScreen({super.key, required this.postId});
@@ -91,9 +92,21 @@ class SharedPostDetailScreen extends StatelessWidget {
                     style: const TextStyle(fontSize: 16),
                   ),
                   const SizedBox(height: 8),
-                  Text(
-                    'Location: $location',
-                    style: TextStyle(color: AppColors.gray700),
+                  FutureBuilder<String>(
+                    future: resolvePostLocationLabel(data),
+                    builder: (
+                      BuildContext context,
+                      AsyncSnapshot<String> snapshot,
+                    ) {
+                      final String resolved =
+                          snapshot.data?.trim().isNotEmpty == true
+                          ? snapshot.data!.trim()
+                          : location;
+                      return Text(
+                        'Location: $resolved',
+                        style: TextStyle(color: AppColors.gray700),
+                      );
+                    },
                   ),
                   const SizedBox(height: 8),
                   Wrap(
@@ -101,9 +114,12 @@ class SharedPostDetailScreen extends StatelessWidget {
                     runSpacing: 6,
                     children: hashtags
                         .map(
-                          (dynamic tag) => Chip(
-                            label: Text(tag.toString()),
-                            visualDensity: VisualDensity.compact,
+                          (dynamic tag) => Text(
+                            tag.toString(),
+                            style: TextStyle(
+                              color: Theme.of(context).colorScheme.primary,
+                              fontWeight: FontWeight.w500,
+                            ),
                           ),
                         )
                         .toList(),

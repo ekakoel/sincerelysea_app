@@ -1,17 +1,16 @@
-import 'dart:ui' as ui;
 import 'dart:async';
-import 'dart:io';
 
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_cache_manager/flutter_cache_manager.dart';
-import 'package:sincerelysea/theme/app_colors.dart';
+import 'package:flutter_map/flutter_map.dart';
+import 'package:flutter_map_marker_cluster/flutter_map_marker_cluster.dart';
 import 'package:geolocator/geolocator.dart';
-import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:latlong2/latlong.dart';
 import 'package:provider/provider.dart';
 import 'package:sincerelysea/services/post_service.dart';
+import 'package:sincerelysea/theme/app_colors.dart';
+import 'package:sincerelysea/utils/post_location_label.dart';
 
 class MapPostsScreen extends StatefulWidget {
   const MapPostsScreen({super.key});
@@ -23,40 +22,27 @@ class MapPostsScreen extends StatefulWidget {
 class _MapPostsScreenState extends State<MapPostsScreen> {
   static const LatLng _defaultCenter = LatLng(-2.5489, 118.0149);
   static const double _minZoom = 1;
-  static const double _maxZoom = 20;
+  static const double _maxZoom = 19;
   static const double _minCenterShiftThreshold = 0.02;
   static const double _minSpanChangeRatioThreshold = 0.35;
 
-  final ClusterManagerId _postClusterManagerId = const ClusterManagerId(
-    'post_cluster_manager',
-  );
-  late final ClusterManager _postClusterManager = ClusterManager(
-    clusterManagerId: _postClusterManagerId,
-    onClusterTap: _handleClusterTap,
-  );
-
-  GoogleMapController? _mapController;
-  LatLng _currentTarget = _defaultCenter;
+  final MapController _mapController = MapController();
+  LatLng _currentCenter = _defaultCenter;
   double _currentZoom = 2;
-  final ValueNotifier<LatLngBounds?> _visibleBoundsNotifier =
-      ValueNotifier<LatLngBounds?>(null);
+
+  LatLngBounds? _appliedBounds;
   LatLngBounds? _pendingBounds;
   bool _showExploreAreaButton = false;
   int _popularLimit = 20;
+
   List<QueryDocumentSnapshot<Map<String, dynamic>>> _latestDocs =
       <QueryDocumentSnapshot<Map<String, dynamic>>>[];
   List<String> _appliedPopularPostIds = <String>[];
-  Timer? _cameraIdleDebounceTimer;
-  Timer? _markerRefreshDebounceTimer;
-  static const int _maxMarkerIconCacheEntries = 300;
-  final Map<String, BitmapDescriptor> _markerIconCache =
-      <String, BitmapDescriptor>{};
-  final Map<String, BitmapDescriptor> _markerIconCacheByImageUrl =
-      <String, BitmapDescriptor>{};
-  final Set<String> _markerIconLoading = <String>{};
   List<QueryDocumentSnapshot<Map<String, dynamic>>> _renderedPopularInZone =
       <QueryDocumentSnapshot<Map<String, dynamic>>>[];
-  Set<Marker> _renderedMarkers = <Marker>{};
+
+  Timer? _cameraIdleDebounceTimer;
+
   static const TextStyle _panelTitleStyle = TextStyle(
     fontSize: 12,
     fontWeight: FontWeight.w600,
@@ -69,10 +55,7 @@ class _MapPostsScreenState extends State<MapPostsScreen> {
 
   @override
   void dispose() {
-    _mapController = null;
-    _visibleBoundsNotifier.dispose();
     _cameraIdleDebounceTimer?.cancel();
-    _markerRefreshDebounceTimer?.cancel();
     super.dispose();
   }
 
@@ -84,584 +67,219 @@ class _MapPostsScreenState extends State<MapPostsScreen> {
       appBar: AppBar(title: const Text('Explore Map')),
       body: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
         stream: postService.getPostsForMap(),
-        builder:
-            (
-              BuildContext context,
-              AsyncSnapshot<QuerySnapshot<Map<String, dynamic>>> snapshot,
-            ) {
-              if (snapshot.hasError && _latestDocs.isEmpty) {
-                return Center(
-                  child: Text('Failed to load map posts: ${snapshot.error}'),
-                );
-              }
+        builder: (
+          BuildContext context,
+          AsyncSnapshot<QuerySnapshot<Map<String, dynamic>>> snapshot,
+        ) {
+          if (snapshot.hasError && _latestDocs.isEmpty) {
+            return Center(
+              child: Text('Failed to load map posts: ${snapshot.error}'),
+            );
+          }
 
-              final bool isRefreshingWithCache =
-                  snapshot.connectionState == ConnectionState.waiting &&
-                  _latestDocs.isNotEmpty;
+          final bool isRefreshingWithCache =
+              snapshot.connectionState == ConnectionState.waiting &&
+              _latestDocs.isNotEmpty;
 
-              final List<QueryDocumentSnapshot<Map<String, dynamic>>> docs =
-                  snapshot.data?.docs ?? _latestDocs;
+          final List<QueryDocumentSnapshot<Map<String, dynamic>>> docs =
+              snapshot.data?.docs ?? _latestDocs;
 
-              if (docs.isEmpty && snapshot.connectionState == ConnectionState.waiting) {
-                return const Center(child: CircularProgressIndicator());
-              }
-              _latestDocs = docs;
-              final LatLngBounds? appliedBounds = _visibleBoundsNotifier.value;
-              final Map<String, QueryDocumentSnapshot<Map<String, dynamic>>>
-              docsById = <String, QueryDocumentSnapshot<Map<String, dynamic>>>{
-                for (final QueryDocumentSnapshot<Map<String, dynamic>> doc
-                    in docs)
+          if (docs.isEmpty && snapshot.connectionState == ConnectionState.waiting) {
+            return const Center(child: CircularProgressIndicator());
+          }
+
+          _latestDocs = docs;
+          final Map<String, QueryDocumentSnapshot<Map<String, dynamic>>> docsById =
+              <String, QueryDocumentSnapshot<Map<String, dynamic>>>{
+                for (final QueryDocumentSnapshot<Map<String, dynamic>> doc in docs)
                   doc.id: doc,
               };
-              List<QueryDocumentSnapshot<Map<String, dynamic>>> popularInZone =
-                  _appliedPopularPostIds
-                      .map((String id) => docsById[id])
-                      .whereType<QueryDocumentSnapshot<Map<String, dynamic>>>()
-                      .toList();
-              if (_appliedPopularPostIds.isEmpty || popularInZone.isEmpty) {
-                popularInZone = _getPopularPostsInVisibleZone(
-                  docs,
-                  bounds: appliedBounds,
-                  limit: _popularLimit,
-                );
-              }
-              final bool keepPreviousPopular =
-                  isRefreshingWithCache &&
-                  popularInZone.isEmpty &&
-                  _renderedPopularInZone.isNotEmpty;
-              if (keepPreviousPopular) {
-                popularInZone = _renderedPopularInZone;
-              } else {
-                _renderedPopularInZone = popularInZone;
-              }
 
-              final Set<Marker> nextMarkers = <Marker>{};
-              for (final QueryDocumentSnapshot<Map<String, dynamic>> doc
-                  in popularInZone) {
-                final Map<String, dynamic> data = doc.data();
-                final LatLng? point = _extractLatLng(data);
-                if (point == null) {
-                  continue;
-                }
-                final String imageUrl = data['imageUrl']?.toString() ?? '';
-                _ensureMarkerIcon(postId: doc.id, imageUrl: imageUrl);
+          List<QueryDocumentSnapshot<Map<String, dynamic>>> popularInZone =
+              _appliedPopularPostIds
+                  .map((String id) => docsById[id])
+                  .whereType<QueryDocumentSnapshot<Map<String, dynamic>>>()
+                  .toList();
 
-                nextMarkers.add(
-                  Marker(
-                    markerId: MarkerId(doc.id),
-                    position: point,
-                    clusterManagerId: _postClusterManagerId,
-                    icon:
-                        _markerIconCache[doc.id] ??
-                        BitmapDescriptor.defaultMarkerWithHue(
-                          BitmapDescriptor.hueAzure,
-                        ),
-                    infoWindow: InfoWindow(
-                      title: _buildMarkerTitle(data),
-                      snippet: _buildMarkerSnippet(data),
-                    ),
-                    onTap: () => _showPostPreview(data),
-                  ),
-                );
-              }
-              final bool keepPreviousMarkers =
-                  isRefreshingWithCache &&
-                  nextMarkers.isEmpty &&
-                  _renderedMarkers.isNotEmpty;
-              final Set<Marker> markers = keepPreviousMarkers
-                  ? _renderedMarkers
-                  : nextMarkers;
-              if (!keepPreviousMarkers) {
-                _renderedMarkers = Set<Marker>.from(nextMarkers);
-              }
+          if (_appliedPopularPostIds.isEmpty || popularInZone.isEmpty) {
+            popularInZone = _getPopularPostsInBounds(
+              docs,
+              bounds: _appliedBounds,
+              limit: _popularLimit,
+            );
+          }
 
-              return Column(
-                children: <Widget>[
-                  Expanded(
-                    child: Stack(
+          final bool keepPreviousPopular =
+              isRefreshingWithCache &&
+              popularInZone.isEmpty &&
+              _renderedPopularInZone.isNotEmpty;
+          if (keepPreviousPopular) {
+            popularInZone = _renderedPopularInZone;
+          } else {
+            _renderedPopularInZone = popularInZone;
+          }
+
+          final List<Marker> markers = <Marker>[];
+          for (final QueryDocumentSnapshot<Map<String, dynamic>> doc in popularInZone) {
+            final Map<String, dynamic> data = doc.data();
+            final LatLng? point = _extractLatLng(data);
+            if (point == null) {
+              continue;
+            }
+            final String imageUrl = data['imageUrl']?.toString() ?? '';
+            markers.add(
+              Marker(
+                key: ValueKey<String>('post-marker-${doc.id}'),
+                point: point,
+                width: 40,
+                height: 40,
+                child: GestureDetector(
+                  onTap: () => _showPostPreview(data),
+                  child: _PostAvatarMarker(imageUrl: imageUrl),
+                ),
+              ),
+            );
+          }
+
+          return Column(
+            children: <Widget>[
+              Expanded(
+                child: Stack(
+                  children: <Widget>[
+                    FlutterMap(
+                      mapController: _mapController,
+                      options: MapOptions(
+                        initialCenter: _currentCenter,
+                        initialZoom: _currentZoom,
+                        minZoom: _minZoom,
+                        maxZoom: _maxZoom,
+                        onMapEvent: (MapEvent event) {
+                          _currentCenter = event.camera.center;
+                          _currentZoom = event.camera.zoom;
+                          _onCameraChangedDebounced();
+                        },
+                      ),
                       children: <Widget>[
-                        GoogleMap(
-                          key: const ValueKey<String>('explore_map'),
-                          initialCameraPosition: CameraPosition(
-                            target: _currentTarget,
-                            zoom: _currentZoom,
-                          ),
-                          minMaxZoomPreference: const MinMaxZoomPreference(
-                            _minZoom,
-                            _maxZoom,
-                          ),
-                          onMapCreated: (GoogleMapController controller) {
-                            _mapController = controller;
-                            _captureVisibleBounds(applyToPanel: true);
-                          },
-                          onCameraMove: (CameraPosition position) {
-                            _currentTarget = position.target;
-                            _currentZoom = position.zoom;
-                          },
-                          onCameraIdle: _onCameraIdleDebounced,
-                          clusterManagers: <ClusterManager>{
-                            _postClusterManager,
-                          },
-                          markers: markers,
-                          myLocationEnabled: true,
-                          myLocationButtonEnabled: false,
-                          zoomControlsEnabled: true,
-                          zoomGesturesEnabled: true,
+                        TileLayer(
+                          urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                          userAgentPackageName: 'com.sincerelysea',
                         ),
-                        if (markers.isEmpty && !isRefreshingWithCache)
-                          Positioned(
-                            left: 16,
-                            right: 16,
-                            top: 12,
-                            child: Material(
-                              borderRadius: BorderRadius.circular(10),
-                              color: AppColors.white.withValues(alpha: 0.92),
-                              child: const Padding(
-                                padding: EdgeInsets.symmetric(
-                                  horizontal: 12,
-                                  vertical: 10,
+                        MarkerClusterLayerWidget(
+                          options: MarkerClusterLayerOptions(
+                            markers: markers,
+                            maxClusterRadius: 45,
+                            size: const Size(44, 44),
+                            alignment: Alignment.center,
+                            padding: const EdgeInsets.all(52),
+                            builder: (BuildContext context, List<Marker> cluster) {
+                              return Container(
+                                decoration: BoxDecoration(
+                                  color: AppColors.black.withValues(alpha: 0.86),
+                                  shape: BoxShape.circle,
+                                  border: Border.all(color: AppColors.white, width: 2),
                                 ),
+                                alignment: Alignment.center,
                                 child: Text(
-                                  'No post with location yet.',
-                                  textAlign: TextAlign.center,
+                                  '${cluster.length}',
+                                  style: const TextStyle(
+                                    color: AppColors.white,
+                                    fontWeight: FontWeight.w700,
+                                    fontSize: 12,
+                                  ),
                                 ),
-                              ),
-                            ),
-                          ),
-                        if (isRefreshingWithCache)
-                          Positioned(
-                            left: 0,
-                            right: 0,
-                            top: 0,
-                            child: LinearProgressIndicator(
-                              minHeight: 2,
-                              color: AppColors.black.withValues(alpha: 0.8),
-                              backgroundColor: AppColors.gray300,
-                            ),
-                          ),
-                        if (kDebugMode)
-                          Positioned(
-                            left: 10,
-                            bottom: 12,
-                            child: _buildDebugMetricsChip(
-                              visibleMarkerCount: markers.length,
-                              visiblePopularCount: popularInZone.length,
-                            ),
-                          ),
-                        if (_showExploreAreaButton)
-                          Positioned(
-                            top: 12,
-                            left: 0,
-                            right: 0,
-                            child: Center(
-                              child: FilledButton.icon(
-                                onPressed: _exploreThisArea,
-                                icon: const Icon(Icons.explore_outlined),
-                                label: const Text('Explore this area'),
-                              ),
-                            ),
-                          ),
-                        Positioned(
-                          right: 12,
-                          bottom: 16,
-                          child: Column(
-                            children: <Widget>[
-                              FloatingActionButton.small(
-                                heroTag: 'map-zoom-in',
-                                onPressed: _zoomIn,
-                                child: const Icon(Icons.add),
-                              ),
-                              const SizedBox(height: 8),
-                              FloatingActionButton.small(
-                                heroTag: 'map-zoom-out',
-                                onPressed: _zoomOut,
-                                child: const Icon(Icons.remove),
-                              ),
-                              const SizedBox(height: 8),
-                              FloatingActionButton.small(
-                                heroTag: 'map-current-location',
-                                onPressed: _moveToCurrentLocation,
-                                child: const Icon(Icons.my_location),
-                              ),
-                              const SizedBox(height: 8),
-                              FloatingActionButton.small(
-                                heroTag: 'map-world',
-                                onPressed: _focusToWorld,
-                                child: const Icon(Icons.public),
-                              ),
-                              const SizedBox(height: 8),
-                              FloatingActionButton.small(
-                                heroTag: 'map-fit-all',
-                                onPressed: () => _focusToAllMarkers(markers),
-                                child: const Icon(Icons.center_focus_strong),
-                              ),
-                            ],
+                              );
+                            },
                           ),
                         ),
                       ],
                     ),
-                  ),
-                  _buildPopularPostsPanel(
-                    popularInZone,
-                    hasAnyPost: popularInZone.isNotEmpty,
-                  ),
-                ],
-              );
-            },
-      ),
-    );
-  }
-
-  void _exploreThisArea() {
-    if (_pendingBounds == null) {
-      return;
-    }
-    _visibleBoundsNotifier.value = _pendingBounds;
-    _refreshAppliedPopularPostIds();
-    if (mounted) {
-      setState(() => _showExploreAreaButton = false);
-    }
-  }
-
-  void _refreshAppliedPopularPostIds() {
-    final LatLngBounds? bounds = _visibleBoundsNotifier.value;
-    final List<QueryDocumentSnapshot<Map<String, dynamic>>> popularInZone =
-        _getPopularPostsInVisibleZone(
-          _latestDocs,
-          bounds: bounds,
-          limit: _popularLimit,
-        );
-    _appliedPopularPostIds = popularInZone
-        .map((QueryDocumentSnapshot<Map<String, dynamic>> doc) => doc.id)
-        .toList();
-  }
-
-  String _buildMarkerTitle(Map<String, dynamic> data) {
-    final String username = data['username']?.toString() ?? 'Post';
-    final String caption = data['content']?.toString() ?? '';
-    if (caption.isEmpty) {
-      return username;
-    }
-    final String shortCaption = caption.length > 16
-        ? '${caption.substring(0, 16)}...'
-        : caption;
-    return '$username • $shortCaption';
-  }
-
-  String _buildMarkerSnippet(Map<String, dynamic> data) {
-    final String location = data['location']?.toString() ?? '';
-    final List<dynamic> hashtags =
-        data['hashtags'] as List<dynamic>? ?? <dynamic>[];
-    final String tags = hashtags
-        .take(2)
-        .map((dynamic tag) => tag.toString())
-        .join(' ');
-    if (location.isNotEmpty && tags.isNotEmpty) {
-      return '$location | $tags';
-    }
-    final String value = location.isNotEmpty ? location : tags;
-    if (value.length <= 20) {
-      return value;
-    }
-    return '${value.substring(0, 20)}...';
-  }
-
-  void _showPostPreview(Map<String, dynamic> data) {
-    showModalBottomSheet<void>(
-      context: context,
-      builder: (BuildContext context) => Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: <Widget>[
-            if ((data['imageUrl']?.toString() ?? '').isNotEmpty)
-              ClipRRect(
-                borderRadius: BorderRadius.circular(12),
-                child: Image.network(
-                  data['imageUrl'].toString(),
-                  height: 180,
-                  width: double.infinity,
-                  fit: BoxFit.cover,
+                    if (markers.isEmpty && !isRefreshingWithCache)
+                      Positioned(
+                        left: 16,
+                        right: 16,
+                        top: 12,
+                        child: Material(
+                          borderRadius: BorderRadius.circular(10),
+                          color: AppColors.white.withValues(alpha: 0.92),
+                          child: const Padding(
+                            padding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                            child: Text(
+                              'No post with location yet.',
+                              textAlign: TextAlign.center,
+                            ),
+                          ),
+                        ),
+                      ),
+                    if (isRefreshingWithCache)
+                      Positioned(
+                        left: 0,
+                        right: 0,
+                        top: 0,
+                        child: LinearProgressIndicator(
+                          minHeight: 2,
+                          color: AppColors.black.withValues(alpha: 0.8),
+                          backgroundColor: AppColors.gray300,
+                        ),
+                      ),
+                    if (_showExploreAreaButton)
+                      Positioned(
+                        top: 12,
+                        left: 0,
+                        right: 0,
+                        child: Center(
+                          child: FilledButton.icon(
+                            onPressed: _exploreThisArea,
+                            icon: const Icon(Icons.explore_outlined),
+                            label: const Text('Explore this area'),
+                          ),
+                        ),
+                      ),
+                    Positioned(
+                      right: 12,
+                      bottom: 16,
+                      child: Column(
+                        children: <Widget>[
+                          FloatingActionButton.small(
+                            heroTag: 'map-zoom-in',
+                            onPressed: _zoomIn,
+                            child: const Icon(Icons.add),
+                          ),
+                          const SizedBox(height: 8),
+                          FloatingActionButton.small(
+                            heroTag: 'map-zoom-out',
+                            onPressed: _zoomOut,
+                            child: const Icon(Icons.remove),
+                          ),
+                          const SizedBox(height: 8),
+                          FloatingActionButton.small(
+                            heroTag: 'map-current-location',
+                            onPressed: _moveToCurrentLocation,
+                            child: const Icon(Icons.my_location),
+                          ),
+                          const SizedBox(height: 8),
+                          FloatingActionButton.small(
+                            heroTag: 'map-world',
+                            onPressed: _focusToWorld,
+                            child: const Icon(Icons.public),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
               ),
-            const SizedBox(height: 10),
-            Text(
-              data['content']?.toString() ?? '',
-              style: const TextStyle(fontWeight: FontWeight.w600),
-            ),
-            const SizedBox(height: 6),
-            Text(
-              data['username']?.toString() ?? 'Anonymous',
-              style: TextStyle(color: AppColors.gray700),
-            ),
-            const SizedBox(height: 6),
-            Text(
-              data['location']?.toString() ?? '',
-              style: TextStyle(color: AppColors.gray700),
-            ),
-            const SizedBox(height: 6),
-            Wrap(
-              spacing: 6,
-              children: (data['hashtags'] as List<dynamic>? ?? <dynamic>[])
-                  .map((dynamic tag) => Text(tag.toString()))
-                  .toList(),
-            ),
-          ],
-        ),
+              _buildPopularPostsPanel(
+                popularInZone,
+                hasAnyPost: popularInZone.isNotEmpty,
+              ),
+            ],
+          );
+        },
       ),
     );
   }
 
-  Future<void> _ensureMarkerIcon({
-    required String postId,
-    required String imageUrl,
-  }) async {
-    if (imageUrl.isEmpty) {
-      return;
-    }
-    final BitmapDescriptor? cachedByImage =
-        _markerIconCacheByImageUrl[imageUrl];
-    if (cachedByImage != null) {
-      _touchImageUrlCacheEntry(imageUrl);
-      _markerIconCache[postId] = cachedByImage;
-      return;
-    }
-    if (_markerIconCache.containsKey(postId) ||
-        _markerIconLoading.contains(imageUrl)) {
-      return;
-    }
-
-    _markerIconLoading.add(imageUrl);
-    try {
-      final BitmapDescriptor icon = await _createCustomMarkerIcon(imageUrl);
-      if (!mounted) {
-        return;
-      }
-      _markerIconCacheByImageUrl[imageUrl] = icon;
-      _enforceMarkerIconCacheLru();
-      _markerIconCache[postId] = icon;
-      _scheduleMarkerRefresh();
-    } catch (_) {
-      // Fallback to default marker when image fetch/render fails.
-    } finally {
-      _markerIconLoading.remove(imageUrl);
-    }
-  }
-
-  void _touchImageUrlCacheEntry(String imageUrl) {
-    final BitmapDescriptor? icon = _markerIconCacheByImageUrl.remove(imageUrl);
-    if (icon == null) {
-      return;
-    }
-    _markerIconCacheByImageUrl[imageUrl] = icon;
-  }
-
-  void _enforceMarkerIconCacheLru() {
-    while (_markerIconCacheByImageUrl.length > _maxMarkerIconCacheEntries) {
-      final String oldestImageUrl = _markerIconCacheByImageUrl.keys.first;
-      final BitmapDescriptor? evictedIcon = _markerIconCacheByImageUrl.remove(
-        oldestImageUrl,
-      );
-      if (evictedIcon == null) {
-        continue;
-      }
-      final List<String> postIdsToEvict = _markerIconCache.entries
-          .where((MapEntry<String, BitmapDescriptor> entry) {
-            return identical(entry.value, evictedIcon);
-          })
-          .map((MapEntry<String, BitmapDescriptor> entry) => entry.key)
-          .toList();
-      for (final String postId in postIdsToEvict) {
-        _markerIconCache.remove(postId);
-      }
-    }
-  }
-
-  void _scheduleMarkerRefresh() {
-    _markerRefreshDebounceTimer?.cancel();
-    _markerRefreshDebounceTimer = Timer(const Duration(milliseconds: 120), () {
-      if (!mounted) {
-        return;
-      }
-      setState(() {});
-    });
-  }
-
-  Future<BitmapDescriptor> _createCustomMarkerIcon(String imageUrl) async {
-    final File imageFile = await DefaultCacheManager().getSingleFile(imageUrl);
-    final Uint8List bytes = await imageFile.readAsBytes();
-    final ui.Codec codec = await ui.instantiateImageCodec(
-      bytes,
-      targetWidth: 60,
-      targetHeight: 60,
-    );
-    final ui.FrameInfo frame = await codec.getNextFrame();
-    final ui.Image image = frame.image;
-
-    const double canvasSize = 80;
-    const double avatarRadius = 21;
-    const double borderRadius = 23.5;
-    final ui.PictureRecorder recorder = ui.PictureRecorder();
-    final Canvas canvas = Canvas(recorder);
-    const Offset center = Offset(canvasSize / 2, 30);
-
-    final Paint shadowPaint = Paint()..color = AppColors.shadowLow;
-    canvas.drawCircle(center.translate(0, 4), borderRadius, shadowPaint);
-
-    final Paint borderPaint = Paint()..color = AppColors.white;
-    canvas.drawCircle(center, borderRadius, borderPaint);
-
-    final Path avatarClip = Path()
-      ..addOval(Rect.fromCircle(center: center, radius: avatarRadius));
-    canvas.save();
-    canvas.clipPath(avatarClip);
-    canvas.drawImageRect(
-      image,
-      Rect.fromLTWH(0, 0, image.width.toDouble(), image.height.toDouble()),
-      Rect.fromCircle(center: center, radius: avatarRadius),
-      Paint(),
-    );
-    canvas.restore();
-
-    final Path pointerPath = Path()
-      ..moveTo(canvasSize / 2, 75)
-      ..lineTo(canvasSize / 2 - 8, 51)
-      ..lineTo(canvasSize / 2 + 8, 51)
-      ..close();
-    canvas.drawPath(pointerPath, Paint()..color = AppColors.gray700);
-
-    final ui.Image markerImage = await recorder.endRecording().toImage(
-      canvasSize.toInt(),
-      canvasSize.toInt(),
-    );
-    final ByteData? pngBytes = await markerImage.toByteData(
-      format: ui.ImageByteFormat.png,
-    );
-    if (pngBytes == null) {
-      throw Exception('Failed to encode marker image');
-    }
-
-    return BitmapDescriptor.bytes(pngBytes.buffer.asUint8List());
-  }
-
-  Future<void> _moveToCurrentLocation() async {
-    final GoogleMapController? controller = _mapController;
-    if (controller == null) {
-      return;
-    }
-
-    try {
-      final Position position = await Geolocator.getCurrentPosition();
-      await controller.animateCamera(
-        CameraUpdate.newLatLngZoom(
-          LatLng(position.latitude, position.longitude),
-          14,
-        ),
-      );
-      _currentTarget = LatLng(position.latitude, position.longitude);
-      _currentZoom = 14;
-    } catch (_) {
-      // Ignore when permission/service is not available.
-    }
-  }
-
-  Future<void> _zoomIn() async {
-    await _zoomBy(1);
-  }
-
-  Future<void> _zoomOut() async {
-    await _zoomBy(-1);
-  }
-
-  Future<void> _zoomBy(double delta) async {
-    final GoogleMapController? controller = _mapController;
-    if (controller == null) {
-      return;
-    }
-
-    double baseZoom = _currentZoom;
-    try {
-      baseZoom = await controller.getZoomLevel();
-    } catch (_) {
-      // Fallback to locally tracked zoom.
-    }
-
-    final double target = (baseZoom + delta).clamp(_minZoom, _maxZoom);
-    if ((target - baseZoom).abs() < 0.0001) {
-      return;
-    }
-    _currentZoom = target;
-    await controller.animateCamera(CameraUpdate.zoomTo(target));
-  }
-
-  Future<void> _focusToAllMarkers(Set<Marker> markers) async {
-    final GoogleMapController? controller = _mapController;
-    if (controller == null || markers.isEmpty) {
-      return;
-    }
-
-    if (markers.length == 1) {
-      await controller.animateCamera(
-        CameraUpdate.newLatLngZoom(markers.first.position, 12),
-      );
-      return;
-    }
-
-    double minLat = markers.first.position.latitude;
-    double maxLat = markers.first.position.latitude;
-    double minLng = markers.first.position.longitude;
-    double maxLng = markers.first.position.longitude;
-
-    for (final Marker marker in markers) {
-      final double lat = marker.position.latitude;
-      final double lng = marker.position.longitude;
-      if (lat < minLat) minLat = lat;
-      if (lat > maxLat) maxLat = lat;
-      if (lng < minLng) minLng = lng;
-      if (lng > maxLng) maxLng = lng;
-    }
-
-    final LatLngBounds bounds = LatLngBounds(
-      southwest: LatLng(minLat, minLng),
-      northeast: LatLng(maxLat, maxLng),
-    );
-
-    await controller.animateCamera(CameraUpdate.newLatLngBounds(bounds, 72));
-  }
-
-  Future<void> _focusToWorld() async {
-    final GoogleMapController? controller = _mapController;
-    if (controller == null) {
-      return;
-    }
-
-    await controller.animateCamera(
-      CameraUpdate.newCameraPosition(
-        const CameraPosition(target: LatLng(0, 0), zoom: 1),
-      ),
-    );
-    _currentTarget = const LatLng(0, 0);
-    _currentZoom = 1;
-
-    await Future<void>.delayed(const Duration(milliseconds: 220));
-    await _captureVisibleBounds(applyToPanel: true);
-    _refreshAppliedPopularPostIds();
-    if (mounted && _showExploreAreaButton) {
-      setState(() => _showExploreAreaButton = false);
-    }
-  }
-
-  void _handleClusterTap(Cluster cluster) {
-    final GoogleMapController? controller = _mapController;
-    if (controller == null) {
-      return;
-    }
-
-    controller.animateCamera(CameraUpdate.newLatLngBounds(cluster.bounds, 64));
-  }
-
-  void _onCameraIdleDebounced() {
+  void _onCameraChangedDebounced() {
     _cameraIdleDebounceTimer?.cancel();
     _cameraIdleDebounceTimer = Timer(
       const Duration(milliseconds: 250),
@@ -669,90 +287,117 @@ class _MapPostsScreenState extends State<MapPostsScreen> {
     );
   }
 
-  Future<void> _captureVisibleBounds({required bool applyToPanel}) async {
-    final GoogleMapController? controller = _mapController;
-    if (controller == null) {
+  void _captureVisibleBounds({required bool applyToPanel}) {
+    if (!mounted) {
       return;
     }
+
+    final LatLngBounds bounds = _mapController.camera.visibleBounds;
+    if (!_isValidBounds(bounds)) {
+      return;
+    }
+
+    final LatLngBounds? old = _appliedBounds;
+    if (!applyToPanel && old != null && !_isSignificantBoundsChange(old, bounds)) {
+      if (_showExploreAreaButton) {
+        setState(() => _showExploreAreaButton = false);
+      }
+      return;
+    }
+
+    _pendingBounds = bounds;
+    if (applyToPanel || old == null) {
+      _appliedBounds = bounds;
+      _refreshAppliedPopularPostIds();
+      if (_showExploreAreaButton) {
+        setState(() => _showExploreAreaButton = false);
+      }
+      return;
+    }
+
+    if (!_showExploreAreaButton) {
+      setState(() => _showExploreAreaButton = true);
+    }
+  }
+
+  void _exploreThisArea() {
+    if (_pendingBounds == null) {
+      return;
+    }
+    _appliedBounds = _pendingBounds;
+    _refreshAppliedPopularPostIds();
+    if (mounted) {
+      setState(() => _showExploreAreaButton = false);
+    }
+  }
+
+  void _refreshAppliedPopularPostIds() {
+    final List<QueryDocumentSnapshot<Map<String, dynamic>>> popularInZone =
+        _getPopularPostsInBounds(
+          _latestDocs,
+          bounds: _appliedBounds,
+          limit: _popularLimit,
+        );
+    _appliedPopularPostIds = popularInZone
+        .map((QueryDocumentSnapshot<Map<String, dynamic>> doc) => doc.id)
+        .toList();
+  }
+
+  Future<void> _moveToCurrentLocation() async {
     try {
-      final LatLngBounds bounds = await controller.getVisibleRegion();
-      if (!mounted) {
-        return;
-      }
-      if (!_isValidBounds(bounds)) {
-        return;
-      }
-      final LatLngBounds? old = _visibleBoundsNotifier.value;
-      if (old != null &&
-          (old.southwest.latitude - bounds.southwest.latitude).abs() < 0.0001 &&
-          (old.southwest.longitude - bounds.southwest.longitude).abs() <
-              0.0001 &&
-          (old.northeast.latitude - bounds.northeast.latitude).abs() < 0.0001 &&
-          (old.northeast.longitude - bounds.northeast.longitude).abs() <
-              0.0001) {
-        return;
-      }
-      if (!applyToPanel &&
-          old != null &&
-          !_isSignificantBoundsChange(old, bounds)) {
-        if (mounted && _showExploreAreaButton) {
-          setState(() => _showExploreAreaButton = false);
-        }
-        return;
-      }
-      _pendingBounds = bounds;
-      if (applyToPanel || old == null) {
-        _visibleBoundsNotifier.value = bounds;
-        _refreshAppliedPopularPostIds();
-        if (mounted && _showExploreAreaButton) {
-          setState(() => _showExploreAreaButton = false);
-        }
-        return;
-      }
-      if (mounted && !_showExploreAreaButton) {
-        setState(() => _showExploreAreaButton = true);
-      }
+      final Position position = await Geolocator.getCurrentPosition();
+      final LatLng point = LatLng(position.latitude, position.longitude);
+      _currentCenter = point;
+      _currentZoom = 14;
+      _mapController.move(point, 14);
+      _captureVisibleBounds(applyToPanel: false);
     } catch (_) {
-      // Ignore occasional platform map bounds errors.
+      // Ignore when permission/service is not available.
+    }
+  }
+
+  void _zoomIn() {
+    final double target = (_currentZoom + 1).clamp(_minZoom, _maxZoom);
+    _currentZoom = target;
+    _mapController.move(_currentCenter, target);
+  }
+
+  void _zoomOut() {
+    final double target = (_currentZoom - 1).clamp(_minZoom, _maxZoom);
+    _currentZoom = target;
+    _mapController.move(_currentCenter, target);
+  }
+
+  void _focusToWorld() {
+    _currentCenter = const LatLng(0, 0);
+    _currentZoom = 1;
+    _mapController.move(_currentCenter, _currentZoom);
+    _captureVisibleBounds(applyToPanel: true);
+    _refreshAppliedPopularPostIds();
+    if (mounted && _showExploreAreaButton) {
+      setState(() => _showExploreAreaButton = false);
     }
   }
 
   bool _isValidBounds(LatLngBounds bounds) {
-    final double latSpan =
-        (bounds.northeast.latitude - bounds.southwest.latitude).abs();
-    final double lngSpan = _wrapLongitudeDelta(
-      bounds.northeast.longitude - bounds.southwest.longitude,
-    ).abs();
-    if (latSpan < 0.000001 && lngSpan < 0.000001) {
-      return false;
-    }
-    return true;
+    final double latSpan = (bounds.north - bounds.south).abs();
+    final double lngSpan = _wrapLongitudeDelta(bounds.east - bounds.west).abs();
+    return !(latSpan < 0.000001 && lngSpan < 0.000001);
   }
 
   bool _isSignificantBoundsChange(LatLngBounds old, LatLngBounds next) {
-    final double oldCenterLat =
-        (old.southwest.latitude + old.northeast.latitude) / 2;
-    final double oldCenterLng =
-        (old.southwest.longitude + old.northeast.longitude) / 2;
-    final double nextCenterLat =
-        (next.southwest.latitude + next.northeast.latitude) / 2;
-    final double nextCenterLng =
-        (next.southwest.longitude + next.northeast.longitude) / 2;
+    final double oldCenterLat = (old.south + old.north) / 2;
+    final double oldCenterLng = (old.west + old.east) / 2;
+    final double nextCenterLat = (next.south + next.north) / 2;
+    final double nextCenterLng = (next.west + next.east) / 2;
 
     final double centerShift =
-        (oldCenterLat - nextCenterLat).abs() +
-        (oldCenterLng - nextCenterLng).abs();
+        (oldCenterLat - nextCenterLat).abs() + (oldCenterLng - nextCenterLng).abs();
 
-    final double oldLatSpan = (old.northeast.latitude - old.southwest.latitude)
-        .abs();
-    final double oldLngSpan = _wrapLongitudeDelta(
-      old.northeast.longitude - old.southwest.longitude,
-    ).abs();
-    final double nextLatSpan =
-        (next.northeast.latitude - next.southwest.latitude).abs();
-    final double nextLngSpan = _wrapLongitudeDelta(
-      next.northeast.longitude - next.southwest.longitude,
-    ).abs();
+    final double oldLatSpan = (old.north - old.south).abs();
+    final double oldLngSpan = _wrapLongitudeDelta(old.east - old.west).abs();
+    final double nextLatSpan = (next.north - next.south).abs();
+    final double nextLngSpan = _wrapLongitudeDelta(next.east - next.west).abs();
 
     final double oldSpan = oldLatSpan + oldLngSpan;
     final double nextSpan = nextLatSpan + nextLngSpan;
@@ -771,8 +416,7 @@ class _MapPostsScreenState extends State<MapPostsScreen> {
     return 360 - raw;
   }
 
-  List<QueryDocumentSnapshot<Map<String, dynamic>>>
-  _getPopularPostsInVisibleZone(
+  List<QueryDocumentSnapshot<Map<String, dynamic>>> _getPopularPostsInBounds(
     List<QueryDocumentSnapshot<Map<String, dynamic>>> docs, {
     required LatLngBounds? bounds,
     required int limit,
@@ -796,9 +440,7 @@ class _MapPostsScreenState extends State<MapPostsScreen> {
       }
     }
 
-    inZone.sort((a, b) {
-      return scoreOf(b.data()).compareTo(scoreOf(a.data()));
-    });
+    inZone.sort((a, b) => scoreOf(b.data()).compareTo(scoreOf(a.data())));
     if (inZone.length <= limit) {
       return inZone;
     }
@@ -806,17 +448,15 @@ class _MapPostsScreenState extends State<MapPostsScreen> {
   }
 
   bool _isInsideBounds(LatLng point, LatLngBounds bounds) {
-    final bool latOk =
-        point.latitude >= bounds.southwest.latitude &&
-        point.latitude <= bounds.northeast.latitude;
+    final bool latOk = point.latitude >= bounds.south && point.latitude <= bounds.north;
 
-    final double swLng = bounds.southwest.longitude;
-    final double neLng = bounds.northeast.longitude;
+    final double west = bounds.west;
+    final double east = bounds.east;
     final bool lngOk;
-    if (swLng <= neLng) {
-      lngOk = point.longitude >= swLng && point.longitude <= neLng;
+    if (west <= east) {
+      lngOk = point.longitude >= west && point.longitude <= east;
     } else {
-      lngOk = point.longitude >= swLng || point.longitude <= neLng;
+      lngOk = point.longitude >= west || point.longitude <= east;
     }
     return latOk && lngOk;
   }
@@ -845,6 +485,59 @@ class _MapPostsScreenState extends State<MapPostsScreen> {
       return null;
     }
     return LatLng(lat, lng);
+  }
+
+  void _showPostPreview(Map<String, dynamic> data) {
+    showModalBottomSheet<void>(
+      context: context,
+      builder: (BuildContext context) => Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            if ((data['imageUrl']?.toString() ?? '').isNotEmpty)
+              ClipRRect(
+                borderRadius: BorderRadius.circular(12),
+                child: CachedNetworkImage(
+                  imageUrl: data['imageUrl'].toString(),
+                  height: 180,
+                  width: double.infinity,
+                  fit: BoxFit.cover,
+                ),
+              ),
+            const SizedBox(height: 10),
+            Text(
+              data['content']?.toString() ?? '',
+              style: const TextStyle(fontWeight: FontWeight.w600),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              data['username']?.toString() ?? 'Anonymous',
+              style: TextStyle(color: AppColors.gray700),
+            ),
+            const SizedBox(height: 6),
+            FutureBuilder<String>(
+              future: resolvePostLocationLabel(data),
+              builder: (
+                BuildContext context,
+                AsyncSnapshot<String> snapshot,
+              ) {
+                final String fallback = data['location']?.toString() ?? '';
+                final String resolved =
+                    snapshot.data?.trim().isNotEmpty == true
+                    ? snapshot.data!.trim()
+                    : fallback;
+                return Text(
+                  resolved,
+                  style: TextStyle(color: AppColors.gray700),
+                );
+              },
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   Widget _buildPopularPostsPanel(
@@ -907,10 +600,7 @@ class _MapPostsScreenState extends State<MapPostsScreen> {
                         PopupMenuItem<int>(value: 50, child: Text('Top 50')),
                       ],
                   child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 10,
-                      vertical: 6,
-                    ),
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                     decoration: BoxDecoration(
                       border: Border.all(color: AppColors.gray300),
                       borderRadius: BorderRadius.circular(16),
@@ -942,17 +632,13 @@ class _MapPostsScreenState extends State<MapPostsScreen> {
 
                 return ListTile(
                   dense: true,
-                  visualDensity: const VisualDensity(
-                    horizontal: -2,
-                    vertical: -2,
-                  ),
+                  visualDensity: const VisualDensity(horizontal: -2, vertical: -2),
                   minLeadingWidth: 36,
                   leading: CircleAvatar(
                     radius: 18,
                     backgroundColor: AppColors.gray200,
-                    backgroundImage: imageUrl.isNotEmpty
-                        ? CachedNetworkImageProvider(imageUrl)
-                        : null,
+                    backgroundImage:
+                        imageUrl.isNotEmpty ? CachedNetworkImageProvider(imageUrl) : null,
                     child: imageUrl.isEmpty
                         ? const Icon(Icons.image_outlined, size: 16)
                         : null,
@@ -970,9 +656,9 @@ class _MapPostsScreenState extends State<MapPostsScreen> {
                   onTap: () {
                     _showPostPreview(data);
                     if (point != null) {
-                      _mapController?.animateCamera(
-                        CameraUpdate.newLatLngZoom(point, 14),
-                      );
+                      _currentCenter = point;
+                      _currentZoom = 14;
+                      _mapController.move(point, 14);
                     }
                   },
                 );
@@ -983,35 +669,45 @@ class _MapPostsScreenState extends State<MapPostsScreen> {
       ),
     );
   }
+}
 
-  Widget _buildDebugMetricsChip({
-    required int visibleMarkerCount,
-    required int visiblePopularCount,
-  }) {
-    final String debugText =
-        'docs:${_latestDocs.length} '
-        'markers:$visibleMarkerCount '
-        'popular:$visiblePopularCount '
-        'iconUrlCache:${_markerIconCacheByImageUrl.length} '
-        'postIconCache:${_markerIconCache.length} '
-        'loading:${_markerIconLoading.length}';
+class _PostAvatarMarker extends StatelessWidget {
+  const _PostAvatarMarker({required this.imageUrl});
 
-    return IgnorePointer(
-      child: Container(
-        constraints: const BoxConstraints(maxWidth: 320),
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-        decoration: BoxDecoration(
-          color: AppColors.black.withValues(alpha: 0.72),
-          borderRadius: BorderRadius.circular(8),
-        ),
-        child: Text(
-          debugText,
-          style: const TextStyle(
-            color: AppColors.white,
-            fontSize: 10,
-            fontFeatures: <ui.FontFeature>[ui.FontFeature.tabularFigures()],
-          ),
-        ),
+  final String imageUrl;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: AppColors.white,
+        shape: BoxShape.circle,
+        border: Border.all(color: AppColors.gray700, width: 1.2),
+        boxShadow: const <BoxShadow>[
+          BoxShadow(color: AppColors.shadowLow, blurRadius: 3, offset: Offset(0, 1.5)),
+        ],
+      ),
+      padding: const EdgeInsets.all(2),
+      child: ClipOval(
+        child: imageUrl.isEmpty
+            ? const SizedBox.expand(
+                child: ColoredBox(
+                  color: AppColors.gray300,
+                  child: Icon(Icons.image_outlined, size: 15),
+                ),
+              )
+            : CachedNetworkImage(
+                imageUrl: imageUrl,
+                fit: BoxFit.cover,
+                width: 36,
+                height: 36,
+                memCacheWidth: 120,
+                memCacheHeight: 120,
+                errorWidget: (context, url, error) => const ColoredBox(
+                  color: AppColors.gray300,
+                  child: Icon(Icons.broken_image_outlined, size: 15),
+                ),
+              ),
       ),
     );
   }

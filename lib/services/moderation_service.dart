@@ -25,6 +25,20 @@ class ModerationService {
     ).doc(postId).snapshots().map((doc) => doc.exists);
   }
 
+  Stream<List<QueryDocumentSnapshot<Map<String, dynamic>>>> hiddenPostsStream() {
+    final User? user = _currentUser;
+    if (user == null) {
+      return Stream<List<QueryDocumentSnapshot<Map<String, dynamic>>>>.value(
+        <QueryDocumentSnapshot<Map<String, dynamic>>>[],
+      );
+    }
+    return _hiddenPostsRef(
+      user.uid,
+    ).orderBy('createdAt', descending: true).snapshots().map(
+      (QuerySnapshot<Map<String, dynamic>> snapshot) => snapshot.docs,
+    );
+  }
+
   Future<bool> isPostHidden(String postId) async {
     final User? user = _currentUser;
     if (user == null || postId.isEmpty) {
@@ -84,6 +98,8 @@ class ModerationService {
   Future<void> hidePost({
     required String postId,
     required String postOwnerUid,
+    String? postOwnerUsername,
+    String? postCaption,
   }) async {
     final User? user = _currentUser;
     if (user == null || postId.isEmpty) {
@@ -92,6 +108,8 @@ class ModerationService {
     await _hiddenPostsRef(user.uid).doc(postId).set(<String, dynamic>{
       'postId': postId,
       'postOwnerUid': postOwnerUid,
+      'postOwnerUsername': postOwnerUsername?.trim(),
+      'postCaption': postCaption?.trim(),
       'createdAt': FieldValue.serverTimestamp(),
     }, SetOptions(merge: true));
   }

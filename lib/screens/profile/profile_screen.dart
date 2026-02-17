@@ -17,6 +17,7 @@ import 'package:sincerelysea/services/post_service.dart';
 import 'package:sincerelysea/services/theme_service.dart';
 import 'package:sincerelysea/services/user_profile_service.dart';
 import 'package:sincerelysea/services/wishlist_service.dart';
+import 'package:sincerelysea/utils/post_location_label.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -1059,9 +1060,21 @@ class _PostDetailSheet extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 8),
-                Text(
-                  'Location: $location',
-                  style: TextStyle(color: AppColors.gray700),
+                FutureBuilder<String>(
+                  future: resolvePostLocationLabel(data),
+                  builder: (
+                    BuildContext context,
+                    AsyncSnapshot<String> snapshot,
+                  ) {
+                    final String resolved =
+                        snapshot.data?.trim().isNotEmpty == true
+                        ? snapshot.data!.trim()
+                        : location;
+                    return Text(
+                      'Location: $resolved',
+                      style: TextStyle(color: AppColors.gray700),
+                    );
+                  },
                 ),
                 const SizedBox(height: 8),
                 Wrap(
@@ -1554,11 +1567,17 @@ class _WishlistSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final bool isDark = Theme.of(context).brightness == Brightness.dark;
+    final Color sectionBackground = isDark ? AppColors.gray100 : AppColors.white;
+    final Color sectionTitleColor = isDark
+        ? AppColors.black87
+        : Theme.of(context).colorScheme.onSurface;
+    final Color emptyTextColor = isDark ? AppColors.gray700 : AppColors.gray600;
     return Container(
       decoration: BoxDecoration(
         border: Border.all(color: AppColors.gray200),
         borderRadius: BorderRadius.circular(14),
-        color: AppColors.white,
+        color: sectionBackground,
       ),
       child: Padding(
         padding: const EdgeInsets.all(12),
@@ -1567,7 +1586,11 @@ class _WishlistSection extends StatelessWidget {
           children: <Widget>[
             Text(
               title,
-              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.w700,
+                color: sectionTitleColor,
+              ),
             ),
             const SizedBox(height: 8),
             if (items.isEmpty)
@@ -1575,7 +1598,7 @@ class _WishlistSection extends StatelessWidget {
                 padding: const EdgeInsets.symmetric(vertical: 8),
                 child: Text(
                   emptyText,
-                  style: TextStyle(color: AppColors.gray600),
+                  style: TextStyle(color: emptyTextColor),
                 ),
               ),
             ...items.map((QueryDocumentSnapshot<Map<String, dynamic>> doc) {
@@ -1622,6 +1645,7 @@ class _WishlistCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final AppSemanticColors semantic = context.semanticColors;
+    final bool isDark = Theme.of(context).brightness == Brightness.dark;
     final String title = data['title']?.toString() ?? '-';
     final String notes = data['notes']?.toString() ?? '';
     final String category = data['category']?.toString() ?? '';
@@ -1638,11 +1662,16 @@ class _WishlistCard extends StatelessWidget {
       2 => 'Medium',
       _ => 'Low',
     };
+    final Color cardBackground = isDark ? AppColors.gray100 : AppColors.surface;
+    final Color primaryTextColor = isDark
+        ? AppColors.black87
+        : Theme.of(context).colorScheme.onSurface;
+    final Color secondaryTextColor = isDark ? AppColors.gray700 : AppColors.gray700;
 
     return Card(
       margin: const EdgeInsets.only(top: 10),
       elevation: 0,
-      color: AppColors.surface,
+      color: cardBackground,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: Padding(
         padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
@@ -1654,9 +1683,10 @@ class _WishlistCard extends StatelessWidget {
                 Expanded(
                   child: Text(
                     title,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.w700,
+                      color: primaryTextColor,
                     ),
                   ),
                 ),
@@ -1727,14 +1757,14 @@ class _WishlistCard extends StatelessWidget {
             ),
             if (notes.isNotEmpty) ...<Widget>[
               const SizedBox(height: 8),
-              Text(notes, style: TextStyle(color: AppColors.gray700)),
+              Text(notes, style: TextStyle(color: secondaryTextColor)),
             ],
             if (targetDate != null) ...<Widget>[
               const SizedBox(height: 8),
               Text(
                 'Target: ${_formatDate(targetDate)}',
                 style: TextStyle(
-                  color: AppColors.gray700,
+                  color: secondaryTextColor,
                   fontWeight: FontWeight.w500,
                 ),
               ),

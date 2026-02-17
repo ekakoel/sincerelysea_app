@@ -150,6 +150,12 @@ Kontribusi sangat terbuka.
 
 ---
 
+# Deploy Firebase Rule
+- firebase deploy --only firestore:rules
+- firebase deploy --only storage
+
+---
+
 ## 📄 License
 
 This project is licensed under the MIT License.

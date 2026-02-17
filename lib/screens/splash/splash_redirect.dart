@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:sincerelysea/theme/app_colors.dart';
 import '../../utils/onboarding_helper.dart';
 import '../onboarding/onboarding_screen.dart';
@@ -19,12 +20,13 @@ class _SplashRedirectState extends State<SplashRedirect> {
   }
 
   Future<void> checkFlow() async {
+    final User? currentUser = FirebaseAuth.instance.currentUser;
     final seen = await OnboardingHelper.hasSeenOnboarding();
 
     await Future.delayed(const Duration(milliseconds: 1200));
     if (!mounted) return;
 
-    if (seen) {
+    if (currentUser != null || seen) {
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(builder: (_) => const AuthWrapper()),
@@ -47,7 +49,7 @@ class _SplashRedirectState extends State<SplashRedirect> {
           children: const [
             CircularProgressIndicator(strokeWidth: 2),
             SizedBox(height: 44),
-            Image(image: AssetImage('assets/splash/logo-dark.png'), width: 300),
+            Image(image: AssetImage('assets/splash/logo-dark.png'), width: 260),
           ],
         ),
       ),

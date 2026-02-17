@@ -67,18 +67,6 @@ class _AppVersionScreenState extends State<AppVersionScreen> {
                 ),
                 const Divider(height: 1),
                 ListTile(
-                  title: const Text('Package ID'),
-                  trailing: ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 180),
-                    child: Text(
-                      packageName,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                ),
-                const Divider(height: 1),
-                ListTile(
                   title: const Text('Platform'),
                   trailing: Text(platform),
                 ),
@@ -119,7 +107,6 @@ class _AppVersionScreenState extends State<AppVersionScreen> {
               appName: appName,
               version: version,
               build: build,
-              packageName: packageName,
               platform: platform,
             ),
             icon: const Icon(Icons.copy_outlined),
@@ -154,13 +141,11 @@ class _AppVersionScreenState extends State<AppVersionScreen> {
     required String appName,
     required String version,
     required String build,
-    required String packageName,
     required String platform,
   }) async {
     final String text =
         'App: $appName\n'
         'Version: $version ($build)\n'
-        'Package: $packageName\n'
         'Platform: $platform';
     await Clipboard.setData(ClipboardData(text: text));
     if (!mounted) {

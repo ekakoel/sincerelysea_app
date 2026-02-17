@@ -26,19 +26,14 @@ class _DiscoveryScreenState extends State<DiscoveryScreen> {
       <QueryDocumentSnapshot<Map<String, dynamic>>>[];
   List<QueryDocumentSnapshot<Map<String, dynamic>>> _hashtagResults =
       <QueryDocumentSnapshot<Map<String, dynamic>>>[];
-  List<QueryDocumentSnapshot<Map<String, dynamic>>> _locationResults =
-      <QueryDocumentSnapshot<Map<String, dynamic>>>[];
   List<QueryDocumentSnapshot<Map<String, dynamic>>> _suggestedUsers =
       <QueryDocumentSnapshot<Map<String, dynamic>>>[];
   DocumentSnapshot<Map<String, dynamic>>? _lastUserDoc;
   DocumentSnapshot<Map<String, dynamic>>? _lastHashtagDoc;
-  DocumentSnapshot<Map<String, dynamic>>? _lastLocationDoc;
   bool _hasMoreUsers = true;
   bool _hasMoreHashtags = true;
-  bool _hasMoreLocations = true;
   bool _loadingUsersMore = false;
   bool _loadingHashtagsMore = false;
-  bool _loadingLocationsMore = false;
   bool _isLoading = false;
 
   @override
@@ -84,13 +79,10 @@ class _DiscoveryScreenState extends State<DiscoveryScreen> {
         _activeQuery = '';
         _userResults = <QueryDocumentSnapshot<Map<String, dynamic>>>[];
         _hashtagResults = <QueryDocumentSnapshot<Map<String, dynamic>>>[];
-        _locationResults = <QueryDocumentSnapshot<Map<String, dynamic>>>[];
         _lastUserDoc = null;
         _lastHashtagDoc = null;
-        _lastLocationDoc = null;
         _hasMoreUsers = true;
         _hasMoreHashtags = true;
-        _hasMoreLocations = true;
       });
       return;
     }
@@ -100,41 +92,39 @@ class _DiscoveryScreenState extends State<DiscoveryScreen> {
       _activeQuery = query;
       _userResults = <QueryDocumentSnapshot<Map<String, dynamic>>>[];
       _hashtagResults = <QueryDocumentSnapshot<Map<String, dynamic>>>[];
-      _locationResults = <QueryDocumentSnapshot<Map<String, dynamic>>>[];
       _lastUserDoc = null;
       _lastHashtagDoc = null;
-      _lastLocationDoc = null;
       _hasMoreUsers = true;
       _hasMoreHashtags = true;
-      _hasMoreLocations = true;
     });
     final DiscoveryService service = context.read<DiscoveryService>();
+    final String userBackendQuery = _backendSeedQuery(query);
+    final String hashtagBackendQuery = _backendSeedQuery(
+      query,
+      isHashtag: true,
+    );
     try {
       final List<QuerySnapshot<Map<String, dynamic>>> pages =
           await Future.wait(<Future<QuerySnapshot<Map<String, dynamic>>>>[
-            service.searchUsersPage(query, limit: _pageSize),
-            service.searchByHashtagPage(query, limit: _pageSize),
-            service.searchByLocationPage(query, limit: _pageSize),
+            service.searchUsersPage(userBackendQuery, limit: _pageSize),
+            service.searchByHashtagPage(hashtagBackendQuery, limit: _pageSize),
           ]);
       if (!mounted ||
           requestId != _searchRequestId ||
           _queryController.text.trim() != query) {
         return;
       }
+      final List<QueryDocumentSnapshot<Map<String, dynamic>>> filteredUsers =
+          _rankUsersByRelevance(pages[0].docs, query);
+      final List<QueryDocumentSnapshot<Map<String, dynamic>>> filteredHashtags =
+          _rankHashtagPostsByRelevance(pages[1].docs, query);
       setState(() {
-        _userResults = pages[0].docs;
-        _hashtagResults = pages[1].docs;
-        _locationResults = pages[2].docs;
-        _lastUserDoc = _userResults.isNotEmpty ? _userResults.last : null;
-        _lastHashtagDoc = _hashtagResults.isNotEmpty
-            ? _hashtagResults.last
-            : null;
-        _lastLocationDoc = _locationResults.isNotEmpty
-            ? _locationResults.last
-            : null;
-        _hasMoreUsers = _userResults.length >= _pageSize;
-        _hasMoreHashtags = _hashtagResults.length >= _pageSize;
-        _hasMoreLocations = _locationResults.length >= _pageSize;
+        _userResults = filteredUsers;
+        _hashtagResults = filteredHashtags;
+        _lastUserDoc = pages[0].docs.isNotEmpty ? pages[0].docs.last : null;
+        _lastHashtagDoc = pages[1].docs.isNotEmpty ? pages[1].docs.last : null;
+        _hasMoreUsers = pages[0].docs.length >= _pageSize;
+        _hasMoreHashtags = pages[1].docs.length >= _pageSize;
       });
     } finally {
       if (mounted && requestId == _searchRequestId) {
@@ -152,18 +142,21 @@ class _DiscoveryScreenState extends State<DiscoveryScreen> {
     }
     setState(() => _loadingUsersMore = true);
     try {
+      final String backendQuery = _backendSeedQuery(_activeQuery);
       final QuerySnapshot<Map<String, dynamic>> page = await context
           .read<DiscoveryService>()
           .searchUsersPage(
-            _activeQuery,
+            backendQuery,
             startAfter: _lastUserDoc,
             limit: _pageSize,
           );
       if (!mounted) {
         return;
       }
+      final List<QueryDocumentSnapshot<Map<String, dynamic>>> filteredUsers =
+          _rankUsersByRelevance(page.docs, _activeQuery);
       setState(() {
-        _userResults.addAll(page.docs);
+        _userResults.addAll(filteredUsers);
         _lastUserDoc = page.docs.isNotEmpty ? page.docs.last : _lastUserDoc;
         _hasMoreUsers = page.docs.length >= _pageSize;
       });
@@ -183,18 +176,24 @@ class _DiscoveryScreenState extends State<DiscoveryScreen> {
     }
     setState(() => _loadingHashtagsMore = true);
     try {
+      final String backendQuery = _backendSeedQuery(
+        _activeQuery,
+        isHashtag: true,
+      );
       final QuerySnapshot<Map<String, dynamic>> page = await context
           .read<DiscoveryService>()
           .searchByHashtagPage(
-            _activeQuery,
+            backendQuery,
             startAfter: _lastHashtagDoc,
             limit: _pageSize,
           );
       if (!mounted) {
         return;
       }
+      final List<QueryDocumentSnapshot<Map<String, dynamic>>>
+      filteredHashtags = _rankHashtagPostsByRelevance(page.docs, _activeQuery);
       setState(() {
-        _hashtagResults.addAll(page.docs);
+        _hashtagResults.addAll(filteredHashtags);
         _lastHashtagDoc = page.docs.isNotEmpty
             ? page.docs.last
             : _lastHashtagDoc;
@@ -207,43 +206,144 @@ class _DiscoveryScreenState extends State<DiscoveryScreen> {
     }
   }
 
-  Future<void> _loadMoreLocations() async {
-    if (_isLoading ||
-        _loadingLocationsMore ||
-        !_hasMoreLocations ||
-        _activeQuery.isEmpty) {
-      return;
+  String _backendSeedQuery(String query, {bool isHashtag = false}) {
+    final List<String> tokens = _queryTokens(query);
+    if (tokens.isEmpty) {
+      return '';
     }
-    setState(() => _loadingLocationsMore = true);
-    try {
-      final QuerySnapshot<Map<String, dynamic>> page = await context
-          .read<DiscoveryService>()
-          .searchByLocationPage(
-            _activeQuery,
-            startAfter: _lastLocationDoc,
-            limit: _pageSize,
-          );
-      if (!mounted) {
-        return;
-      }
-      setState(() {
-        _locationResults.addAll(page.docs);
-        _lastLocationDoc = page.docs.isNotEmpty
-            ? page.docs.last
-            : _lastLocationDoc;
-        _hasMoreLocations = page.docs.length >= _pageSize;
-      });
-    } finally {
-      if (mounted) {
-        setState(() => _loadingLocationsMore = false);
+    final String firstToken = tokens.first;
+    if (isHashtag) {
+      return firstToken.startsWith('#') ? firstToken : '#$firstToken';
+    }
+    return firstToken;
+  }
+
+  List<String> _queryTokens(String query) {
+    return query
+        .trim()
+        .toLowerCase()
+        .split(RegExp(r'[,\s]+'))
+        .map((String token) => token.trim())
+        .where((String token) => token.isNotEmpty)
+        .toSet()
+        .toList();
+  }
+
+  List<QueryDocumentSnapshot<Map<String, dynamic>>> _rankUsersByRelevance(
+    List<QueryDocumentSnapshot<Map<String, dynamic>>> docs,
+    String query,
+  ) {
+    final List<String> tokens = _queryTokens(query);
+    if (tokens.isEmpty) {
+      return docs;
+    }
+    final List<QueryDocumentSnapshot<Map<String, dynamic>>> sorted =
+        List<QueryDocumentSnapshot<Map<String, dynamic>>>.from(docs);
+    sorted.sort((a, b) {
+      final Map<String, dynamic> aData = a.data();
+      final Map<String, dynamic> bData = b.data();
+      final String aHaystack =
+          '${aData['username']?.toString().toLowerCase() ?? ''} '
+          '${aData['displayName']?.toString().toLowerCase() ?? ''}';
+      final String bHaystack =
+          '${bData['username']?.toString().toLowerCase() ?? ''} '
+          '${bData['displayName']?.toString().toLowerCase() ?? ''}';
+      return _compareRelevance(aHaystack, bHaystack, tokens);
+    });
+    return sorted.where((QueryDocumentSnapshot<Map<String, dynamic>> doc) {
+      final Map<String, dynamic> data = doc.data();
+      final String username = data['username']?.toString().toLowerCase() ?? '';
+      final String displayName =
+          data['displayName']?.toString().toLowerCase() ?? '';
+      final String haystack = '$username $displayName';
+      return tokens.any((String token) => haystack.contains(token));
+    }).toList();
+  }
+
+  List<QueryDocumentSnapshot<Map<String, dynamic>>> _rankHashtagPostsByRelevance(
+    List<QueryDocumentSnapshot<Map<String, dynamic>>> docs,
+    String query,
+  ) {
+    final List<String> tokens = _queryTokens(query)
+        .map((String token) => token.startsWith('#') ? token : '#$token')
+        .toList();
+    if (tokens.isEmpty) {
+      return docs;
+    }
+    final List<QueryDocumentSnapshot<Map<String, dynamic>>> sorted =
+        List<QueryDocumentSnapshot<Map<String, dynamic>>>.from(docs);
+    sorted.sort((a, b) {
+      final List<String> aHashtags =
+          (a.data()['hashtags'] as List<dynamic>? ?? <dynamic>[])
+              .map((dynamic value) => value.toString().toLowerCase())
+              .toList();
+      final List<String> bHashtags =
+          (b.data()['hashtags'] as List<dynamic>? ?? <dynamic>[])
+              .map((dynamic value) => value.toString().toLowerCase())
+              .toList();
+      return _compareRelevance(
+        aHashtags.join(' '),
+        bHashtags.join(' '),
+        tokens,
+      );
+    });
+    return sorted.where((QueryDocumentSnapshot<Map<String, dynamic>> doc) {
+      final List<String> hashtags =
+          (doc.data()['hashtags'] as List<dynamic>? ?? <dynamic>[])
+              .map((dynamic value) => value.toString().toLowerCase())
+              .toList();
+      return tokens.any(
+        (String token) => hashtags.any(
+          (String hashtag) =>
+              hashtag.contains(token) ||
+              hashtag.replaceFirst('#', '').contains(token.replaceFirst('#', '')),
+        ),
+      );
+    }).toList();
+  }
+
+  int _compareRelevance(String aHaystack, String bHaystack, List<String> tokens) {
+    final _RelevanceScore aScore = _scoreText(aHaystack, tokens);
+    final _RelevanceScore bScore = _scoreText(bHaystack, tokens);
+
+    if (aScore.fullMatch != bScore.fullMatch) {
+      return aScore.fullMatch ? -1 : 1;
+    }
+    if (aScore.matchCount != bScore.matchCount) {
+      return bScore.matchCount.compareTo(aScore.matchCount);
+    }
+    if (aScore.tightness != bScore.tightness) {
+      return aScore.tightness.compareTo(bScore.tightness);
+    }
+    return aScore.firstMatchIndex.compareTo(bScore.firstMatchIndex);
+  }
+
+  _RelevanceScore _scoreText(String haystack, List<String> tokens) {
+    final List<int> positions = <int>[];
+    for (final String token in tokens) {
+      final int index = haystack.indexOf(token);
+      if (index >= 0) {
+        positions.add(index);
       }
     }
+    positions.sort();
+    final bool fullMatch = positions.length == tokens.length;
+    final int tightness = positions.length <= 1
+        ? 0
+        : positions.last - positions.first;
+    final int firstMatchIndex = positions.isEmpty ? 1 << 20 : positions.first;
+    return _RelevanceScore(
+      fullMatch: fullMatch,
+      matchCount: positions.length,
+      tightness: tightness,
+      firstMatchIndex: firstMatchIndex,
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     return DefaultTabController(
-      length: 3,
+      length: 2,
       child: Scaffold(
         appBar: AppBar(
           title: const Text('Discover'),
@@ -251,7 +351,6 @@ class _DiscoveryScreenState extends State<DiscoveryScreen> {
             tabs: <Tab>[
               Tab(text: 'Users'),
               Tab(text: 'Hashtags'),
-              Tab(text: 'Location'),
             ],
           ),
         ),
@@ -265,12 +364,15 @@ class _DiscoveryScreenState extends State<DiscoveryScreen> {
                     child: TextField(
                       controller: _queryController,
                       textInputAction: TextInputAction.search,
+                      textCapitalization: TextCapitalization.none,
+                      autocorrect: false,
+                      enableSuggestions: false,
                       onSubmitted: (_) {
                         _searchDebounceTimer?.cancel();
                         _search();
                       },
                       decoration: const InputDecoration(
-                        hintText: 'Search username / hashtag / location',
+                        hintText: 'Search username / hashtag',
                         prefixIcon: Icon(Icons.search),
                       ),
                     ),
@@ -298,8 +400,7 @@ class _DiscoveryScreenState extends State<DiscoveryScreen> {
               child: TabBarView(
                 children: <Widget>[
                   _buildUserTab(context),
-                  _buildPostTab(context, _hashtagResults, isHashtagTab: true),
-                  _buildPostTab(context, _locationResults, isHashtagTab: false),
+                  _buildPostTab(context, _hashtagResults),
                 ],
               ),
             ),
@@ -363,14 +464,11 @@ class _DiscoveryScreenState extends State<DiscoveryScreen> {
 
   Widget _buildPostTab(
     BuildContext context,
-    List<QueryDocumentSnapshot<Map<String, dynamic>>> posts, {
-    required bool isHashtagTab,
-  }) {
+    List<QueryDocumentSnapshot<Map<String, dynamic>>> posts,
+  ) {
     final AppSemanticColors semantic = context.semanticColors;
-    final bool loadingMore = isHashtagTab
-        ? _loadingHashtagsMore
-        : _loadingLocationsMore;
-    final bool hasMore = isHashtagTab ? _hasMoreHashtags : _hasMoreLocations;
+    final bool loadingMore = _loadingHashtagsMore;
+    final bool hasMore = _hasMoreHashtags;
 
     if (posts.isEmpty) {
       return const Center(child: Text('No posts found.'));
@@ -388,11 +486,7 @@ class _DiscoveryScreenState extends State<DiscoveryScreen> {
           );
         }
         if (_activeQuery.isNotEmpty && index >= posts.length - 3) {
-          if (isHashtagTab) {
-            _loadMoreHashtags();
-          } else {
-            _loadMoreLocations();
-          }
+          _loadMoreHashtags();
         }
         final Map<String, dynamic> data = posts[index].data();
         final String caption = data['content']?.toString() ?? '';
@@ -421,4 +515,18 @@ class _DiscoveryScreenState extends State<DiscoveryScreen> {
       },
     );
   }
+}
+
+class _RelevanceScore {
+  const _RelevanceScore({
+    required this.fullMatch,
+    required this.matchCount,
+    required this.tightness,
+    required this.firstMatchIndex,
+  });
+
+  final bool fullMatch;
+  final int matchCount;
+  final int tightness;
+  final int firstMatchIndex;
 }

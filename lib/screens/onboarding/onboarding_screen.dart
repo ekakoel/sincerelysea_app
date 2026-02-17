@@ -126,12 +126,12 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
 
             const SizedBox(height: 16),
 
-            // NEXT BUTTON
+            // NEXT ACTION (text only)
             Padding(
               padding: const EdgeInsets.all(16),
-              child: SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
+              child: Align(
+                alignment: Alignment.center,
+                child: TextButton(
                   onPressed: nextPage,
                   child: Text(
                     currentIndex == onboardingList.length - 1
