@@ -4,6 +4,10 @@ class Product {
   const Product({
     required this.id,
     required this.userId,
+    required this.ownerType,
+    required this.ownerId,
+    required this.storeName,
+    required this.managedByAdmins,
     required this.category,
     required this.inventoryType,
     required this.preorderDays,
@@ -19,6 +23,10 @@ class Product {
 
   final String id;
   final String userId;
+  final String ownerType;
+  final String ownerId;
+  final String storeName;
+  final bool managedByAdmins;
   final String category;
   final String inventoryType;
   final int preorderDays;
@@ -44,6 +52,18 @@ class Product {
     return Product(
       id: doc.id,
       userId: data['userId']?.toString() ?? '',
+      ownerType: data['ownerType']?.toString() == 'business'
+          ? 'business'
+          : 'business',
+      ownerId: data['ownerId']?.toString().trim().isNotEmpty == true
+          ? data['ownerId'].toString().trim()
+          : 'sincerelysea',
+      storeName: data['storeName']?.toString().trim().isNotEmpty == true
+          ? data['storeName'].toString().trim()
+          : 'SincerelySea Store',
+      managedByAdmins: data['managedByAdmins'] is bool
+          ? data['managedByAdmins'] as bool
+          : true,
       category: data['category']?.toString() ?? '',
       inventoryType: _normalizeInventoryType(data['inventoryType']),
       preorderDays: _toInt(data['preorderDays']),
@@ -66,6 +86,10 @@ class Product {
   Map<String, dynamic> toFirestore() {
     return <String, dynamic>{
       'userId': userId,
+      'ownerType': ownerType,
+      'ownerId': ownerId,
+      'storeName': storeName.trim(),
+      'managedByAdmins': managedByAdmins,
       'category': category.trim(),
       'inventoryType': inventoryType,
       'preorderDays': preorderDays,

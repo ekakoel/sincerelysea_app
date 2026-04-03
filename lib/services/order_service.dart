@@ -3,6 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:sincerelysea/models/cart_item.dart';
 import 'package:sincerelysea/models/order.dart' as app_order;
 import 'package:sincerelysea/models/product.dart';
+import 'package:sincerelysea/services/sales_reporting_service.dart';
 
 class CheckoutInfo {
   const CheckoutInfo({
@@ -19,6 +20,7 @@ class CheckoutInfo {
 class OrderService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseAuth _auth = FirebaseAuth.instance;
+  final SalesReportingService _salesReportingService = SalesReportingService();
   static const Set<String> _allowedStatuses = <String>{
     'pending',
     'cancelled',
@@ -30,6 +32,26 @@ class OrderService {
 
   CollectionReference<Map<String, dynamic>> get _ordersRef =>
       _firestore.collection('orders');
+
+  Future<bool> _isCurrentUserAdmin() async {
+    final User? user = _auth.currentUser;
+    if (user == null) {
+      return false;
+    }
+    final DocumentSnapshot<Map<String, dynamic>> snapshot = await _firestore
+        .collection('users')
+        .doc(user.uid)
+        .get();
+    final Map<String, dynamic> data = snapshot.data() ?? <String, dynamic>{};
+    if (data['role']?.toString().trim().toLowerCase() != 'admin') {
+      return false;
+    }
+    final List<dynamic>? scopes = data['adminScopes'] as List<dynamic>?;
+    if (scopes == null || scopes.isEmpty) {
+      return true;
+    }
+    return scopes.map((dynamic scope) => scope.toString()).contains('orders');
+  }
 
   Stream<QuerySnapshot<Map<String, dynamic>>> myOrdersStream() {
     final User? user = _auth.currentUser;
@@ -43,12 +65,11 @@ class OrderService {
   }
 
   Stream<QuerySnapshot<Map<String, dynamic>>> sellerOrdersStream() {
-    final User? user = _auth.currentUser;
-    if (user == null) {
+    if (_auth.currentUser == null) {
       return const Stream<QuerySnapshot<Map<String, dynamic>>>.empty();
     }
     return _ordersRef
-        .where('sellerIds', arrayContains: user.uid)
+        .where('storeId', isEqualTo: SalesReportingService.storeId)
         .orderBy('createdAt', descending: true)
         .snapshots();
   }
@@ -74,17 +95,30 @@ class OrderService {
       throw Exception('Order not found.');
     }
 
-    final List<String> sellerIds =
-        (snapshot.data()?['sellerIds'] as List<dynamic>? ?? <dynamic>[])
-            .map((dynamic item) => item.toString())
-            .toList(growable: false);
-    if (!sellerIds.contains(user.uid)) {
-      throw Exception('Only the seller can update this order.');
+    if (!await _isCurrentUserAdmin()) {
+      throw Exception('Only store admins can update this order.');
     }
-
-    await orderRef.update(<String, dynamic>{
-      'status': normalizedStatus,
-      'updatedAt': FieldValue.serverTimestamp(),
+    final app_order.Order order = app_order.Order.fromFirestore(snapshot);
+    await _firestore.runTransaction((Transaction tx) async {
+      tx.update(orderRef, <String, dynamic>{
+        'status': normalizedStatus,
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+      final DateTime now = DateTime.now();
+      if (order.status != 'paid' && normalizedStatus == 'paid') {
+        _salesReportingService.recordOrderPaid(
+          tx: tx,
+          orderId: order.id,
+          totalPrice: order.totalPrice,
+          occurredAt: now,
+        );
+      }
+      if (order.status != 'completed' && normalizedStatus == 'completed') {
+        _salesReportingService.recordOrderCompleted(
+          tx: tx,
+          occurredAt: now,
+        );
+      }
     });
   }
 
@@ -141,6 +175,12 @@ class OrderService {
         'status': 'cancelled',
         'updatedAt': FieldValue.serverTimestamp(),
       });
+      _salesReportingService.recordOrderCancelled(
+        tx: tx,
+        orderId: order.id,
+        totalPrice: order.totalPrice,
+        occurredAt: DateTime.now(),
+      );
     });
   }
 
@@ -160,7 +200,6 @@ class OrderService {
     final DocumentReference<Map<String, dynamic>> orderRef = _ordersRef.doc();
     await _firestore.runTransaction((Transaction tx) async {
       final List<app_order.OrderItem> orderItems = <app_order.OrderItem>[];
-      final Set<String> sellerIds = <String>{};
       double totalPrice = 0;
 
       for (final CartItem cartItem in cartItems) {
@@ -215,21 +254,29 @@ class OrderService {
           price: product.price,
         );
         orderItems.add(orderItem);
-        sellerIds.add(product.userId);
         totalPrice += product.price * cartItem.quantity;
       }
 
       tx.set(orderRef, <String, dynamic>{
         'userId': user.uid,
+        'storeId': SalesReportingService.storeId,
+        'storeName': SalesReportingService.storeName,
         'items': orderItems.map((app_order.OrderItem item) => item.toMap()).toList(),
         'totalPrice': totalPrice,
         'status': 'pending',
         'createdAt': FieldValue.serverTimestamp(),
-        'sellerIds': sellerIds.toList(growable: false),
+        'sellerIds': <String>[],
         'customerName': checkoutInfo.customerName.trim(),
         'phone': checkoutInfo.phone.trim(),
         'address': checkoutInfo.address.trim(),
+        'fulfillmentMode': 'admin_managed',
       });
+      _salesReportingService.recordOrderPlaced(
+        tx: tx,
+        orderId: orderRef.id,
+        totalPrice: totalPrice,
+        occurredAt: DateTime.now(),
+      );
     });
 
     return orderRef.id;

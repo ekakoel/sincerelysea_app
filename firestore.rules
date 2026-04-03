@@ -14,6 +14,20 @@ service cloud.firestore {
         && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
     }
 
+    function hasAdminScope(scope) {
+      return isAdmin()
+        && (
+          !(get(/databases/$(database)/documents/users/$(request.auth.uid)).data.adminScopes is list)
+          || get(/databases/$(database)/documents/users/$(request.auth.uid)).data.adminScopes.size() == 0
+          || get(/databases/$(database)/documents/users/$(request.auth.uid)).data.adminScopes.hasAny([scope])
+          || get(/databases/$(database)/documents/users/$(request.auth.uid)).data.adminScopes.hasAny(['all'])
+        );
+    }
+
+    function isOfficialStore(v) {
+      return v == 'sincerelysea';
+    }
+
     function onlyChanges(allowedKeys) {
       return request.resource.data.diff(resource.data).changedKeys().hasOnly(allowedKeys);
     }
@@ -95,9 +109,14 @@ service cloud.firestore {
       return request.resource.data.role in ['user', 'admin'];
     }
 
+    function validAdminScopes() {
+      return !('adminScopes' in request.resource.data)
+        || request.resource.data.adminScopes is list;
+    }
+
     function adminRoleUpdateOnly() {
-      return isAdmin()
-        && onlyChanges(['role', 'updatedAt'])
+      return hasAdminScope('roles')
+        && onlyChanges(['role', 'adminScopes', 'updatedAt'])
         && request.resource.data.uid == resource.data.uid
         && request.resource.data.email == resource.data.email
         && request.resource.data.displayName == resource.data.displayName
@@ -106,7 +125,8 @@ service cloud.firestore {
         && request.resource.data.usernameLower == resource.data.usernameLower
         && request.resource.data.usernameChangedOnce == resource.data.usernameChangedOnce
         && request.resource.data.createdAt == resource.data.createdAt
-        && validAdminRoleValue();
+        && validAdminRoleValue()
+        && validAdminScopes();
     }
 
     function shareCountIncrementedByOne() {
@@ -196,8 +216,12 @@ service cloud.firestore {
     match /products/{productId} {
       allow read: if isSignedIn();
       allow create: if isSignedIn()
-        && isAdmin()
+        && hasAdminScope('products')
         && request.resource.data.userId == request.auth.uid
+        && request.resource.data.ownerType == 'business'
+        && isOfficialStore(request.resource.data.ownerId)
+        && request.resource.data.storeName == 'SincerelySea Store'
+        && request.resource.data.managedByAdmins == true
         && request.resource.data.name is string
         && request.resource.data.name.size() > 0
         && request.resource.data.price is number
@@ -215,30 +239,35 @@ service cloud.firestore {
         )
         && request.resource.data.images is list;
       allow update, delete: if isSignedIn()
-        && isAdmin()
-        && resource.data.userId == request.auth.uid;
+        && hasAdminScope('products')
+        && resource.data.ownerType == 'business'
+        && isOfficialStore(resource.data.ownerId)
+        && resource.data.managedByAdmins == true;
     }
 
     match /orders/{orderId} {
       allow read: if isSignedIn()
         && (
           resource.data.userId == request.auth.uid
-          || (
-            resource.data.sellerIds is list
-            && resource.data.sellerIds.hasAny([request.auth.uid])
-          )
+          || (hasAdminScope('orders') && isOfficialStore(resource.data.storeId))
         );
       allow create: if isSignedIn()
         && request.resource.data.userId == request.auth.uid
+        && isOfficialStore(request.resource.data.storeId)
+        && request.resource.data.storeName == 'SincerelySea Store'
+        && request.resource.data.fulfillmentMode == 'admin_managed'
         && request.resource.data.items is list
         && request.resource.data.totalPrice is number
         && request.resource.data.status in ['pending', 'cancelled', 'paid', 'processing', 'shipped', 'completed'];
       allow update: if isSignedIn()
         && (
           (
-            resource.data.sellerIds is list
-            && resource.data.sellerIds.hasAny([request.auth.uid])
+            hasAdminScope('orders')
+            && isOfficialStore(resource.data.storeId)
             && request.resource.data.userId == resource.data.userId
+            && request.resource.data.storeId == resource.data.storeId
+            && request.resource.data.storeName == resource.data.storeName
+            && request.resource.data.fulfillmentMode == resource.data.fulfillmentMode
             && request.resource.data.items == resource.data.items
             && request.resource.data.totalPrice == resource.data.totalPrice
             && request.resource.data.sellerIds == resource.data.sellerIds
@@ -252,6 +281,9 @@ service cloud.firestore {
             resource.data.userId == request.auth.uid
             && resource.data.status == 'pending'
             && request.resource.data.userId == resource.data.userId
+            && request.resource.data.storeId == resource.data.storeId
+            && request.resource.data.storeName == resource.data.storeName
+            && request.resource.data.fulfillmentMode == resource.data.fulfillmentMode
             && request.resource.data.items == resource.data.items
             && request.resource.data.totalPrice == resource.data.totalPrice
             && request.resource.data.sellerIds == resource.data.sellerIds
@@ -265,10 +297,38 @@ service cloud.firestore {
       allow delete: if false;
     }
 
+    match /journal_entries/{entryId} {
+      allow read: if hasAdminScope('finance');
+      allow create: if isSignedIn()
+        && isOfficialStore(request.resource.data.storeId)
+        && request.resource.data.storeName == 'SincerelySea Store'
+        && request.resource.data.orderId is string
+        && request.resource.data.entryType in ['order_created', 'order_paid', 'order_cancelled']
+        && request.resource.data.memo is string
+        && request.resource.data.lines is list;
+      allow update, delete: if false;
+    }
+
+    match /sales_reports/{reportId} {
+      allow read: if hasAdminScope('finance');
+      allow create, update: if isSignedIn()
+        && isOfficialStore(request.resource.data.storeId)
+        && request.resource.data.storeName == 'SincerelySea Store'
+        && request.resource.data.reportDateKey == reportId
+        && request.resource.data.orderCount is number
+        && request.resource.data.paidOrderCount is number
+        && request.resource.data.completedOrderCount is number
+        && request.resource.data.cancelledOrderCount is number
+        && request.resource.data.grossSales is number
+        && request.resource.data.cancelledSales is number
+        && request.resource.data.netSales is number;
+      allow delete: if false;
+    }
+
     match /admin_audit_logs/{logId} {
-      allow read: if isAdmin();
-      allow create: if isAdmin()
-        && request.resource.data.action == 'role_updated'
+      allow read: if hasAdminScope('roles');
+      allow create: if hasAdminScope('roles')
+        && request.resource.data.action in ['role_updated', 'admin_access_updated']
         && request.resource.data.actorUid == request.auth.uid
         && request.resource.data.previousRole in ['user', 'admin']
         && request.resource.data.newRole in ['user', 'admin'];
@@ -451,14 +511,20 @@ service cloud.firestore {
     }
 
     match /reports/{reportId} {
-      allow read: if isSignedIn();
+      allow read: if hasAdminScope('community')
+        || (isSignedIn() && resource.data.reporterUid == request.auth.uid);
       allow create: if isSignedIn()
         && request.resource.data.reporterUid == request.auth.uid
         && request.resource.data.type in ['post', 'user']
         && request.resource.data.reason is string
         && request.resource.data.reason.size() > 0
         && request.resource.data.reason.size() <= 120;
-      allow update, delete: if false;
+      allow update: if hasAdminScope('community')
+        && request.resource.data.reporterUid == resource.data.reporterUid
+        && request.resource.data.type == resource.data.type
+        && request.resource.data.targetId == resource.data.targetId
+        && request.resource.data.reason == resource.data.reason;
+      allow delete: if false;
     }
   }
 }

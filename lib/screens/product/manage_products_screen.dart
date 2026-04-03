@@ -22,12 +22,12 @@ class ManageProductsScreen extends StatelessWidget {
         }
         if (roleSnapshot.data != true) {
           return Scaffold(
-            appBar: AppBar(title: const Text('Manage Products')),
+            appBar: AppBar(title: const Text('Manage Store Products')),
             body: const Center(
               child: Padding(
                 padding: EdgeInsets.all(24),
                 child: Text(
-                  'Only admin accounts can manage products.',
+                  'Only admin accounts can manage SincerelySea Store products.',
                   textAlign: TextAlign.center,
                 ),
               ),
@@ -36,7 +36,7 @@ class ManageProductsScreen extends StatelessWidget {
         }
 
         return Scaffold(
-          appBar: AppBar(title: const Text('Manage Products')),
+          appBar: AppBar(title: const Text('Manage Store Products')),
           body: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
             stream: productService.myProductsStream(),
             builder: (
@@ -56,11 +56,18 @@ class ManageProductsScreen extends StatelessWidget {
                   (snapshot.data?.docs ??
                           <QueryDocumentSnapshot<Map<String, dynamic>>>[])
                       .map(Product.fromFirestore)
+                      .where(
+                        (Product product) =>
+                            product.ownerId == ProductService.storeId ||
+                            product.managedByAdmins,
+                      )
                       .toList(growable: false);
 
               if (products.isEmpty) {
                 return const Center(
-                  child: Text('You have not added any products yet.'),
+                  child: Text(
+                    'No products have been added to SincerelySea Store yet.',
+                  ),
                 );
               }
 

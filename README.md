@@ -1,6 +1,6 @@
-# SincerelySea App  
+# SincerelySea App
 
-SincerelySea adalah aplikasi mobile berbasis Flutter yang dirancang sebagai platform komunitas untuk berbagi cerita, pengalaman, dan inspirasi secara positif dan autentik. Aplikasi ini mengutamakan kenyamanan pengguna, keamanan data, dan pengalaman sosial yang modern.
+SincerelySea adalah aplikasi mobile Flutter yang menggabungkan komunitas sosial dengan `admin-managed marketplace`. Aplikasi ini sekarang berfungsi sebagai ruang komunitas sekaligus `SincerelySea Store`, tempat brand memasarkan produk resminya langsung di dalam aplikasi.
 
 ---
 
@@ -10,19 +10,74 @@ Mulai 2026-04-03, setiap perubahan kode wajib didokumentasikan di file Markdown.
 
 - Changelog utama: [docs/CHANGELOG.md](/Users/abc/SincerelySea/sincerelysea/docs/CHANGELOG.md)
 - Aturan dokumentasi: [docs/DOCUMENTATION_POLICY.md](/Users/abc/SincerelySea/sincerelysea/docs/DOCUMENTATION_POLICY.md)
+- Domain bisnis: [docs/BUSINESS_DOMAIN.md](/Users/abc/SincerelySea/sincerelysea/docs/BUSINESS_DOMAIN.md)
+- Panduan scope admin: [docs/SCOPE_GUIDE.md](/Users/abc/SincerelySea/sincerelysea/docs/SCOPE_GUIDE.md)
+- Roadmap proyek: [docs/PROJECT_ROADMAP.md](/Users/abc/SincerelySea/sincerelysea/docs/PROJECT_ROADMAP.md)
 
 ---
 
+## 🧭 Project Summary
+
+- `SincerelySea` adalah aplikasi komunitas + official store milik brand
+- marketplace bersifat `admin-managed`, bukan multi-seller publik
+- store resmi berjalan dengan nama `SincerelySea Store`
+- admin dibagi berdasarkan scope kerja agar operasional lebih rapi
+
+## 🧭 Business Domain
+
+- `SincerelySea Store` adalah toko resmi brand di dalam aplikasi.
+- Produk dikelola internal oleh user dengan role `admin`.
+- User biasa berperan sebagai pembeli dan anggota komunitas.
+- Commerce reporting mengikuti struktur `sales_reports` dan `journal_entries`.
+- Admin internal dapat dibagi berdasarkan scope kerja:
+  - `products`
+  - `orders`
+  - `finance`
+  - `community`
+  - `roles`
+
+Dokumen domain lengkap:
+- [docs/BUSINESS_DOMAIN.md](/Users/abc/SincerelySea/sincerelysea/docs/BUSINESS_DOMAIN.md)
+
+## 🗂️ Admin Scope
+
+- `products`: katalog, stock, preorder, dan pengelolaan produk
+- `orders`: operasional order, status order, dan fulfilment
+- `finance`: seluruh laporan transaksi, sales reports, dan journal entries
+- `community`: report komunitas, moderasi post/user
+- `roles`: pembagian akses admin
+
+Dokumen scope lengkap:
+- [docs/SCOPE_GUIDE.md](/Users/abc/SincerelySea/sincerelysea/docs/SCOPE_GUIDE.md)
+
 ## 🚀 Features
 
-- 🔐 Authentication (Login & Register)
-- 🏠 Home Feed (Post & Timeline)
-- 📝 Create Post (Text, Hashtag, Media)
-- ❤️ Interaction (Like, Comment)
-- 👤 User Profile
-- 📷 Media Support (Image Upload)
-- ☁️ Firebase Integration
-- 📱 Android & iOS Support
+- Authentication dengan Firebase Auth
+- Home feed komunitas, posting, interaksi, dan profile
+- Social commerce dengan product post, cart, checkout, dan order flow
+- `SincerelySea Store` yang dikelola admin
+- Wishlist produk, saved products, dan official store catalog
+- Admin dashboard, role management, sales reports, dan journal entries
+- Scoped admin operations untuk product manager, order manager, dan community manager
+- Scoped finance administration untuk semua laporan transaksi dan jurnal
+- Firebase Firestore, Storage, App Check, dan Cloud Functions integration
+- Android & iOS support
+
+---
+
+## 🗺️ Roadmap
+
+Roadmap utama proyek dipisahkan per scope agar lebih mudah diikuti AI dan developer.
+
+Fokus saat ini:
+
+- penguatan admin scope
+- operasional order yang lebih efisien
+- transaction reporting dan integrasi jurnal
+- tooling komunitas dan access control
+
+Dokumen roadmap lengkap:
+- [docs/PROJECT_ROADMAP.md](/Users/abc/SincerelySea/sincerelysea/docs/PROJECT_ROADMAP.md)
 
 ---
 
@@ -43,13 +98,13 @@ Mulai 2026-04-03, setiap perubahan kode wajib didokumentasikan di file Markdown.
 
 ```
 lib/
-│
-├── models/          # Data models
-├── services/        # Firebase & business logic services
-├── screens/         # UI screens
-├── widgets/         # Reusable components
-├── providers/       # State management
-└── main.dart        # App entry point
+├── models/          # Product, order, cart, sales report, journal entry models
+├── services/        # Auth, post, product, order, wishlist, reporting, admin
+├── screens/         # Social, commerce, admin, settings, auth, profile screens
+├── widgets/         # Reusable cards, images, and UI helpers
+├── theme/           # Theme tokens and semantic colors
+├── l10n/            # Localization files
+└── main.dart        # App entry point and provider registration
 ```
 
 ---
@@ -130,13 +185,32 @@ flutter build ios --release
 
 ---
 
-## 📌 Roadmap
+## 🧾 Commerce Reporting
 
-- 🔔 Push Notification  
-- 🎥 Video Upload  
-- 💬 Real-time Chat  
-- 🌍 Location-based Feature  
-- 🛡️ Advanced Security Rules  
+Laporan penjualan mengikuti alur:
+
+`Order -> Journal Entry -> Sales Report`
+
+Koleksi Firestore utama:
+
+- `products/{productId}`
+- `orders/{orderId}`
+- `sales_reports/{reportId}`
+- `journal_entries/{entryId}`
+
+Scope admin utama:
+
+- `products`: pengelolaan katalog dan inventori
+- `orders`: pengelolaan order dan laporan penjualan
+- `finance`: pengelolaan semua laporan transaksi dan journal entries
+- `community`: pengelolaan report komunitas
+- `roles`: pengelolaan akses admin
+
+Event order yang saat ini dicatat ke jurnal:
+
+- `order_created`
+- `order_paid`
+- `order_cancelled`
 
 ---
 
@@ -173,4 +247,4 @@ This project is licensed under the MIT License.
 
 ## About SincerelySea
 
-SincerelySea hadir sebagai ruang digital untuk berbagi cerita yang tulus, membangun komunitas positif, dan menciptakan koneksi yang bermakna.
+SincerelySea hadir sebagai ruang digital untuk berbagi cerita yang tulus sekaligus membangun official store experience yang terhubung langsung dengan komunitasnya.

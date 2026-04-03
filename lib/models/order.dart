@@ -54,6 +54,8 @@ class Order {
   const Order({
     required this.id,
     required this.userId,
+    required this.storeId,
+    required this.storeName,
     required this.items,
     required this.totalPrice,
     required this.status,
@@ -66,6 +68,8 @@ class Order {
 
   final String id;
   final String userId;
+  final String storeId;
+  final String storeName;
   final List<OrderItem> items;
   final double totalPrice;
   final String status;
@@ -80,6 +84,12 @@ class Order {
     return Order(
       id: doc.id,
       userId: data['userId']?.toString() ?? '',
+      storeId: data['storeId']?.toString().trim().isNotEmpty == true
+          ? data['storeId'].toString().trim()
+          : 'sincerelysea',
+      storeName: data['storeName']?.toString().trim().isNotEmpty == true
+          ? data['storeName'].toString().trim()
+          : 'SincerelySea Store',
       items: (data['items'] as List<dynamic>? ?? <dynamic>[])
           .whereType<Map<String, dynamic>>()
           .map(OrderItem.fromMap)
@@ -100,6 +110,8 @@ class Order {
   Map<String, dynamic> toFirestore() {
     return <String, dynamic>{
       'userId': userId,
+      'storeId': storeId,
+      'storeName': storeName.trim(),
       'items': items.map((OrderItem item) => item.toMap()).toList(),
       'totalPrice': totalPrice,
       'status': status,

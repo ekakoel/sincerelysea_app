@@ -4,6 +4,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:sincerelysea/models/product.dart';
+import 'package:sincerelysea/services/sales_reporting_service.dart';
 
 class CreateProductInput {
   const CreateProductInput({
@@ -38,6 +39,9 @@ enum ProductSortOption {
 }
 
 class ProductService {
+  static const String storeId = SalesReportingService.storeId;
+  static const String storeName = SalesReportingService.storeName;
+
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FirebaseStorage _storage = FirebaseStorage.instance;
@@ -54,7 +58,15 @@ class ProductService {
         .collection('users')
         .doc(user.uid)
         .get();
-    return snapshot.data()?['role']?.toString().trim().toLowerCase() == 'admin';
+    final Map<String, dynamic> data = snapshot.data() ?? <String, dynamic>{};
+    if (data['role']?.toString().trim().toLowerCase() != 'admin') {
+      return false;
+    }
+    final List<dynamic>? scopes = data['adminScopes'] as List<dynamic>?;
+    if (scopes == null || scopes.isEmpty) {
+      return true;
+    }
+    return scopes.map((dynamic scope) => scope.toString()).contains('products');
   }
 
   Stream<DocumentSnapshot<Map<String, dynamic>>> getProduct(String productId) {
@@ -92,11 +104,24 @@ class ProductService {
   }
 
   Future<List<Product>> getSellerProducts(String userId) async {
-    final QuerySnapshot<Map<String, dynamic>> snapshot = await _productsRef
-        .where('userId', isEqualTo: userId)
+    return getStoreProducts(userId);
+  }
+
+  Future<List<Product>> getStoreProducts(String ownerId) async {
+    QuerySnapshot<Map<String, dynamic>> snapshot = await _productsRef
+        .where('ownerId', isEqualTo: ownerId)
         .get();
+    if (snapshot.docs.isEmpty && ownerId == storeId) {
+      snapshot = await _productsRef.get();
+    }
     final List<Product> products = snapshot.docs
         .map(Product.fromFirestore)
+        .where(
+          (Product product) =>
+              ownerId != storeId ||
+              product.ownerId == storeId ||
+              product.managedByAdmins,
+        )
         .where((Product product) => product.id.isNotEmpty)
         .toList(growable: false);
     products.sort((Product a, Product b) {
@@ -108,12 +133,10 @@ class ProductService {
   }
 
   Stream<QuerySnapshot<Map<String, dynamic>>> myProductsStream() {
-    final User? user = _auth.currentUser;
-    if (user == null) {
+    if (_auth.currentUser == null) {
       return const Stream<QuerySnapshot<Map<String, dynamic>>>.empty();
     }
     return _productsRef
-        .where('userId', isEqualTo: user.uid)
         .orderBy('createdAt', descending: true)
         .snapshots();
   }
@@ -183,6 +206,10 @@ class ProductService {
 
       await productRef.set(<String, dynamic>{
         'userId': user.uid,
+        'ownerType': 'business',
+        'ownerId': storeId,
+        'storeName': storeName,
+        'managedByAdmins': true,
         'category': input.category.trim(),
         'inventoryType': input.inventoryType.trim().toLowerCase() == 'preorder'
             ? 'preorder'

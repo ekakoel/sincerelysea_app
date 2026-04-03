@@ -8,6 +8,8 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sincerelysea/screens/legal/privacy_policy_screen.dart';
 import 'package:sincerelysea/screens/admin/admin_dashboard_screen.dart';
+import 'package:sincerelysea/screens/admin/community_reports_screen.dart';
+import 'package:sincerelysea/screens/admin/sales_reports_screen.dart';
 import 'package:sincerelysea/screens/admin/admin_user_roles_screen.dart';
 import 'package:sincerelysea/screens/orders/order_history_screen.dart';
 import 'package:sincerelysea/screens/orders/seller_orders_screen.dart';
@@ -25,6 +27,7 @@ import 'package:sincerelysea/screens/settings/session_management_screen.dart';
 import 'package:sincerelysea/screens/support/contact_support_screen.dart';
 import 'package:sincerelysea/services/admin_service.dart';
 import 'package:sincerelysea/services/auth_service.dart';
+import 'package:sincerelysea/services/community_management_service.dart';
 import 'package:sincerelysea/services/local_notification_service.dart';
 import 'package:sincerelysea/services/product_service.dart';
 import 'package:sincerelysea/theme/app_semantic_colors.dart';
@@ -236,23 +239,12 @@ class _ProfileSettingsMenuScreenState extends State<ProfileSettingsMenuScreen> {
                       Divider(height: 1, color: semantic.divider),
                       _SettingsItem(
                         icon: Icons.inventory_2_outlined,
-                        title: 'Manage Products',
+                        title: 'Manage Store Products',
                         subtitle:
-                            'Update stock, preorder settings, and availability',
+                            'Update SincerelySea Store stock, preorder settings, and availability',
                         onTap: () => Navigator.of(context).push(
                           MaterialPageRoute<void>(
                             builder: (_) => const ManageProductsScreen(),
-                          ),
-                        ),
-                      ),
-                      Divider(height: 1, color: semantic.divider),
-                      _SettingsItem(
-                        icon: Icons.store_mall_directory_outlined,
-                        title: 'Seller Orders',
-                        subtitle: 'Manage incoming orders for your products',
-                        onTap: () => Navigator.of(context).push(
-                          MaterialPageRoute<void>(
-                            builder: (_) => const SellerOrdersScreen(),
                           ),
                         ),
                       ),
@@ -286,11 +278,107 @@ class _ProfileSettingsMenuScreenState extends State<ProfileSettingsMenuScreen> {
                         ),
                       ),
                     ),
+                  ],
+                ),
+              );
+            },
+          ),
+          FutureBuilder<bool>(
+            future: context.read<AdminService>().hasCurrentUserScope('orders'),
+            builder: (BuildContext context, AsyncSnapshot<bool> snapshot) {
+              if (snapshot.data != true) {
+                return const SizedBox.shrink();
+              }
+              return Padding(
+                padding: const EdgeInsets.only(top: 14),
+                child: _SectionCard(
+                  title: 'Order Admin',
+                  items: <Widget>[
+                    _SettingsItem(
+                      icon: Icons.store_mall_directory_outlined,
+                      title: 'Store Orders',
+                      subtitle:
+                          'Manage incoming customer orders for SincerelySea Store',
+                      onTap: () => Navigator.of(context).push(
+                        MaterialPageRoute<void>(
+                          builder: (_) => const SellerOrdersScreen(),
+                        ),
+                      ),
+                    ),
                     Divider(height: 1, color: semantic.divider),
+                  ],
+                ),
+              );
+            },
+          ),
+          FutureBuilder<bool>(
+            future: context.read<AdminService>().hasCurrentUserScope('finance'),
+            builder: (BuildContext context, AsyncSnapshot<bool> snapshot) {
+              if (snapshot.data != true) {
+                return const SizedBox.shrink();
+              }
+              return Padding(
+                padding: const EdgeInsets.only(top: 14),
+                child: _SectionCard(
+                  title: 'Finance Admin',
+                  items: <Widget>[
+                    _SettingsItem(
+                      icon: Icons.assessment_outlined,
+                      title: 'Transaction Reports',
+                      subtitle:
+                          'Manage daily sales snapshots, journal entries, and transaction reporting',
+                      onTap: () => Navigator.of(context).push(
+                        MaterialPageRoute<void>(
+                          builder: (_) => const SalesReportsScreen(),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            },
+          ),
+          FutureBuilder<bool>(
+            future: context.read<CommunityManagementService>().canCurrentUserManageCommunity(),
+            builder: (BuildContext context, AsyncSnapshot<bool> snapshot) {
+              if (snapshot.data != true) {
+                return const SizedBox.shrink();
+              }
+              return Padding(
+                padding: const EdgeInsets.only(top: 14),
+                child: _SectionCard(
+                  title: 'Community Admin',
+                  items: <Widget>[
+                    _SettingsItem(
+                      icon: Icons.flag_outlined,
+                      title: 'Community Reports',
+                      subtitle: 'Review post and user reports from the community',
+                      onTap: () => Navigator.of(context).push(
+                        MaterialPageRoute<void>(
+                          builder: (_) => const CommunityReportsScreen(),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            },
+          ),
+          FutureBuilder<bool>(
+            future: context.read<AdminService>().canCurrentUserManageAdminAccess(),
+            builder: (BuildContext context, AsyncSnapshot<bool> snapshot) {
+              if (snapshot.data != true) {
+                return const SizedBox.shrink();
+              }
+              return Padding(
+                padding: const EdgeInsets.only(top: 14),
+                child: _SectionCard(
+                  title: 'Access Control',
+                  items: <Widget>[
                     _SettingsItem(
                       icon: Icons.admin_panel_settings_outlined,
-                      title: 'Manage Roles',
-                      subtitle: 'Promote or demote admins securely',
+                      title: 'Manage Admin Access',
+                      subtitle: 'Assign product, order, and community managers',
                       onTap: () => Navigator.of(context).push(
                         MaterialPageRoute<void>(
                           builder: (_) => const AdminUserRolesScreen(),

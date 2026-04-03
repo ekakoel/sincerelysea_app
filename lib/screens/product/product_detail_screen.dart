@@ -179,13 +179,9 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                   final Map<String, dynamic> data =
                       seller.data?.data() ?? <String, dynamic>{};
                   final bool isAdmin =
+                      product.managedByAdmins ||
                       data['role']?.toString().trim().toLowerCase() == 'admin';
-                  final String sellerName =
-                      data['displayName']?.toString().trim().isNotEmpty == true
-                      ? data['displayName'].toString().trim()
-                      : (data['username']?.toString().trim().isNotEmpty == true
-                            ? '@${data['username']}'
-                            : 'Unknown seller');
+                  final String sellerName = product.storeName;
                   return ListTile(
                     contentPadding: EdgeInsets.zero,
                     leading: const CircleAvatar(
@@ -193,23 +189,23 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                     ),
                     title: Row(
                       children: <Widget>[
-                        const Text('Seller'),
+                        const Text('Store'),
                         if (isAdmin) ...<Widget>[
                           const SizedBox(width: 8),
                           const _RoleBadge(label: 'ADMIN'),
                         ],
                       ],
                     ),
-                    subtitle: Text('$sellerName\nTap to view storefront'),
+                    subtitle: Text('$sellerName\nTap to view the official store'),
                     isThreeLine: true,
                     trailing: const Icon(Icons.chevron_right),
-                    onTap: product.userId.trim().isEmpty
+                    onTap: product.ownerId.trim().isEmpty
                         ? null
                         : () {
                             Navigator.of(context).push(
                               MaterialPageRoute<void>(
                                 builder: (_) => SellerStorefrontScreen(
-                                  sellerUserId: product.userId,
+                                  sellerUserId: product.ownerId,
                                   sellerName: sellerName,
                                 ),
                               ),

@@ -252,6 +252,7 @@ class AuthService {
             user.displayName ?? user.email?.split('@').first ?? 'Anonymous',
         'photoUrl': user.photoURL ?? '',
         'role': 'user',
+        'adminScopes': <String>[],
         'username': username,
         'usernameLower': usernameLower,
         'usernameChangedOnce': false,

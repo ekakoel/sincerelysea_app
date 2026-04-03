@@ -89,7 +89,7 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
           if (widget.isSellerView) ...<Widget>[
             const SizedBox(height: 14),
             _Section(
-              title: 'Seller Actions',
+              title: 'Store Actions',
               child: DropdownButtonFormField<String>(
                 initialValue: order.status,
                 decoration: const InputDecoration(labelText: 'Update Status'),

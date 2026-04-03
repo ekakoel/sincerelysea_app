@@ -27,20 +27,20 @@ class _AdminUserRolesScreenState extends State<AdminUserRolesScreen> {
   Widget build(BuildContext context) {
     final AdminService adminService = context.read<AdminService>();
     return FutureBuilder<bool>(
-      future: adminService.isCurrentUserAdmin(),
-      builder: (BuildContext context, AsyncSnapshot<bool> roleSnapshot) {
-        if (roleSnapshot.connectionState == ConnectionState.waiting) {
+      future: adminService.canCurrentUserManageAdminAccess(),
+      builder: (BuildContext context, AsyncSnapshot<bool> accessSnapshot) {
+        if (accessSnapshot.connectionState == ConnectionState.waiting) {
           return const Scaffold(
             body: Center(child: CircularProgressIndicator()),
           );
         }
-        if (roleSnapshot.data != true) {
+        if (accessSnapshot.data != true) {
           return const Scaffold(
             body: Center(
               child: Padding(
                 padding: EdgeInsets.all(24),
                 child: Text(
-                  'Only admin accounts can manage roles.',
+                  'Only authorized admins can manage admin access.',
                   textAlign: TextAlign.center,
                 ),
               ),
@@ -49,7 +49,7 @@ class _AdminUserRolesScreenState extends State<AdminUserRolesScreen> {
         }
 
         return Scaffold(
-          appBar: AppBar(title: const Text('Admin Roles')),
+          appBar: AppBar(title: const Text('Admin Access')),
           body: Column(
             children: <Widget>[
               Padding(
@@ -89,11 +89,12 @@ class _AdminUserRolesScreenState extends State<AdminUserRolesScreen> {
                     }
 
                     final List<QueryDocumentSnapshot<Map<String, dynamic>>> docs =
-                        snapshot.data?.docs ?? <QueryDocumentSnapshot<Map<String, dynamic>>>[];
+                        snapshot.data?.docs ??
+                        <QueryDocumentSnapshot<Map<String, dynamic>>>[];
                     final List<QueryDocumentSnapshot<Map<String, dynamic>>> filteredDocs =
-                        docs.where(_matchesSearch).toList();
+                        docs.where(_matchesSearch).toList(growable: false);
                     final int adminCount = docs.where((doc) {
-                      return doc.data()['role']?.toString().toLowerCase() == 'admin';
+                      return adminService.isAdminData(doc.data());
                     }).length;
 
                     if (filteredDocs.isEmpty) {
@@ -118,12 +119,14 @@ class _AdminUserRolesScreenState extends State<AdminUserRolesScreen> {
                           filteredUsers: filteredDocs.length,
                         ),
                         const SizedBox(height: 12),
-                        ...filteredDocs.map((doc) => _UserRoleTile(
-                              document: doc,
-                              isUpdating: _updatingUserId == doc.id,
-                              onRoleChanged: (String role) =>
-                                  _updateRole(doc.id, role),
-                            )),
+                        ...filteredDocs.map(
+                          (QueryDocumentSnapshot<Map<String, dynamic>> doc) =>
+                              _UserAccessTile(
+                                document: doc,
+                                isUpdating: _updatingUserId == doc.id,
+                                onManageTap: () => _showAccessSheet(doc),
+                              ),
+                        ),
                       ],
                     );
                   },
@@ -145,36 +148,183 @@ class _AdminUserRolesScreenState extends State<AdminUserRolesScreen> {
     final String displayName =
         data['displayName']?.toString().toLowerCase() ?? '';
     final String email = data['email']?.toString().toLowerCase() ?? '';
-    final String haystack = '$username $displayName $email';
-    return haystack.contains(_searchQuery);
+    return '$username $displayName $email'.contains(_searchQuery);
   }
 
-  Future<void> _updateRole(String userId, String role) async {
-    final ScaffoldMessengerState messenger = ScaffoldMessenger.of(context);
-    setState(() => _updatingUserId = userId);
-    try {
-      await context.read<AdminService>().updateUserRole(
-        userId: userId,
-        role: role,
-      );
-      if (!mounted) {
-        return;
-      }
-      messenger.showSnackBar(
-        SnackBar(content: Text('Role updated to ${role.toUpperCase()}')),
-      );
-    } catch (e) {
-      if (!mounted) {
-        return;
-      }
-      messenger.showSnackBar(
-        SnackBar(content: Text('Failed to update role: $e')),
-      );
-    } finally {
-      if (mounted) {
-        setState(() => _updatingUserId = null);
-      }
-    }
+  Future<void> _showAccessSheet(
+    QueryDocumentSnapshot<Map<String, dynamic>> document,
+  ) async {
+    final AdminService adminService = context.read<AdminService>();
+    final Map<String, dynamic> data = document.data();
+    String selectedRole =
+        adminService.isAdminData(data) ? 'admin' : 'user';
+    final Set<String> selectedScopes = adminService
+        .adminScopesFromData(data)
+        .toSet();
+    final User? currentUser = FirebaseAuth.instance.currentUser;
+    final bool isSelf = currentUser?.uid == document.id;
+    bool saving = false;
+
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      builder: (BuildContext bottomSheetContext) {
+        return StatefulBuilder(
+          builder: (BuildContext context, StateSetter setModalState) {
+            Future<void> save() async {
+              final NavigatorState navigator = Navigator.of(bottomSheetContext);
+              final ScaffoldMessengerState messenger = ScaffoldMessenger.of(
+                this.context,
+              );
+              setModalState(() => saving = true);
+              setState(() => _updatingUserId = document.id);
+              try {
+                await adminService.updateUserAccess(
+                  userId: document.id,
+                  role: selectedRole,
+                  adminScopes: selectedScopes.toList(growable: false),
+                );
+                if (!mounted) {
+                  return;
+                }
+                navigator.pop();
+                messenger.showSnackBar(
+                  const SnackBar(content: Text('Admin access updated.')),
+                );
+              } catch (e) {
+                if (!mounted) {
+                  return;
+                }
+                messenger.showSnackBar(
+                  SnackBar(content: Text('Failed to update access: $e')),
+                );
+              } finally {
+                if (mounted) {
+                  setState(() => _updatingUserId = null);
+                }
+                setModalState(() => saving = false);
+              }
+            }
+
+            return SafeArea(
+              child: Padding(
+                padding: EdgeInsets.fromLTRB(
+                  16,
+                  16,
+                  16,
+                  MediaQuery.of(bottomSheetContext).viewInsets.bottom + 24,
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    Text(
+                      'Manage Access',
+                      style: Theme.of(context).textTheme.titleLarge,
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      data['displayName']?.toString().trim().isNotEmpty == true
+                          ? data['displayName'].toString().trim()
+                          : '@${data['username'] ?? 'user'}',
+                    ),
+                    const SizedBox(height: 16),
+                    DropdownButtonFormField<String>(
+                      initialValue: selectedRole,
+                      decoration: const InputDecoration(labelText: 'Role'),
+                      items: const <DropdownMenuItem<String>>[
+                        DropdownMenuItem(value: 'user', child: Text('User')),
+                        DropdownMenuItem(value: 'admin', child: Text('Admin')),
+                      ],
+                      onChanged: isSelf
+                          ? null
+                          : (String? value) {
+                              if (value == null) {
+                                return;
+                              }
+                              setModalState(() {
+                                selectedRole = value;
+                                if (selectedRole != 'admin') {
+                                  selectedScopes.clear();
+                                } else if (selectedScopes.isEmpty) {
+                                  selectedScopes.addAll(
+                                    AdminService.supportedScopes,
+                                  );
+                                }
+                              });
+                            },
+                    ),
+                    if (selectedRole == 'admin') ...<Widget>[
+                      const SizedBox(height: 16),
+                      const Text(
+                        'Admin Responsibilities',
+                        style: TextStyle(fontWeight: FontWeight.w700),
+                      ),
+                      const SizedBox(height: 8),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: AdminService.supportedScopes.map((String scope) {
+                          final bool selected = selectedScopes.contains(scope);
+                          return FilterChip(
+                            selected: selected,
+                            label: Text(_scopeLabel(scope)),
+                            onSelected: isSelf
+                                ? null
+                                : (bool value) {
+                                    setModalState(() {
+                                      if (value) {
+                                        selectedScopes.add(scope);
+                                      } else {
+                                        selectedScopes.remove(scope);
+                                      }
+                                    });
+                                  },
+                          );
+                        }).toList(growable: false),
+                      ),
+                      const SizedBox(height: 8),
+                      const Text(
+                        'Use products for catalog managers, orders for operational order admins, finance for transaction reporting, community for moderation, and roles for access management.',
+                        style: TextStyle(color: AppColors.black54, height: 1.35),
+                      ),
+                    ],
+                    const SizedBox(height: 20),
+                    SizedBox(
+                      width: double.infinity,
+                      child: FilledButton(
+                        onPressed: saving || isSelf ? null : save,
+                        child: saving
+                            ? const SizedBox(
+                                width: 16,
+                                height: 16,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: Colors.white,
+                                ),
+                              )
+                            : const Text('Save Access'),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  String _scopeLabel(String scope) {
+    return switch (scope) {
+      'products' => 'Product Manager',
+      'orders' => 'Order Manager',
+      'finance' => 'Finance Admin',
+      'community' => 'Community Manager',
+      'roles' => 'Access Manager',
+      _ => scope,
+    };
   }
 }
 
@@ -202,9 +352,7 @@ class _AdminSummaryCard extends StatelessWidget {
         children: <Widget>[
           Expanded(child: _SummaryMetric(label: 'Users', value: totalUsers)),
           Expanded(child: _SummaryMetric(label: 'Admins', value: adminUsers)),
-          Expanded(
-            child: _SummaryMetric(label: 'Visible', value: filteredUsers),
-          ),
+          Expanded(child: _SummaryMetric(label: 'Visible', value: filteredUsers)),
         ],
       ),
     );
@@ -226,28 +374,26 @@ class _SummaryMetric extends StatelessWidget {
           style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700),
         ),
         const SizedBox(height: 4),
-        Text(
-          label,
-          style: const TextStyle(color: AppColors.black54),
-        ),
+        Text(label, style: const TextStyle(color: AppColors.black54)),
       ],
     );
   }
 }
 
-class _UserRoleTile extends StatelessWidget {
-  const _UserRoleTile({
+class _UserAccessTile extends StatelessWidget {
+  const _UserAccessTile({
     required this.document,
     required this.isUpdating,
-    required this.onRoleChanged,
+    required this.onManageTap,
   });
 
   final QueryDocumentSnapshot<Map<String, dynamic>> document;
   final bool isUpdating;
-  final ValueChanged<String> onRoleChanged;
+  final VoidCallback onManageTap;
 
   @override
   Widget build(BuildContext context) {
+    final AdminService adminService = context.read<AdminService>();
     final Map<String, dynamic> data = document.data();
     final User? currentUser = FirebaseAuth.instance.currentUser;
     final String username = data['username']?.toString().trim().isNotEmpty == true
@@ -258,21 +404,22 @@ class _UserRoleTile extends StatelessWidget {
         ? data['displayName'].toString().trim()
         : username;
     final String email = data['email']?.toString().trim() ?? '';
-    final String role = data['role']?.toString().trim().toLowerCase() == 'admin'
-        ? 'admin'
-        : 'user';
+    final bool isAdmin = adminService.isAdminData(data);
+    final List<String> scopes = isAdmin
+        ? adminService.adminScopesFromData(data)
+        : const <String>[];
     final bool isSelf = currentUser?.uid == document.id;
 
     return Card(
       margin: const EdgeInsets.only(bottom: 10),
       child: ListTile(
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
         leading: CircleAvatar(
-          backgroundColor: role == 'admin' ? AppColors.black : AppColors.gray300,
+          backgroundColor: isAdmin ? AppColors.black : AppColors.gray300,
           child: Text(
             displayName.isNotEmpty ? displayName[0].toUpperCase() : '?',
             style: TextStyle(
-              color: role == 'admin' ? AppColors.white : AppColors.black,
+              color: isAdmin ? AppColors.white : AppColors.black,
               fontWeight: FontWeight.w700,
             ),
           ),
@@ -287,26 +434,57 @@ class _UserRoleTile extends StatelessWidget {
               ),
             ),
             const SizedBox(width: 8),
-            _RoleChip(role: role),
+            _RoleChip(role: isAdmin ? 'admin' : 'user'),
           ],
         ),
-        subtitle: Padding(
-          padding: const EdgeInsets.only(top: 4),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: <Widget>[
-              Text('@$username'),
-              if (email.isNotEmpty) Text(email),
-              if (isSelf)
-                const Padding(
-                  padding: EdgeInsets.only(top: 4),
-                  child: Text(
-                    'Current account',
-                    style: TextStyle(fontWeight: FontWeight.w600),
-                  ),
-                ),
+        subtitle: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            const SizedBox(height: 4),
+            Text('@$username'),
+            if (email.isNotEmpty) Text(email),
+            if (scopes.isNotEmpty) ...<Widget>[
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 6,
+                runSpacing: 6,
+                children: scopes.map((String scope) {
+                  return Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 4,
+                    ),
+                    decoration: BoxDecoration(
+                      color: AppColors.gray100,
+                      borderRadius: BorderRadius.circular(999),
+                    ),
+                    child: Text(
+                      switch (scope) {
+                        'products' => 'Products',
+                        'orders' => 'Orders',
+                        'finance' => 'Finance',
+                        'community' => 'Community',
+                        'roles' => 'Roles',
+                        _ => scope,
+                      },
+                      style: const TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  );
+                }).toList(growable: false),
+              ),
             ],
-          ),
+            if (isSelf)
+              const Padding(
+                padding: EdgeInsets.only(top: 8),
+                child: Text(
+                  'Current account',
+                  style: TextStyle(fontWeight: FontWeight.w600),
+                ),
+              ),
+          ],
         ),
         trailing: isUpdating
             ? const SizedBox(
@@ -314,36 +492,9 @@ class _UserRoleTile extends StatelessWidget {
                 height: 24,
                 child: CircularProgressIndicator(strokeWidth: 2),
               )
-            : PopupMenuButton<String>(
-                enabled: !isSelf,
-                onSelected: onRoleChanged,
-                itemBuilder: (BuildContext context) => <PopupMenuEntry<String>>[
-                  const PopupMenuItem<String>(
-                    value: 'user',
-                    child: Text('Set as User'),
-                  ),
-                  const PopupMenuItem<String>(
-                    value: 'admin',
-                    child: Text('Set as Admin'),
-                  ),
-                ],
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 8,
-                  ),
-                  decoration: BoxDecoration(
-                    color: isSelf ? AppColors.gray200 : AppColors.black,
-                    borderRadius: BorderRadius.circular(999),
-                  ),
-                  child: Text(
-                    isSelf ? 'Locked' : 'Change',
-                    style: TextStyle(
-                      color: isSelf ? AppColors.black54 : AppColors.white,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                ),
+            : FilledButton.tonal(
+                onPressed: isSelf ? null : onManageTap,
+                child: Text(isSelf ? 'Locked' : 'Manage'),
               ),
       ),
     );

@@ -19,10 +19,12 @@ import 'package:sincerelysea/services/post_service.dart';
 import 'package:sincerelysea/services/product_service.dart';
 import 'package:sincerelysea/services/support_service.dart';
 import 'package:sincerelysea/services/app_check_header_service.dart';
+import 'package:sincerelysea/services/sales_reporting_service.dart';
 import 'package:sincerelysea/services/theme_service.dart';
 import 'package:sincerelysea/services/user_profile_service.dart';
 import 'package:sincerelysea/services/wishlist_service.dart';
 import 'package:sincerelysea/services/cart_service.dart';
+import 'package:sincerelysea/services/community_management_service.dart';
 import 'package:sincerelysea/services/order_service.dart';
 import 'screens/splash/splash_redirect.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -55,7 +57,11 @@ class MyApp extends StatelessWidget {
         Provider<PostService>(create: (_) => PostService()),
         Provider<ProductService>(create: (_) => ProductService()),
         Provider<CartService>(create: (_) => CartService()),
+        Provider<CommunityManagementService>(
+          create: (_) => CommunityManagementService(),
+        ),
         Provider<OrderService>(create: (_) => OrderService()),
+        Provider<SalesReportingService>(create: (_) => SalesReportingService()),
         Provider<SupportService>(create: (_) => SupportService()),
         Provider<FollowService>(create: (_) => FollowService()),
         Provider<UserProfileService>(create: (_) => UserProfileService()),

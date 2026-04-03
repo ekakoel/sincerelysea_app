@@ -1,9 +1,9 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:sincerelysea/models/product.dart';
 import 'package:sincerelysea/screens/product/product_detail_screen.dart';
 import 'package:sincerelysea/services/product_service.dart';
+import 'package:sincerelysea/services/sales_reporting_service.dart';
 import 'package:sincerelysea/services/wishlist_service.dart';
 import 'package:sincerelysea/widgets/product_card.dart';
 
@@ -21,125 +21,100 @@ class SellerStorefrontScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: Text(sellerName)),
-      body: FutureBuilder<DocumentSnapshot<Map<String, dynamic>>>(
-        future: FirebaseFirestore.instance
-            .collection('users')
-            .doc(sellerUserId)
-            .get(),
+      body: FutureBuilder<List<Product>>(
+        future: context.read<ProductService>().getStoreProducts(sellerUserId),
         builder: (
           BuildContext context,
-          AsyncSnapshot<DocumentSnapshot<Map<String, dynamic>>> sellerSnapshot,
+          AsyncSnapshot<List<Product>> snapshot,
         ) {
-          if (sellerSnapshot.connectionState == ConnectionState.waiting) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator());
           }
-          if (sellerSnapshot.hasError) {
+          if (snapshot.hasError) {
             return Center(
-              child: Text('Failed to load seller profile: ${sellerSnapshot.error}'),
+              child: Text('Failed to load store products: ${snapshot.error}'),
             );
           }
-
-          final Map<String, dynamic> sellerData =
-              sellerSnapshot.data?.data() ?? <String, dynamic>{};
-          final bool isAdmin =
-              sellerData['role']?.toString().trim().toLowerCase() == 'admin';
-
-          return FutureBuilder<List<Product>>(
-            future: context.read<ProductService>().getSellerProducts(sellerUserId),
-            builder: (
-              BuildContext context,
-              AsyncSnapshot<List<Product>> snapshot,
-            ) {
-              if (snapshot.connectionState == ConnectionState.waiting) {
-                return const Center(child: CircularProgressIndicator());
-              }
-              if (snapshot.hasError) {
-                return Center(
-                  child: Text('Failed to load seller products: ${snapshot.error}'),
-                );
-              }
-
-              final List<Product> products = snapshot.data ?? <Product>[];
-              return StreamBuilder<Set<String>>(
-                stream: context.read<WishlistService>().productWishlistIdsStream(),
-                builder:
-                    (BuildContext context, AsyncSnapshot<Set<String>> wishlist) {
-                      final Set<String> wishlistIds = wishlist.data ?? <String>{};
-                      if (products.isEmpty) {
-                        return ListView(
-                          padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
-                          children: <Widget>[
-                            _SellerHeader(
-                              sellerName: sellerName,
-                              username: sellerData['username']?.toString() ?? '',
-                              isAdmin: isAdmin,
-                              productCount: products.length,
-                            ),
-                            const SizedBox(height: 24),
-                            const Center(
-                              child: Text('This seller has no products yet.'),
-                            ),
-                          ],
-                        );
-                      }
-                      return CustomScrollView(
-                        slivers: <Widget>[
-                          SliverToBoxAdapter(
-                            child: Padding(
-                              padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
-                              child: _SellerHeader(
-                                sellerName: sellerName,
-                                username:
-                                    sellerData['username']?.toString() ?? '',
-                                isAdmin: isAdmin,
-                                productCount: products.length,
+          final List<Product> products = snapshot.data ?? <Product>[];
+          final bool isOfficialStore =
+              sellerUserId == SalesReportingService.storeId;
+          return StreamBuilder<Set<String>>(
+            stream: context.read<WishlistService>().productWishlistIdsStream(),
+            builder:
+                (BuildContext context, AsyncSnapshot<Set<String>> wishlist) {
+                  final Set<String> wishlistIds = wishlist.data ?? <String>{};
+                  if (products.isEmpty) {
+                    return ListView(
+                      padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+                      children: <Widget>[
+                        _SellerHeader(
+                          sellerName: sellerName,
+                          username: '',
+                          isAdmin: isOfficialStore,
+                          productCount: products.length,
+                        ),
+                        const SizedBox(height: 24),
+                        const Center(
+                          child: Text('No products are available in this store yet.'),
+                        ),
+                      ],
+                    );
+                  }
+                  return CustomScrollView(
+                    slivers: <Widget>[
+                      SliverToBoxAdapter(
+                        child: Padding(
+                          padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
+                          child: _SellerHeader(
+                            sellerName: sellerName,
+                            username: '',
+                            isAdmin: isOfficialStore,
+                            productCount: products.length,
+                          ),
+                        ),
+                      ),
+                      SliverPadding(
+                        padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+                        sliver: SliverGrid(
+                          delegate: SliverChildBuilderDelegate((
+                            BuildContext context,
+                            int index,
+                          ) {
+                            final Product product = products[index];
+                            final bool isWishlisted = wishlistIds.contains(
+                              product.id,
+                            );
+                            return ProductCard(
+                              product: product,
+                              isWishlisted: isWishlisted,
+                              onWishlistTap: () => _toggleWishlist(
+                                context,
+                                product,
+                                isWishlisted,
                               ),
-                            ),
-                          ),
-                          SliverPadding(
-                            padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
-                            sliver: SliverGrid(
-                              delegate: SliverChildBuilderDelegate((
-                                BuildContext context,
-                                int index,
-                              ) {
-                                final Product product = products[index];
-                                final bool isWishlisted = wishlistIds.contains(
-                                  product.id,
-                                );
-                                return ProductCard(
-                                  product: product,
-                                  isWishlisted: isWishlisted,
-                                  onWishlistTap: () => _toggleWishlist(
-                                    context,
-                                    product,
-                                    isWishlisted,
+                              onTap: () {
+                                Navigator.of(context).push(
+                                  MaterialPageRoute<void>(
+                                    builder: (_) => ProductDetailScreen(
+                                      productId: product.id,
+                                    ),
                                   ),
-                                  onTap: () {
-                                    Navigator.of(context).push(
-                                      MaterialPageRoute<void>(
-                                        builder: (_) => ProductDetailScreen(
-                                          productId: product.id,
-                                        ),
-                                      ),
-                                    );
-                                  },
                                 );
-                              }, childCount: products.length),
-                              gridDelegate:
-                                  const SliverGridDelegateWithFixedCrossAxisCount(
-                                    crossAxisCount: 2,
-                                    crossAxisSpacing: 12,
-                                    mainAxisSpacing: 12,
-                                    childAspectRatio: 0.72,
-                                  ),
-                            ),
-                          ),
-                        ],
-                      );
-                    },
-              );
-            },
+                              },
+                            );
+                          }, childCount: products.length),
+                          gridDelegate:
+                              const SliverGridDelegateWithFixedCrossAxisCount(
+                                crossAxisCount: 2,
+                                crossAxisSpacing: 12,
+                                mainAxisSpacing: 12,
+                                childAspectRatio: 0.72,
+                              ),
+                        ),
+                      ),
+                    ],
+                  );
+                },
           );
         },
       ),
@@ -216,7 +191,7 @@ class _SellerHeader extends StatelessWidget {
           ),
           const SizedBox(height: 4),
           Text(
-            username.trim().isEmpty ? 'Seller storefront' : '@$username',
+            username.trim().isEmpty ? 'Official SincerelySea Store' : '@$username',
             style: TextStyle(color: Theme.of(context).hintColor),
           ),
           const SizedBox(height: 10),

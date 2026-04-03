@@ -33,6 +33,15 @@ Semua perubahan proyek wajib dicatat di file ini mulai sekarang.
 - Audit log role changes di koleksi `admin_audit_logs`.
 - Filter audit log admin untuk membedakan promosi dan demosi role.
 - Product analytics di admin dashboard untuk memantau tipe produk, paused items, low stock, dan top products.
+- Struktur data baru untuk domain bisnis resmi `SincerelySea Store` pada product dan order.
+- Model dan service pelaporan baru: `SalesReport`, `JournalEntry`, dan `SalesReportingService`.
+- Halaman admin baru untuk membaca sales reports dan journal entries.
+- Dokumen domain bisnis baru di `docs/BUSINESS_DOMAIN.md`.
+- Scope admin baru untuk membedakan product manager, order manager, community manager, dan access manager.
+- Halaman `Community Reports` untuk admin komunitas.
+- Order management yang lebih mudah dipakai dengan pencarian dan kartu `needs attention`.
+- Scope `finance` baru untuk admin yang mengelola seluruh laporan transaksi aplikasi.
+- Dokumen baru `docs/SCOPE_GUIDE.md` dan `docs/PROJECT_ROADMAP.md` untuk memetakan scope admin dan roadmap proyek.
 
 ### Changed
 - `PostService` dan flow create post sekarang mendukung `type` (`post` / `product`) dan `productId`.
@@ -57,6 +66,14 @@ Semua perubahan proyek wajib dicatat di file ini mulai sekarang.
 - `firestore.rules` sekarang mengizinkan admin mengganti role user secara terbatas tanpa membuka edit field profile lain.
 - Perubahan role admin sekarang otomatis menulis audit log, dan seller admin kini diberi label jelas di product detail serta storefront.
 - Admin dashboard sekarang lebih operasional dengan insight commerce yang langsung dihitung dari `products` dan `orders`.
+- Konsep seller publik sekarang digeser menjadi `SincerelySea Store` yang dikelola admin.
+- `OrderService` sekarang menulis snapshot `sales_reports` dan `journal_entries` saat order dibuat, dibayar, diselesaikan, atau dibatalkan.
+- Wording UI commerce sekarang mengarah ke official store, store orders, dan admin-managed catalog.
+- `README.md` sekarang mendokumentasikan domain bisnis baru, arsitektur reporting, dan struktur proyek yang lebih sesuai dengan kondisi codebase saat ini.
+- Menu settings admin sekarang dibagi per tanggung jawab: product admin, order admin, community admin, dan access control.
+- `AdminService`, `ProductService`, `OrderService`, dan rules Firestore sekarang menghormati `adminScopes`.
+- Akses `sales_reports` dan `journal_entries` sekarang diarahkan ke admin `finance`, terpisah dari admin order operasional.
+- `README.md` sekarang diposisikan sebagai entry point utama untuk memahami konsep bisnis, scope admin, dan roadmap proyek.
 
 ### Notes
 - Setiap perubahan berikutnya harus menambah entri baru di file ini.
