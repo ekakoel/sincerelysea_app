@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:io';
 
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
@@ -10,6 +9,7 @@ import 'package:sincerelysea/theme/app_semantic_colors.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 import 'package:sincerelysea/l10n/app_localizations.dart';
+import 'package:sincerelysea/screens/product/product_detail_screen.dart';
 import 'package:sincerelysea/screens/profile/profile_settings_menu_screen.dart';
 import 'package:sincerelysea/services/auth_service.dart';
 import 'package:sincerelysea/services/follow_service.dart';
@@ -18,6 +18,7 @@ import 'package:sincerelysea/services/theme_service.dart';
 import 'package:sincerelysea/services/user_profile_service.dart';
 import 'package:sincerelysea/services/wishlist_service.dart';
 import 'package:sincerelysea/utils/post_location_label.dart';
+import 'package:sincerelysea/widgets/app_check_network_image.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -165,9 +166,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                   color: colorScheme.surface,
                                   border: Border(
                                     top: BorderSide(color: semantic.divider),
-                                    bottom: BorderSide(
-                                      color: semantic.divider,
-                                    ),
+                                    bottom: BorderSide(color: semantic.divider),
                                   ),
                                 ),
                                 child: TabBar(
@@ -269,6 +268,8 @@ class _ProfileHeader extends StatelessWidget {
     final String username =
         profileData['username']?.toString() ??
         _emailPrefix(user.email).toLowerCase();
+    final bool isAdmin =
+        profileData['role']?.toString().trim().toLowerCase() == 'admin';
     final String? avatarUrl =
         profileData['photoUrl']?.toString().isNotEmpty == true
         ? profileData['photoUrl']?.toString()
@@ -281,24 +282,18 @@ class _ProfileHeader extends StatelessWidget {
           child: Stack(
             alignment: Alignment.center,
             children: <Widget>[
-              CircleAvatar(
+              AppCheckAvatar(
                 radius: 72,
                 backgroundColor: AppColors.gray300,
-                backgroundImage: avatarUrl != null && avatarUrl.isNotEmpty
-                    ? CachedNetworkImageProvider(avatarUrl)
-                    : null,
-                child: avatarUrl == null || avatarUrl.isEmpty
-                    ? Text(
-                        displayName.isNotEmpty
-                            ? displayName[0].toUpperCase()
-                            : '?',
-                        style: const TextStyle(
-                          fontSize: 46,
-                          fontWeight: FontWeight.bold,
-                          color: AppColors.black54,
-                        ),
-                      )
-                    : null,
+                imageUrl: avatarUrl,
+                fallback: Text(
+                  displayName.isNotEmpty ? displayName[0].toUpperCase() : '?',
+                  style: const TextStyle(
+                    fontSize: 46,
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.black54,
+                  ),
+                ),
               ),
               Positioned(
                 right: 0,
@@ -326,14 +321,26 @@ class _ProfileHeader extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 16),
-        Text(
-          displayName,
-          style: const TextStyle(
-            fontSize: 20,
-            fontWeight: FontWeight.w600,
-            letterSpacing: -0.4,
-            fontFamily: 'serif',
-          ),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: <Widget>[
+            Flexible(
+              child: Text(
+                displayName,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.w600,
+                  letterSpacing: -0.4,
+                  fontFamily: 'serif',
+                ),
+              ),
+            ),
+            if (isAdmin) ...<Widget>[
+              const SizedBox(width: 8),
+              const _ProfileRoleBadge(label: 'ADMIN'),
+            ],
+          ],
         ),
         const SizedBox(height: 4),
         Text(
@@ -355,6 +362,32 @@ class _ProfileHeader extends StatelessWidget {
         const SizedBox(height: 14),
         _ProfileStatsRow(userId: userId),
       ],
+    );
+  }
+}
+
+class _ProfileRoleBadge extends StatelessWidget {
+  const _ProfileRoleBadge({required this.label});
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+        color: AppColors.black,
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Text(
+        label,
+        style: const TextStyle(
+          color: AppColors.white,
+          fontSize: 11,
+          fontWeight: FontWeight.w700,
+          letterSpacing: 0.6,
+        ),
+      ),
     );
   }
 }
@@ -914,8 +947,8 @@ class _ProfilePostImageState extends State<_ProfilePostImage> {
       );
     }
 
-    return CachedNetworkImage(
-      key: ValueKey<String>('${cleanUrl}_$_retryCount'),
+    return AppCheckCachedNetworkImage(
+      imageKey: ValueKey<String>('${cleanUrl}_$_retryCount'),
       imageUrl: cleanUrl,
       fit: BoxFit.cover,
       memCacheWidth: widget.thumbConfig.memWidth,
@@ -928,29 +961,22 @@ class _ProfilePostImageState extends State<_ProfilePostImage> {
         _markLoadDone();
         return Image(image: imageProvider, fit: BoxFit.cover);
       },
-      progressIndicatorBuilder:
-          (BuildContext context, String _, DownloadProgress progress) =>
-              Container(
-                color: AppColors.gray200,
-                child: Center(
-                  child: SizedBox(
-                    width: 22,
-                    height: 22,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      value: progress.progress,
-                    ),
-                  ),
-                ),
-              ),
-      errorWidget: (BuildContext context, String _, Object error) {
-        _markLoadDone();
-        return _fallback(
-          icon: Icons.broken_image_outlined,
-          message: AppLocalizations.of(context).failedToLoadImage,
-          canRetry: true,
-        );
-      },
+      placeholder: Container(
+        color: AppColors.gray200,
+        child: const Center(
+          child: SizedBox(
+            width: 22,
+            height: 22,
+            child: CircularProgressIndicator(strokeWidth: 2),
+          ),
+        ),
+      ),
+      onError: _markLoadDone,
+      error: _fallback(
+        icon: Icons.broken_image_outlined,
+        message: AppLocalizations.of(context).failedToLoadImage,
+        canRetry: true,
+      ),
     );
   }
 }
@@ -1028,27 +1054,24 @@ class _PostDetailSheet extends StatelessWidget {
                 if (imageUrl.isNotEmpty)
                   ClipRRect(
                     borderRadius: BorderRadius.circular(14),
-                    child: CachedNetworkImage(
+                    child: AppCheckCachedNetworkImage(
                       imageUrl: imageUrl,
                       height: 250,
                       fit: BoxFit.cover,
-                      placeholder: (BuildContext context, String _) =>
-                          Container(
-                            height: 250,
-                            color: AppColors.gray200,
-                            child: const Center(
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            ),
-                          ),
-                      errorWidget:
-                          (BuildContext context, String _, Object error) =>
-                              Container(
-                                height: 250,
-                                color: AppColors.gray200,
-                                child: const Center(
-                                  child: Icon(Icons.broken_image_outlined),
-                                ),
-                              ),
+                      placeholder: Container(
+                        height: 250,
+                        color: AppColors.gray200,
+                        child: const Center(
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        ),
+                      ),
+                      error: Container(
+                        height: 250,
+                        color: AppColors.gray200,
+                        child: const Center(
+                          child: Icon(Icons.broken_image_outlined),
+                        ),
+                      ),
                     ),
                   ),
                 const SizedBox(height: 14),
@@ -1062,19 +1085,17 @@ class _PostDetailSheet extends StatelessWidget {
                 const SizedBox(height: 8),
                 FutureBuilder<String>(
                   future: resolvePostLocationLabel(data),
-                  builder: (
-                    BuildContext context,
-                    AsyncSnapshot<String> snapshot,
-                  ) {
-                    final String resolved =
-                        snapshot.data?.trim().isNotEmpty == true
-                        ? snapshot.data!.trim()
-                        : location;
-                    return Text(
-                      'Location: $resolved',
-                      style: TextStyle(color: AppColors.gray700),
-                    );
-                  },
+                  builder:
+                      (BuildContext context, AsyncSnapshot<String> snapshot) {
+                        final String resolved =
+                            snapshot.data?.trim().isNotEmpty == true
+                            ? snapshot.data!.trim()
+                            : location;
+                        return Text(
+                          'Location: $resolved',
+                          style: TextStyle(color: AppColors.gray700),
+                        );
+                      },
                 ),
                 const SizedBox(height: 8),
                 Wrap(
@@ -1568,7 +1589,9 @@ class _WishlistSection extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final bool isDark = Theme.of(context).brightness == Brightness.dark;
-    final Color sectionBackground = isDark ? AppColors.gray100 : AppColors.white;
+    final Color sectionBackground = isDark
+        ? AppColors.gray100
+        : AppColors.white;
     final Color sectionTitleColor = isDark
         ? AppColors.black87
         : Theme.of(context).colorScheme.onSurface;
@@ -1596,10 +1619,7 @@ class _WishlistSection extends StatelessWidget {
             if (items.isEmpty)
               Padding(
                 padding: const EdgeInsets.symmetric(vertical: 8),
-                child: Text(
-                  emptyText,
-                  style: TextStyle(color: emptyTextColor),
-                ),
+                child: Text(emptyText, style: TextStyle(color: emptyTextColor)),
               ),
             ...items.map((QueryDocumentSnapshot<Map<String, dynamic>> doc) {
               final Map<String, dynamic> data = doc.data();
@@ -1646,6 +1666,12 @@ class _WishlistCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final AppSemanticColors semantic = context.semanticColors;
     final bool isDark = Theme.of(context).brightness == Brightness.dark;
+    final bool isProductWishlist = data['type']?.toString() == 'product';
+    final String productId = data['productId']?.toString() ?? '';
+    final String productImageUrl = data['productImageUrl']?.toString() ?? '';
+    final double productPrice = data['productPrice'] is num
+        ? (data['productPrice'] as num).toDouble()
+        : 0;
     final String title = data['title']?.toString() ?? '-';
     final String notes = data['notes']?.toString() ?? '';
     final String category = data['category']?.toString() ?? '';
@@ -1666,112 +1692,197 @@ class _WishlistCard extends StatelessWidget {
     final Color primaryTextColor = isDark
         ? AppColors.black87
         : Theme.of(context).colorScheme.onSurface;
-    final Color secondaryTextColor = isDark ? AppColors.gray700 : AppColors.gray700;
+    final Color secondaryTextColor = isDark
+        ? AppColors.gray700
+        : AppColors.gray700;
 
     return Card(
       margin: const EdgeInsets.only(top: 10),
       elevation: 0,
       color: cardBackground,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: <Widget>[
-            Row(
-              children: <Widget>[
-                Expanded(
-                  child: Text(
-                    title,
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w700,
-                      color: primaryTextColor,
-                    ),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: isProductWishlist && productId.trim().isNotEmpty
+            ? () {
+                Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                    builder: (_) => ProductDetailScreen(productId: productId),
                   ),
-                ),
-                if (isProcessing)
-                  const Padding(
-                    padding: EdgeInsets.only(right: 8),
-                    child: SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(strokeWidth: 2),
+                );
+              }
+            : null,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              if (isProductWishlist) ...<Widget>[
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(12),
+                      child: SizedBox(
+                        width: 72,
+                        height: 72,
+                        child: productImageUrl.isEmpty
+                            ? Container(
+                                color: AppColors.gray200,
+                                child: const Icon(Icons.inventory_2_outlined),
+                              )
+                            : AppCheckCachedNetworkImage(
+                                imageUrl: productImageUrl,
+                                fit: BoxFit.cover,
+                                placeholder: Container(color: AppColors.gray200),
+                                error: Container(
+                                  color: AppColors.gray200,
+                                  child: const Icon(Icons.broken_image_outlined),
+                                ),
+                              ),
+                      ),
                     ),
-                  ),
-                PopupMenuButton<String>(
-                  onSelected: (String value) {
-                    if (value == 'edit') {
-                      onEdit();
-                    } else if (value == 'toggle') {
-                      onToggleStatus();
-                    } else if (value == 'delete') {
-                      onDelete();
-                    }
-                  },
-                  itemBuilder: (BuildContext context) =>
-                      <PopupMenuEntry<String>>[
-                        const PopupMenuItem<String>(
-                          value: 'edit',
-                          child: Text('Edit'),
-                        ),
-                        PopupMenuItem<String>(
-                          value: 'toggle',
-                          child: Text(
-                            isFulfilled
-                                ? 'Move to active'
-                                : 'Mark as fulfilled',
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: <Widget>[
+                          Text(
+                            title,
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w700,
+                              color: primaryTextColor,
+                            ),
                           ),
+                          const SizedBox(height: 6),
+                          Text(
+                            '\$${productPrice.toStringAsFixed(2)}',
+                            style: TextStyle(
+                              fontWeight: FontWeight.w700,
+                              color: primaryTextColor,
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            'Tap to view product',
+                            style: TextStyle(color: secondaryTextColor),
+                          ),
+                        ],
+                      ),
+                    ),
+                    _buildMenu(isProductWishlist, isFulfilled, context),
+                  ],
+                ),
+              ] else
+                Row(
+                  children: <Widget>[
+                    Expanded(
+                      child: Text(
+                        title,
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w700,
+                          color: primaryTextColor,
                         ),
-                        const PopupMenuItem<String>(
-                          value: 'delete',
-                          child: Text('Delete'),
-                        ),
-                      ],
+                      ),
+                    ),
+                    _buildMenu(isProductWishlist, isFulfilled, context),
+                  ],
                 ),
-              ],
-            ),
-            const SizedBox(height: 4),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              crossAxisAlignment: WrapCrossAlignment.center,
-              children: <Widget>[
-                _WishlistTag(
-                  icon: isFulfilled ? Icons.task_alt : Icons.schedule,
-                  label: isFulfilled ? 'Fulfilled' : 'Active',
-                  color: isFulfilled ? semantic.success : semantic.warning,
-                ),
-                _WishlistTag(
-                  icon: Icons.flag_outlined,
-                  label: 'Priority: $priorityText',
-                  color: priorityColor,
-                ),
-                if (category.isNotEmpty)
-                  _WishlistTag(
-                    icon: Icons.sell_outlined,
-                    label: category,
-                    color: AppColors.gray700,
+              if (isProcessing)
+                const Padding(
+                  padding: EdgeInsets.only(top: 8),
+                  child: SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(strokeWidth: 2),
                   ),
-              ],
-            ),
-            if (notes.isNotEmpty) ...<Widget>[
-              const SizedBox(height: 8),
-              Text(notes, style: TextStyle(color: secondaryTextColor)),
-            ],
-            if (targetDate != null) ...<Widget>[
-              const SizedBox(height: 8),
-              Text(
-                'Target: ${_formatDate(targetDate)}',
-                style: TextStyle(
-                  color: secondaryTextColor,
-                  fontWeight: FontWeight.w500,
                 ),
+              const SizedBox(height: 4),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: <Widget>[
+                  _WishlistTag(
+                    icon: isFulfilled ? Icons.task_alt : Icons.schedule,
+                    label: isFulfilled ? 'Fulfilled' : 'Active',
+                    color: isFulfilled ? semantic.success : semantic.warning,
+                  ),
+                  if (!isProductWishlist)
+                    _WishlistTag(
+                      icon: Icons.flag_outlined,
+                      label: 'Priority: $priorityText',
+                      color: priorityColor,
+                    ),
+                  if (category.isNotEmpty)
+                    _WishlistTag(
+                      icon: Icons.sell_outlined,
+                      label: category,
+                      color: AppColors.gray700,
+                    ),
+                  if (isProductWishlist)
+                    _WishlistTag(
+                      icon: Icons.favorite_border,
+                      label: 'Product Wishlist',
+                      color: Colors.red,
+                    ),
+                ],
               ),
+              if (notes.isNotEmpty) ...<Widget>[
+                const SizedBox(height: 8),
+                Text(notes, style: TextStyle(color: secondaryTextColor)),
+              ],
+              if (!isProductWishlist && targetDate != null) ...<Widget>[
+                const SizedBox(height: 8),
+                Text(
+                  'Target: ${_formatDate(targetDate)}',
+                  style: TextStyle(
+                    color: secondaryTextColor,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ],
             ],
-          ],
+          ),
         ),
       ),
+    );
+  }
+
+  Widget _buildMenu(
+    bool isProductWishlist,
+    bool isFulfilled,
+    BuildContext context,
+  ) {
+    return PopupMenuButton<String>(
+      onSelected: (String value) {
+        if (value == 'edit') {
+          onEdit();
+        } else if (value == 'toggle') {
+          onToggleStatus();
+        } else if (value == 'delete') {
+          onDelete();
+        }
+      },
+      itemBuilder: (BuildContext context) => <PopupMenuEntry<String>>[
+        if (!isProductWishlist)
+          const PopupMenuItem<String>(
+            value: 'edit',
+            child: Text('Edit'),
+          ),
+        PopupMenuItem<String>(
+          value: 'toggle',
+          child: Text(
+            isFulfilled ? 'Move to active' : 'Mark as fulfilled',
+          ),
+        ),
+        const PopupMenuItem<String>(
+          value: 'delete',
+          child: Text('Delete'),
+        ),
+      ],
     );
   }
 }

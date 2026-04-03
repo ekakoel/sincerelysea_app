@@ -10,6 +10,7 @@ class NotificationCenterService {
     'follow',
     'follow_request',
     'share',
+    'back_in_stock',
     'activity',
   };
 
@@ -80,6 +81,7 @@ class NotificationCenterService {
     required String actorUid,
     required String actorUsername,
     String? postId,
+    String? productId,
     String? message,
   }) async {
     if (targetUid.isEmpty || actorUid.isEmpty || targetUid == actorUid) {
@@ -95,12 +97,16 @@ class NotificationCenterService {
     final String? safePostId = postId?.trim().isNotEmpty == true
         ? postId!.trim()
         : null;
+    final String? safeProductId = productId?.trim().isNotEmpty == true
+        ? productId!.trim()
+        : null;
 
     if (await _isDuplicateRecentNotification(
       targetUid: targetUid,
       type: normalizedType,
       actorUid: actorUid,
       postId: safePostId,
+      productId: safeProductId,
     )) {
       return;
     }
@@ -110,6 +116,7 @@ class NotificationCenterService {
       'actorUid': actorUid,
       'actorUsername': safeActorUsername,
       'postId': safePostId,
+      'productId': safeProductId,
       'message': safeMessage.length <= 240
           ? safeMessage
           : '${safeMessage.substring(0, 240)}...',
@@ -123,6 +130,7 @@ class NotificationCenterService {
     required String type,
     required String actorUid,
     required String? postId,
+    required String? productId,
   }) async {
     final QuerySnapshot<Map<String, dynamic>> recent = await _notificationRef(
       targetUid,
@@ -137,6 +145,9 @@ class NotificationCenterService {
         continue;
       }
       if ((data['postId']?.toString() ?? '') != (postId ?? '')) {
+        continue;
+      }
+      if ((data['productId']?.toString() ?? '') != (productId ?? '')) {
         continue;
       }
       final Timestamp? createdAt = data['createdAt'] as Timestamp?;

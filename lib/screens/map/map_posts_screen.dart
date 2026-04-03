@@ -1,6 +1,5 @@
 import 'dart:async';
 
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
@@ -11,6 +10,7 @@ import 'package:provider/provider.dart';
 import 'package:sincerelysea/services/post_service.dart';
 import 'package:sincerelysea/theme/app_colors.dart';
 import 'package:sincerelysea/utils/post_location_label.dart';
+import 'package:sincerelysea/widgets/app_check_network_image.dart';
 
 class MapPostsScreen extends StatefulWidget {
   const MapPostsScreen({super.key});
@@ -67,214 +67,231 @@ class _MapPostsScreenState extends State<MapPostsScreen> {
       appBar: AppBar(title: const Text('Explore Map')),
       body: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
         stream: postService.getPostsForMap(),
-        builder: (
-          BuildContext context,
-          AsyncSnapshot<QuerySnapshot<Map<String, dynamic>>> snapshot,
-        ) {
-          if (snapshot.hasError && _latestDocs.isEmpty) {
-            return Center(
-              child: Text('Failed to load map posts: ${snapshot.error}'),
-            );
-          }
+        builder:
+            (
+              BuildContext context,
+              AsyncSnapshot<QuerySnapshot<Map<String, dynamic>>> snapshot,
+            ) {
+              if (snapshot.hasError && _latestDocs.isEmpty) {
+                return Center(
+                  child: Text('Failed to load map posts: ${snapshot.error}'),
+                );
+              }
 
-          final bool isRefreshingWithCache =
-              snapshot.connectionState == ConnectionState.waiting &&
-              _latestDocs.isNotEmpty;
+              final bool isRefreshingWithCache =
+                  snapshot.connectionState == ConnectionState.waiting &&
+                  _latestDocs.isNotEmpty;
 
-          final List<QueryDocumentSnapshot<Map<String, dynamic>>> docs =
-              snapshot.data?.docs ?? _latestDocs;
+              final List<QueryDocumentSnapshot<Map<String, dynamic>>> docs =
+                  snapshot.data?.docs ?? _latestDocs;
 
-          if (docs.isEmpty && snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
-          }
+              if (docs.isEmpty &&
+                  snapshot.connectionState == ConnectionState.waiting) {
+                return const Center(child: CircularProgressIndicator());
+              }
 
-          _latestDocs = docs;
-          final Map<String, QueryDocumentSnapshot<Map<String, dynamic>>> docsById =
-              <String, QueryDocumentSnapshot<Map<String, dynamic>>>{
-                for (final QueryDocumentSnapshot<Map<String, dynamic>> doc in docs)
+              _latestDocs = docs;
+              final Map<String, QueryDocumentSnapshot<Map<String, dynamic>>>
+              docsById = <String, QueryDocumentSnapshot<Map<String, dynamic>>>{
+                for (final QueryDocumentSnapshot<Map<String, dynamic>> doc
+                    in docs)
                   doc.id: doc,
               };
 
-          List<QueryDocumentSnapshot<Map<String, dynamic>>> popularInZone =
-              _appliedPopularPostIds
-                  .map((String id) => docsById[id])
-                  .whereType<QueryDocumentSnapshot<Map<String, dynamic>>>()
-                  .toList();
+              List<QueryDocumentSnapshot<Map<String, dynamic>>> popularInZone =
+                  _appliedPopularPostIds
+                      .map((String id) => docsById[id])
+                      .whereType<QueryDocumentSnapshot<Map<String, dynamic>>>()
+                      .toList();
 
-          if (_appliedPopularPostIds.isEmpty || popularInZone.isEmpty) {
-            popularInZone = _getPopularPostsInBounds(
-              docs,
-              bounds: _appliedBounds,
-              limit: _popularLimit,
-            );
-          }
+              if (_appliedPopularPostIds.isEmpty || popularInZone.isEmpty) {
+                popularInZone = _getPopularPostsInBounds(
+                  docs,
+                  bounds: _appliedBounds,
+                  limit: _popularLimit,
+                );
+              }
 
-          final bool keepPreviousPopular =
-              isRefreshingWithCache &&
-              popularInZone.isEmpty &&
-              _renderedPopularInZone.isNotEmpty;
-          if (keepPreviousPopular) {
-            popularInZone = _renderedPopularInZone;
-          } else {
-            _renderedPopularInZone = popularInZone;
-          }
+              final bool keepPreviousPopular =
+                  isRefreshingWithCache &&
+                  popularInZone.isEmpty &&
+                  _renderedPopularInZone.isNotEmpty;
+              if (keepPreviousPopular) {
+                popularInZone = _renderedPopularInZone;
+              } else {
+                _renderedPopularInZone = popularInZone;
+              }
 
-          final List<Marker> markers = <Marker>[];
-          for (final QueryDocumentSnapshot<Map<String, dynamic>> doc in popularInZone) {
-            final Map<String, dynamic> data = doc.data();
-            final LatLng? point = _extractLatLng(data);
-            if (point == null) {
-              continue;
-            }
-            final String imageUrl = data['imageUrl']?.toString() ?? '';
-            markers.add(
-              Marker(
-                key: ValueKey<String>('post-marker-${doc.id}'),
-                point: point,
-                width: 40,
-                height: 40,
-                child: GestureDetector(
-                  onTap: () => _showPostPreview(data),
-                  child: _PostAvatarMarker(imageUrl: imageUrl),
-                ),
-              ),
-            );
-          }
+              final List<Marker> markers = <Marker>[];
+              for (final QueryDocumentSnapshot<Map<String, dynamic>> doc
+                  in popularInZone) {
+                final Map<String, dynamic> data = doc.data();
+                final LatLng? point = _extractLatLng(data);
+                if (point == null) {
+                  continue;
+                }
+                final String imageUrl = data['imageUrl']?.toString() ?? '';
+                markers.add(
+                  Marker(
+                    key: ValueKey<String>('post-marker-${doc.id}'),
+                    point: point,
+                    width: 40,
+                    height: 40,
+                    child: GestureDetector(
+                      onTap: () => _showPostPreview(data),
+                      child: _PostAvatarMarker(imageUrl: imageUrl),
+                    ),
+                  ),
+                );
+              }
 
-          return Column(
-            children: <Widget>[
-              Expanded(
-                child: Stack(
-                  children: <Widget>[
-                    FlutterMap(
-                      mapController: _mapController,
-                      options: MapOptions(
-                        initialCenter: _currentCenter,
-                        initialZoom: _currentZoom,
-                        minZoom: _minZoom,
-                        maxZoom: _maxZoom,
-                        onMapEvent: (MapEvent event) {
-                          _currentCenter = event.camera.center;
-                          _currentZoom = event.camera.zoom;
-                          _onCameraChangedDebounced();
-                        },
-                      ),
+              return Column(
+                children: <Widget>[
+                  Expanded(
+                    child: Stack(
                       children: <Widget>[
-                        TileLayer(
-                          urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                          userAgentPackageName: 'com.sincerelysea',
-                        ),
-                        MarkerClusterLayerWidget(
-                          options: MarkerClusterLayerOptions(
-                            markers: markers,
-                            maxClusterRadius: 45,
-                            size: const Size(44, 44),
-                            alignment: Alignment.center,
-                            padding: const EdgeInsets.all(52),
-                            builder: (BuildContext context, List<Marker> cluster) {
-                              return Container(
-                                decoration: BoxDecoration(
-                                  color: AppColors.black.withValues(alpha: 0.86),
-                                  shape: BoxShape.circle,
-                                  border: Border.all(color: AppColors.white, width: 2),
-                                ),
-                                alignment: Alignment.center,
-                                child: Text(
-                                  '${cluster.length}',
-                                  style: const TextStyle(
-                                    color: AppColors.white,
-                                    fontWeight: FontWeight.w700,
-                                    fontSize: 12,
-                                  ),
-                                ),
-                              );
+                        FlutterMap(
+                          mapController: _mapController,
+                          options: MapOptions(
+                            initialCenter: _currentCenter,
+                            initialZoom: _currentZoom,
+                            minZoom: _minZoom,
+                            maxZoom: _maxZoom,
+                            onMapEvent: (MapEvent event) {
+                              _currentCenter = event.camera.center;
+                              _currentZoom = event.camera.zoom;
+                              _onCameraChangedDebounced();
                             },
+                          ),
+                          children: <Widget>[
+                            TileLayer(
+                              urlTemplate:
+                                  'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                              userAgentPackageName: 'com.sincerelysea',
+                            ),
+                            MarkerClusterLayerWidget(
+                              options: MarkerClusterLayerOptions(
+                                markers: markers,
+                                maxClusterRadius: 45,
+                                size: const Size(44, 44),
+                                alignment: Alignment.center,
+                                padding: const EdgeInsets.all(52),
+                                builder:
+                                    (
+                                      BuildContext context,
+                                      List<Marker> cluster,
+                                    ) {
+                                      return Container(
+                                        decoration: BoxDecoration(
+                                          color: AppColors.black.withValues(
+                                            alpha: 0.86,
+                                          ),
+                                          shape: BoxShape.circle,
+                                          border: Border.all(
+                                            color: AppColors.white,
+                                            width: 2,
+                                          ),
+                                        ),
+                                        alignment: Alignment.center,
+                                        child: Text(
+                                          '${cluster.length}',
+                                          style: const TextStyle(
+                                            color: AppColors.white,
+                                            fontWeight: FontWeight.w700,
+                                            fontSize: 12,
+                                          ),
+                                        ),
+                                      );
+                                    },
+                              ),
+                            ),
+                          ],
+                        ),
+                        if (markers.isEmpty && !isRefreshingWithCache)
+                          Positioned(
+                            left: 16,
+                            right: 16,
+                            top: 12,
+                            child: Material(
+                              borderRadius: BorderRadius.circular(10),
+                              color: AppColors.white.withValues(alpha: 0.92),
+                              child: const Padding(
+                                padding: EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                  vertical: 10,
+                                ),
+                                child: Text(
+                                  'No post with location yet.',
+                                  textAlign: TextAlign.center,
+                                ),
+                              ),
+                            ),
+                          ),
+                        if (isRefreshingWithCache)
+                          Positioned(
+                            left: 0,
+                            right: 0,
+                            top: 0,
+                            child: LinearProgressIndicator(
+                              minHeight: 2,
+                              color: AppColors.black.withValues(alpha: 0.8),
+                              backgroundColor: AppColors.gray300,
+                            ),
+                          ),
+                        if (_showExploreAreaButton)
+                          Positioned(
+                            top: 12,
+                            left: 0,
+                            right: 0,
+                            child: Center(
+                              child: FilledButton.icon(
+                                onPressed: _exploreThisArea,
+                                icon: const Icon(Icons.explore_outlined),
+                                label: const Text('Explore this area'),
+                              ),
+                            ),
+                          ),
+                        Positioned(
+                          right: 12,
+                          bottom: 16,
+                          child: Column(
+                            children: <Widget>[
+                              FloatingActionButton.small(
+                                heroTag: 'map-zoom-in',
+                                onPressed: _zoomIn,
+                                child: const Icon(Icons.add),
+                              ),
+                              const SizedBox(height: 8),
+                              FloatingActionButton.small(
+                                heroTag: 'map-zoom-out',
+                                onPressed: _zoomOut,
+                                child: const Icon(Icons.remove),
+                              ),
+                              const SizedBox(height: 8),
+                              FloatingActionButton.small(
+                                heroTag: 'map-current-location',
+                                onPressed: _moveToCurrentLocation,
+                                child: const Icon(Icons.my_location),
+                              ),
+                              const SizedBox(height: 8),
+                              FloatingActionButton.small(
+                                heroTag: 'map-world',
+                                onPressed: _focusToWorld,
+                                child: const Icon(Icons.public),
+                              ),
+                            ],
                           ),
                         ),
                       ],
                     ),
-                    if (markers.isEmpty && !isRefreshingWithCache)
-                      Positioned(
-                        left: 16,
-                        right: 16,
-                        top: 12,
-                        child: Material(
-                          borderRadius: BorderRadius.circular(10),
-                          color: AppColors.white.withValues(alpha: 0.92),
-                          child: const Padding(
-                            padding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                            child: Text(
-                              'No post with location yet.',
-                              textAlign: TextAlign.center,
-                            ),
-                          ),
-                        ),
-                      ),
-                    if (isRefreshingWithCache)
-                      Positioned(
-                        left: 0,
-                        right: 0,
-                        top: 0,
-                        child: LinearProgressIndicator(
-                          minHeight: 2,
-                          color: AppColors.black.withValues(alpha: 0.8),
-                          backgroundColor: AppColors.gray300,
-                        ),
-                      ),
-                    if (_showExploreAreaButton)
-                      Positioned(
-                        top: 12,
-                        left: 0,
-                        right: 0,
-                        child: Center(
-                          child: FilledButton.icon(
-                            onPressed: _exploreThisArea,
-                            icon: const Icon(Icons.explore_outlined),
-                            label: const Text('Explore this area'),
-                          ),
-                        ),
-                      ),
-                    Positioned(
-                      right: 12,
-                      bottom: 16,
-                      child: Column(
-                        children: <Widget>[
-                          FloatingActionButton.small(
-                            heroTag: 'map-zoom-in',
-                            onPressed: _zoomIn,
-                            child: const Icon(Icons.add),
-                          ),
-                          const SizedBox(height: 8),
-                          FloatingActionButton.small(
-                            heroTag: 'map-zoom-out',
-                            onPressed: _zoomOut,
-                            child: const Icon(Icons.remove),
-                          ),
-                          const SizedBox(height: 8),
-                          FloatingActionButton.small(
-                            heroTag: 'map-current-location',
-                            onPressed: _moveToCurrentLocation,
-                            child: const Icon(Icons.my_location),
-                          ),
-                          const SizedBox(height: 8),
-                          FloatingActionButton.small(
-                            heroTag: 'map-world',
-                            onPressed: _focusToWorld,
-                            child: const Icon(Icons.public),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              _buildPopularPostsPanel(
-                popularInZone,
-                hasAnyPost: popularInZone.isNotEmpty,
-              ),
-            ],
-          );
-        },
+                  ),
+                  _buildPopularPostsPanel(
+                    popularInZone,
+                    hasAnyPost: popularInZone.isNotEmpty,
+                  ),
+                ],
+              );
+            },
       ),
     );
   }
@@ -298,7 +315,9 @@ class _MapPostsScreenState extends State<MapPostsScreen> {
     }
 
     final LatLngBounds? old = _appliedBounds;
-    if (!applyToPanel && old != null && !_isSignificantBoundsChange(old, bounds)) {
+    if (!applyToPanel &&
+        old != null &&
+        !_isSignificantBoundsChange(old, bounds)) {
       if (_showExploreAreaButton) {
         setState(() => _showExploreAreaButton = false);
       }
@@ -392,7 +411,8 @@ class _MapPostsScreenState extends State<MapPostsScreen> {
     final double nextCenterLng = (next.west + next.east) / 2;
 
     final double centerShift =
-        (oldCenterLat - nextCenterLat).abs() + (oldCenterLng - nextCenterLng).abs();
+        (oldCenterLat - nextCenterLat).abs() +
+        (oldCenterLng - nextCenterLng).abs();
 
     final double oldLatSpan = (old.north - old.south).abs();
     final double oldLngSpan = _wrapLongitudeDelta(old.east - old.west).abs();
@@ -448,7 +468,8 @@ class _MapPostsScreenState extends State<MapPostsScreen> {
   }
 
   bool _isInsideBounds(LatLng point, LatLngBounds bounds) {
-    final bool latOk = point.latitude >= bounds.south && point.latitude <= bounds.north;
+    final bool latOk =
+        point.latitude >= bounds.south && point.latitude <= bounds.north;
 
     final double west = bounds.west;
     final double east = bounds.east;
@@ -499,11 +520,29 @@ class _MapPostsScreenState extends State<MapPostsScreen> {
             if ((data['imageUrl']?.toString() ?? '').isNotEmpty)
               ClipRRect(
                 borderRadius: BorderRadius.circular(12),
-                child: CachedNetworkImage(
+                child: AppCheckCachedNetworkImage(
                   imageUrl: data['imageUrl'].toString(),
                   height: 180,
                   width: double.infinity,
                   fit: BoxFit.cover,
+                  placeholder: Container(
+                    height: 180,
+                    color: AppColors.gray200,
+                    child: const Center(
+                      child: SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      ),
+                    ),
+                  ),
+                  error: Container(
+                    height: 180,
+                    color: AppColors.gray200,
+                    child: const Center(
+                      child: Icon(Icons.broken_image_outlined),
+                    ),
+                  ),
                 ),
               ),
             const SizedBox(height: 10),
@@ -519,13 +558,9 @@ class _MapPostsScreenState extends State<MapPostsScreen> {
             const SizedBox(height: 6),
             FutureBuilder<String>(
               future: resolvePostLocationLabel(data),
-              builder: (
-                BuildContext context,
-                AsyncSnapshot<String> snapshot,
-              ) {
+              builder: (BuildContext context, AsyncSnapshot<String> snapshot) {
                 final String fallback = data['location']?.toString() ?? '';
-                final String resolved =
-                    snapshot.data?.trim().isNotEmpty == true
+                final String resolved = snapshot.data?.trim().isNotEmpty == true
                     ? snapshot.data!.trim()
                     : fallback;
                 return Text(
@@ -600,7 +635,10 @@ class _MapPostsScreenState extends State<MapPostsScreen> {
                         PopupMenuItem<int>(value: 50, child: Text('Top 50')),
                       ],
                   child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 6,
+                    ),
                     decoration: BoxDecoration(
                       border: Border.all(color: AppColors.gray300),
                       borderRadius: BorderRadius.circular(16),
@@ -632,16 +670,20 @@ class _MapPostsScreenState extends State<MapPostsScreen> {
 
                 return ListTile(
                   dense: true,
-                  visualDensity: const VisualDensity(horizontal: -2, vertical: -2),
+                  visualDensity: const VisualDensity(
+                    horizontal: -2,
+                    vertical: -2,
+                  ),
                   minLeadingWidth: 36,
-                  leading: CircleAvatar(
+                  leading: AppCheckAvatar(
                     radius: 18,
                     backgroundColor: AppColors.gray200,
-                    backgroundImage:
-                        imageUrl.isNotEmpty ? CachedNetworkImageProvider(imageUrl) : null,
-                    child: imageUrl.isEmpty
-                        ? const Icon(Icons.image_outlined, size: 16)
-                        : null,
+                    imageUrl: imageUrl,
+                    fallback: const Icon(Icons.image_outlined, size: 16),
+                    error: const ColoredBox(
+                      color: AppColors.gray300,
+                      child: Icon(Icons.broken_image_outlined, size: 15),
+                    ),
                   ),
                   title: Text(
                     caption.isEmpty ? '(No caption)' : caption,
@@ -684,7 +726,11 @@ class _PostAvatarMarker extends StatelessWidget {
         shape: BoxShape.circle,
         border: Border.all(color: AppColors.gray700, width: 1.2),
         boxShadow: const <BoxShadow>[
-          BoxShadow(color: AppColors.shadowLow, blurRadius: 3, offset: Offset(0, 1.5)),
+          BoxShadow(
+            color: AppColors.shadowLow,
+            blurRadius: 3,
+            offset: Offset(0, 1.5),
+          ),
         ],
       ),
       padding: const EdgeInsets.all(2),
@@ -696,14 +742,24 @@ class _PostAvatarMarker extends StatelessWidget {
                   child: Icon(Icons.image_outlined, size: 15),
                 ),
               )
-            : CachedNetworkImage(
+            : AppCheckCachedNetworkImage(
                 imageUrl: imageUrl,
                 fit: BoxFit.cover,
                 width: 36,
                 height: 36,
                 memCacheWidth: 120,
                 memCacheHeight: 120,
-                errorWidget: (context, url, error) => const ColoredBox(
+                placeholder: const ColoredBox(
+                  color: AppColors.gray300,
+                  child: Center(
+                    child: SizedBox(
+                      width: 12,
+                      height: 12,
+                      child: CircularProgressIndicator(strokeWidth: 1.6),
+                    ),
+                  ),
+                ),
+                error: const ColoredBox(
                   color: AppColors.gray300,
                   child: Icon(Icons.broken_image_outlined, size: 15),
                 ),

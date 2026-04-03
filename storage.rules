@@ -31,6 +31,15 @@ service firebase.storage {
         && request.resource.contentType.matches('image/.*');
     }
 
+    // Product gallery path: users/{uid}/products/{productId}/{fileName}
+    match /users/{uid}/products/{productId}/{fileName} {
+      allow read: if true;
+      allow write, delete: if signedIn()
+        && request.auth.uid == uid
+        && request.resource != null
+        && request.resource.contentType.matches('image/.*');
+    }
+
     // Deny other storage paths by default.
     match /{allPaths=**} {
       allow read, write: if false;

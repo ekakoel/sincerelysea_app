@@ -9,6 +9,11 @@ service cloud.firestore {
       return isSignedIn() && request.auth.uid == uid;
     }
 
+    function isAdmin() {
+      return isSignedIn()
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+
     function onlyChanges(allowedKeys) {
       return request.resource.data.diff(resource.data).changedKeys().hasOnly(allowedKeys);
     }
@@ -38,6 +43,21 @@ service cloud.firestore {
 
     function canReadPostById(postId) {
       return isSignedIn();
+    }
+
+    function validPostType() {
+      return request.resource.data.type == null
+        || request.resource.data.type in ['post', 'product'];
+    }
+
+    function validProductPostLink() {
+      return request.resource.data.type != 'product'
+        || (
+          isAdmin()
+          && request.resource.data.productId is string
+          && exists(/databases/$(database)/documents/products/$(request.resource.data.productId))
+          && get(/databases/$(database)/documents/products/$(request.resource.data.productId)).data.userId == request.auth.uid
+        );
     }
 
     function usernameUnchanged() {
@@ -71,6 +91,24 @@ service cloud.firestore {
         && request.resource.data.usernameChangedOnce == true;
     }
 
+    function validAdminRoleValue() {
+      return request.resource.data.role in ['user', 'admin'];
+    }
+
+    function adminRoleUpdateOnly() {
+      return isAdmin()
+        && onlyChanges(['role', 'updatedAt'])
+        && request.resource.data.uid == resource.data.uid
+        && request.resource.data.email == resource.data.email
+        && request.resource.data.displayName == resource.data.displayName
+        && request.resource.data.photoUrl == resource.data.photoUrl
+        && request.resource.data.username == resource.data.username
+        && request.resource.data.usernameLower == resource.data.usernameLower
+        && request.resource.data.usernameChangedOnce == resource.data.usernameChangedOnce
+        && request.resource.data.createdAt == resource.data.createdAt
+        && validAdminRoleValue();
+    }
+
     function shareCountIncrementedByOne() {
       return request.resource.data.shareCount is int
         && (
@@ -92,6 +130,8 @@ service cloud.firestore {
       allow create: if isSignedIn()
         && request.resource.data.uid == request.auth.uid
         && isValidImageUrl(request.resource.data.imageUrl)
+        && validPostType()
+        && validProductPostLink()
         && (request.resource.data.visibility in ['public', 'followers', 'private'])
         && (
           request.resource.data.allowComments == null
@@ -102,6 +142,8 @@ service cloud.firestore {
       allow update: if (isOwner(resource.data.uid)
           && request.resource.data.uid == resource.data.uid)
           && isValidImageUrl(request.resource.data.imageUrl)
+          && validPostType()
+          && validProductPostLink()
         // Non-owner updates are limited to engagement fields.
         || (isSignedIn()
           && request.resource.data.uid == resource.data.uid
@@ -151,6 +193,88 @@ service cloud.firestore {
       }
     }
 
+    match /products/{productId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn()
+        && isAdmin()
+        && request.resource.data.userId == request.auth.uid
+        && request.resource.data.name is string
+        && request.resource.data.name.size() > 0
+        && request.resource.data.price is number
+        && request.resource.data.inventoryType in ['ready_stock', 'preorder']
+        && request.resource.data.availableForPurchase is bool
+        && request.resource.data.stock is int
+        && request.resource.data.stock >= 0
+        && (
+          request.resource.data.preorderDays == null
+          || request.resource.data.preorderDays is int
+        )
+        && (
+          request.resource.data.preorderNote == null
+          || request.resource.data.preorderNote is string
+        )
+        && request.resource.data.images is list;
+      allow update, delete: if isSignedIn()
+        && isAdmin()
+        && resource.data.userId == request.auth.uid;
+    }
+
+    match /orders/{orderId} {
+      allow read: if isSignedIn()
+        && (
+          resource.data.userId == request.auth.uid
+          || (
+            resource.data.sellerIds is list
+            && resource.data.sellerIds.hasAny([request.auth.uid])
+          )
+        );
+      allow create: if isSignedIn()
+        && request.resource.data.userId == request.auth.uid
+        && request.resource.data.items is list
+        && request.resource.data.totalPrice is number
+        && request.resource.data.status in ['pending', 'cancelled', 'paid', 'processing', 'shipped', 'completed'];
+      allow update: if isSignedIn()
+        && (
+          (
+            resource.data.sellerIds is list
+            && resource.data.sellerIds.hasAny([request.auth.uid])
+            && request.resource.data.userId == resource.data.userId
+            && request.resource.data.items == resource.data.items
+            && request.resource.data.totalPrice == resource.data.totalPrice
+            && request.resource.data.sellerIds == resource.data.sellerIds
+            && request.resource.data.customerName == resource.data.customerName
+            && request.resource.data.phone == resource.data.phone
+            && request.resource.data.address == resource.data.address
+            && request.resource.data.createdAt == resource.data.createdAt
+            && request.resource.data.status in ['pending', 'paid', 'processing', 'shipped', 'completed']
+          )
+          || (
+            resource.data.userId == request.auth.uid
+            && resource.data.status == 'pending'
+            && request.resource.data.userId == resource.data.userId
+            && request.resource.data.items == resource.data.items
+            && request.resource.data.totalPrice == resource.data.totalPrice
+            && request.resource.data.sellerIds == resource.data.sellerIds
+            && request.resource.data.customerName == resource.data.customerName
+            && request.resource.data.phone == resource.data.phone
+            && request.resource.data.address == resource.data.address
+            && request.resource.data.createdAt == resource.data.createdAt
+            && request.resource.data.status == 'cancelled'
+          )
+        );
+      allow delete: if false;
+    }
+
+    match /admin_audit_logs/{logId} {
+      allow read: if isAdmin();
+      allow create: if isAdmin()
+        && request.resource.data.action == 'role_updated'
+        && request.resource.data.actorUid == request.auth.uid
+        && request.resource.data.previousRole in ['user', 'admin']
+        && request.resource.data.newRole in ['user', 'admin'];
+      allow update, delete: if false;
+    }
+
     match /usernames/{usernameLower} {
       allow read: if isSignedIn();
       allow create: if isSignedIn()
@@ -167,7 +291,8 @@ service cloud.firestore {
       allow read: if isSignedIn();
       allow create, delete: if isOwner(uid);
       allow update: if isOwner(uid)
-        && (usernameUnchanged() || usernameChangedOneTime());
+        && (usernameUnchanged() || usernameChangedOneTime())
+        || adminRoleUpdateOnly();
 
       // uid is the profile owner, followerUid is the authenticated follower id.
       match /followers/{followerUid} {
@@ -201,6 +326,10 @@ service cloud.firestore {
       }
 
       match /blocks/{targetUid} {
+        allow read, create, update, delete: if isOwner(uid);
+      }
+
+      match /cart/{cartId} {
         allow read, create, update, delete: if isOwner(uid);
       }
 
@@ -292,14 +421,30 @@ service cloud.firestore {
           && request.resource.data.title is string
           && request.resource.data.title.size() > 0
           && request.resource.data.title.size() <= 80
-          && request.resource.data.status in ['active', 'fulfilled'];
+          && request.resource.data.status in ['active', 'fulfilled']
+          && (
+            !('type' in request.resource.data)
+            || request.resource.data.type in ['manual', 'product']
+          )
+          && (
+            !('productId' in request.resource.data)
+            || request.resource.data.productId is string
+          );
 
         allow update: if isOwner(uid)
           && request.resource.data.uid == resource.data.uid
           && request.resource.data.title is string
           && request.resource.data.title.size() > 0
           && request.resource.data.title.size() <= 80
-          && request.resource.data.status in ['active', 'fulfilled'];
+          && request.resource.data.status in ['active', 'fulfilled']
+          && (
+            !('type' in request.resource.data)
+            || request.resource.data.type in ['manual', 'product']
+          )
+          && (
+            !('productId' in request.resource.data)
+            || request.resource.data.productId is string
+          );
 
         allow delete: if isOwner(uid);
       }

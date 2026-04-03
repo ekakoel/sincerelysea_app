@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:io';
 
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
@@ -16,6 +15,7 @@ import 'package:sincerelysea/services/auth_service.dart';
 import 'package:sincerelysea/services/user_profile_service.dart';
 import 'package:sincerelysea/utils/auth_exception_handler.dart';
 import 'package:sincerelysea/utils/username_text_input_formatter.dart';
+import 'package:sincerelysea/widgets/app_check_network_image.dart';
 
 class ProfileSettingsScreen extends StatefulWidget {
   const ProfileSettingsScreen({super.key});
@@ -370,24 +370,19 @@ class _ProfileSettingsScreenState extends State<ProfileSettingsScreen> {
                       child: Stack(
                         alignment: Alignment.center,
                         children: <Widget>[
-                          CircleAvatar(
+                          AppCheckAvatar(
                             radius: 52,
                             backgroundColor: AppColors.gray300,
-                            backgroundImage:
-                                avatarUrl != null && avatarUrl.isNotEmpty
-                                ? CachedNetworkImageProvider(avatarUrl)
-                                : null,
-                            child: avatarUrl == null || avatarUrl.isEmpty
-                                ? Text(
-                                    displayName.isNotEmpty
-                                        ? displayName[0].toUpperCase()
-                                        : '?',
-                                    style: const TextStyle(
-                                      fontSize: 30,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  )
-                                : null,
+                            imageUrl: avatarUrl,
+                            fallback: Text(
+                              displayName.isNotEmpty
+                                  ? displayName[0].toUpperCase()
+                                  : '?',
+                              style: const TextStyle(
+                                fontSize: 30,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
                           ),
                           Positioned(
                             right: 0,

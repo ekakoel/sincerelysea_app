@@ -1,4 +1,3 @@
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
@@ -7,6 +6,7 @@ import 'package:provider/provider.dart';
 import 'package:sincerelysea/services/follow_service.dart';
 import 'package:sincerelysea/services/moderation_service.dart';
 import 'package:sincerelysea/services/post_service.dart';
+import 'package:sincerelysea/widgets/app_check_network_image.dart';
 
 class UserProfilePreviewScreen extends StatelessWidget {
   const UserProfilePreviewScreen({
@@ -46,6 +46,8 @@ class UserProfilePreviewScreen extends StatelessWidget {
             final String bio = data['bio']?.toString() ?? '';
             final String? photoUrl = data['photoUrl']?.toString();
             final bool isPrivate = data['isPrivate'] == true;
+            final bool isAdmin =
+                data['role']?.toString().trim().toLowerCase() == 'admin';
 
             return Scaffold(
               appBar: AppBar(
@@ -116,36 +118,44 @@ class UserProfilePreviewScreen extends StatelessWidget {
                 children: <Widget>[
                   Row(
                     children: <Widget>[
-                      CircleAvatar(
+                      AppCheckAvatar(
                         radius: 40,
                         backgroundColor: AppColors.gray300,
-                        backgroundImage: photoUrl != null && photoUrl.isNotEmpty
-                            ? CachedNetworkImageProvider(photoUrl)
-                            : null,
-                        child: (photoUrl == null || photoUrl.isEmpty)
-                            ? Text(
-                                displayName.isNotEmpty
-                                    ? displayName[0].toUpperCase()
-                                    : '?',
-                                style: const TextStyle(
-                                  fontSize: 28,
-                                  fontWeight: FontWeight.bold,
-                                  color: AppColors.black54,
-                                ),
-                              )
-                            : null,
+                        imageUrl: photoUrl,
+                        fallback: Text(
+                          displayName.isNotEmpty
+                              ? displayName[0].toUpperCase()
+                              : '?',
+                          style: const TextStyle(
+                            fontSize: 28,
+                            fontWeight: FontWeight.bold,
+                            color: AppColors.black54,
+                          ),
+                        ),
                       ),
                       const SizedBox(width: 14),
                       Expanded(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: <Widget>[
-                            Text(
-                              displayName,
-                              style: const TextStyle(
-                                fontSize: 20,
-                                fontWeight: FontWeight.w700,
-                              ),
+                            Row(
+                              children: <Widget>[
+                                Expanded(
+                                  child: Text(
+                                    displayName,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(
+                                      fontSize: 20,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                ),
+                                if (isAdmin) ...<Widget>[
+                                  const SizedBox(width: 8),
+                                  const _ProfileRoleBadge(label: 'ADMIN'),
+                                ],
+                              ],
                             ),
                             const SizedBox(height: 2),
                             Text(
@@ -215,6 +225,32 @@ class UserProfilePreviewScreen extends StatelessWidget {
   }
 }
 
+class _ProfileRoleBadge extends StatelessWidget {
+  const _ProfileRoleBadge({required this.label});
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+        color: AppColors.black,
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Text(
+        label,
+        style: const TextStyle(
+          color: AppColors.white,
+          fontSize: 11,
+          fontWeight: FontWeight.w700,
+          letterSpacing: 0.6,
+        ),
+      ),
+    );
+  }
+}
+
 class _FollowButton extends StatefulWidget {
   const _FollowButton({required this.targetUid, required this.targetUsername});
 
@@ -242,8 +278,12 @@ class _FollowButtonState extends State<_FollowButton> {
             return StreamBuilder<bool>(
               stream: followService.isFollowingYouStream(widget.targetUid),
               builder:
-                  (BuildContext context, AsyncSnapshot<bool> followBackSnapshot) {
-                    final bool isFollowingYou = followBackSnapshot.data ?? false;
+                  (
+                    BuildContext context,
+                    AsyncSnapshot<bool> followBackSnapshot,
+                  ) {
+                    final bool isFollowingYou =
+                        followBackSnapshot.data ?? false;
                     final String followLabel = isRequested
                         ? 'Requested'
                         : (isFollowingYou ? 'Follow back' : 'Follow');
@@ -270,9 +310,7 @@ class _FollowButtonState extends State<_FollowButton> {
                                         );
                                       } finally {
                                         if (mounted) {
-                                          setState(
-                                            () => _isSubmitting = false,
-                                          );
+                                          setState(() => _isSubmitting = false);
                                         }
                                       }
                                     },
@@ -307,9 +345,7 @@ class _FollowButtonState extends State<_FollowButton> {
                                         );
                                       } finally {
                                         if (mounted) {
-                                          setState(
-                                            () => _isSubmitting = false,
-                                          );
+                                          setState(() => _isSubmitting = false);
                                         }
                                       }
                                     },
@@ -480,10 +516,10 @@ class _UserPostsGrid extends StatelessWidget {
                 }
                 return ClipRRect(
                   borderRadius: BorderRadius.circular(8),
-                  child: CachedNetworkImage(
+                  child: AppCheckCachedNetworkImage(
                     imageUrl: imageUrl,
                     fit: BoxFit.cover,
-                    placeholder: (BuildContext context, String _) => Container(
+                    placeholder: Container(
                       color: AppColors.gray200,
                       child: const Center(
                         child: SizedBox(
@@ -493,12 +529,10 @@ class _UserPostsGrid extends StatelessWidget {
                         ),
                       ),
                     ),
-                    errorWidget:
-                        (BuildContext context, String _, Object error) =>
-                            Container(
-                              color: AppColors.gray200,
-                              child: const Icon(Icons.broken_image_outlined),
-                            ),
+                    error: Container(
+                      color: AppColors.gray200,
+                      child: const Icon(Icons.broken_image_outlined),
+                    ),
                   ),
                 );
               },

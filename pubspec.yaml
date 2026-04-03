@@ -61,6 +61,7 @@ dependencies:
   permission_handler: ^12.0.1
   firebase_analytics: ^12.1.0
   firebase_crashlytics: ^5.0.2
+  firebase_app_check: ^0.4.0
   
 
 flutter_launcher_icons:
@@ -72,9 +73,7 @@ flutter_launcher_icons:
 
 flutter_native_splash:
   color: "#FFFFFF"
-  image: assets/splash/logo-dark.png
   android_12:
-    image: assets/splash/logo-dark.png
     color: "#FFFFFF"
   ios: true
   android: true

@@ -18,8 +18,11 @@ import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:sincerelysea/config/share_config.dart';
 import 'package:sincerelysea/l10n/app_localizations.dart';
+import 'package:sincerelysea/models/product.dart';
+import 'package:sincerelysea/screens/cart/cart_screen.dart';
 import 'package:sincerelysea/screens/map/map_picker_screen.dart';
 import 'package:sincerelysea/screens/notifications/notifications_screen.dart';
+import 'package:sincerelysea/screens/product/product_detail_screen.dart';
 import 'package:sincerelysea/screens/profile/user_profile_preview_screen.dart';
 import 'package:sincerelysea/services/follow_service.dart';
 import 'package:sincerelysea/services/hidden_content_preferences_service.dart';
@@ -27,7 +30,11 @@ import 'package:sincerelysea/services/local_notification_service.dart';
 import 'package:sincerelysea/services/moderation_service.dart';
 import 'package:sincerelysea/services/notification_center_service.dart';
 import 'package:sincerelysea/services/post_service.dart';
+import 'package:sincerelysea/services/app_check_header_service.dart';
+import 'package:sincerelysea/services/product_service.dart';
+import 'package:sincerelysea/services/wishlist_service.dart';
 import 'package:sincerelysea/utils/post_location_label.dart';
+import 'package:sincerelysea/widgets/product_card.dart';
 
 Future<Position> _getCurrentPosition() async {
   final bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
@@ -53,6 +60,30 @@ Future<Position> _getCurrentPosition() async {
   );
 }
 
+class ProductCreationData {
+  const ProductCreationData({
+    required this.category,
+    required this.inventoryType,
+    required this.preorderDays,
+    required this.preorderNote,
+    required this.name,
+    required this.price,
+    required this.stock,
+    required this.description,
+    required this.images,
+  });
+
+  final String category;
+  final String inventoryType;
+  final int preorderDays;
+  final String preorderNote;
+  final String name;
+  final double price;
+  final int stock;
+  final String description;
+  final List<File> images;
+}
+
 class CreatePostRequest {
   const CreatePostRequest({
     required this.caption,
@@ -60,6 +91,7 @@ class CreatePostRequest {
     required this.location,
     required this.geoPoint,
     required this.hashtags,
+    this.productData,
   });
 
   final String caption;
@@ -67,6 +99,9 @@ class CreatePostRequest {
   final String location;
   final GeoPoint? geoPoint;
   final List<String> hashtags;
+  final ProductCreationData? productData;
+
+  bool get isProductPost => productData != null;
 }
 
 const int maxPostHashtagCount = 8;
@@ -131,47 +166,121 @@ Future<File> _renderSquarePreviewImage({
   required ui.Size baseImageSizeInPreview,
   required Matrix4 transform,
   required double previewFrameSize,
-  int outputSize = 1080,
 }) async {
   final Uint8List sourceBytes = await originalFile.readAsBytes();
   final ui.Codec codec = await ui.instantiateImageCodec(sourceBytes);
   final ui.FrameInfo sourceFrame = await codec.getNextFrame();
   final ui.Image sourceImage = sourceFrame.image;
 
+  final Matrix4 inverseTransform = Matrix4.copy(transform);
+  final bool isInvertible = inverseTransform.invert() != 0;
+  if (!isInvertible) {
+    sourceImage.dispose();
+    throw Exception('Failed to compute crop transform.');
+  }
+
+  final Offset topLeftInChild = MatrixUtils.transformPoint(
+    inverseTransform,
+    Offset.zero,
+  );
+  final Offset topRightInChild = MatrixUtils.transformPoint(
+    inverseTransform,
+    Offset(previewFrameSize, 0),
+  );
+  final Offset bottomLeftInChild = MatrixUtils.transformPoint(
+    inverseTransform,
+    Offset(0, previewFrameSize),
+  );
+  final Offset bottomRightInChild = MatrixUtils.transformPoint(
+    inverseTransform,
+    Offset(previewFrameSize, previewFrameSize),
+  );
+
+  final double childLeft = <double>[
+    topLeftInChild.dx,
+    topRightInChild.dx,
+    bottomLeftInChild.dx,
+    bottomRightInChild.dx,
+  ].reduce(math.min);
+  final double childTop = <double>[
+    topLeftInChild.dy,
+    topRightInChild.dy,
+    bottomLeftInChild.dy,
+    bottomRightInChild.dy,
+  ].reduce(math.min);
+  final double childRight = <double>[
+    topLeftInChild.dx,
+    topRightInChild.dx,
+    bottomLeftInChild.dx,
+    bottomRightInChild.dx,
+  ].reduce(math.max);
+  final double childBottom = <double>[
+    topLeftInChild.dy,
+    topRightInChild.dy,
+    bottomLeftInChild.dy,
+    bottomRightInChild.dy,
+  ].reduce(math.max);
+
+  final Rect childCropRect =
+      Rect.fromLTRB(childLeft, childTop, childRight, childBottom).intersect(
+        Rect.fromLTWH(
+          0,
+          0,
+          baseImageSizeInPreview.width,
+          baseImageSizeInPreview.height,
+        ),
+      );
+  if (childCropRect.isEmpty) {
+    sourceImage.dispose();
+    throw Exception('Invalid crop area.');
+  }
+
+  final double scaleToSourceX =
+      sourceImage.width / baseImageSizeInPreview.width;
+  final double scaleToSourceY =
+      sourceImage.height / baseImageSizeInPreview.height;
+
+  final Rect sourceCropRect =
+      Rect.fromLTRB(
+        childCropRect.left * scaleToSourceX,
+        childCropRect.top * scaleToSourceY,
+        childCropRect.right * scaleToSourceX,
+        childCropRect.bottom * scaleToSourceY,
+      ).intersect(
+        Rect.fromLTWH(
+          0,
+          0,
+          sourceImage.width.toDouble(),
+          sourceImage.height.toDouble(),
+        ),
+      );
+  if (sourceCropRect.isEmpty) {
+    sourceImage.dispose();
+    throw Exception('Invalid source crop area.');
+  }
+
+  final int outputSide = math.max(
+    1,
+    math.min(sourceCropRect.width.floor(), sourceCropRect.height.floor()),
+  );
+
   final ui.PictureRecorder recorder = ui.PictureRecorder();
   final Canvas canvas = Canvas(
     recorder,
-    Rect.fromLTWH(0, 0, outputSize.toDouble(), outputSize.toDouble()),
+    Rect.fromLTWH(0, 0, outputSide.toDouble(), outputSide.toDouble()),
   );
   final Paint paint = Paint()..filterQuality = FilterQuality.high;
 
-  canvas.clipRect(
-    Rect.fromLTWH(0, 0, outputSize.toDouble(), outputSize.toDouble()),
-  );
-
-  final double ratio = outputSize / previewFrameSize;
-  canvas.scale(ratio, ratio);
-  canvas.transform(transform.storage);
   canvas.drawImageRect(
     sourceImage,
-    Rect.fromLTWH(
-      0,
-      0,
-      sourceImage.width.toDouble(),
-      sourceImage.height.toDouble(),
-    ),
-    Rect.fromLTWH(
-      0,
-      0,
-      baseImageSizeInPreview.width,
-      baseImageSizeInPreview.height,
-    ),
+    sourceCropRect,
+    Rect.fromLTWH(0, 0, outputSide.toDouble(), outputSide.toDouble()),
     paint,
   );
 
   final ui.Image rendered = await recorder.endRecording().toImage(
-    outputSize,
-    outputSize,
+    outputSide,
+    outputSide,
   );
   final ByteData? bytes = await rendered.toByteData(
     format: ui.ImageByteFormat.png,
@@ -196,13 +305,18 @@ Future<void> showCreatePostDialog(
   required Future<void> Function(CreatePostRequest request) onSubmit,
 }) async {
   const int maxCaptionLength = 220;
+  final ProductService productService = rootContext.read<ProductService>();
+  final String barrierLabel =
+      MaterialLocalizations.of(rootContext).modalBarrierDismissLabel;
+  final bool canCreateProduct = await productService.isCurrentUserAdmin();
+  if (!rootContext.mounted) {
+    return;
+  }
 
   await showGeneralDialog<void>(
     context: rootContext,
     barrierDismissible: true,
-    barrierLabel: MaterialLocalizations.of(
-      rootContext,
-    ).modalBarrierDismissLabel,
+    barrierLabel: barrierLabel,
     transitionDuration: const Duration(milliseconds: 300),
     pageBuilder:
         (
@@ -216,7 +330,22 @@ Future<void> showCreatePostDialog(
               TextEditingController();
           final TextEditingController hashtagController =
               TextEditingController();
+          final TextEditingController productNameController =
+              TextEditingController();
+          String selectedProductCategory = 'Lifestyle';
+          String selectedInventoryType = 'ready_stock';
+          final TextEditingController productPriceController =
+              TextEditingController();
+          final TextEditingController productStockController =
+              TextEditingController();
+          final TextEditingController productPreorderDaysController =
+              TextEditingController();
+          final TextEditingController productPreorderNoteController =
+              TextEditingController();
+          final TextEditingController productDescriptionController =
+              TextEditingController();
           File? selectedImage;
+          final List<File> productGalleryImages = <File>[];
           ui.Size? selectedImageSize;
           ui.Size? previewBaseSize;
           double previewFrameSize = 220;
@@ -227,6 +356,7 @@ Future<void> showCreatePostDialog(
           GeoPoint? selectedGeoPoint;
           bool isUploading = false;
           bool isFetchingLocation = false;
+          bool isProductEnabled = false;
           bool isFormattingHashtags = false;
           String lastAcceptedHashtagInput = '';
           bool hasShownHashtagLimitWarning = false;
@@ -371,7 +501,7 @@ Future<void> showCreatePostDialog(
                                                           InteractiveViewer(
                                                             minScale: 1,
                                                             maxScale: 4,
-                                                            constrained: true,
+                                                            constrained: false,
                                                             boundaryMargin:
                                                                 EdgeInsets.zero,
                                                             clipBehavior:
@@ -398,8 +528,8 @@ Future<void> showCreatePostDialog(
                                                                   .height,
                                                               child: Image.file(
                                                                 selectedImage!,
-                                                                fit:
-                                                                    BoxFit.fill,
+                                                                fit: BoxFit
+                                                                    .cover,
                                                               ),
                                                             ),
                                                           ),
@@ -530,7 +660,8 @@ Future<void> showCreatePostDialog(
                                                   if (!context.mounted) {
                                                     return;
                                                   }
-                                                  final String resolvedLocation =
+                                                  final String
+                                                  resolvedLocation =
                                                       await resolveRegionCountryLabel(
                                                         latitude:
                                                             position.latitude,
@@ -683,7 +814,8 @@ Future<void> showCreatePostDialog(
                                         _parseHashtagsInput(value);
                                     if (hashtags.length > maxPostHashtagCount) {
                                       isFormattingHashtags = true;
-                                      hashtagController.value = TextEditingValue(
+                                      hashtagController
+                                          .value = TextEditingValue(
                                         text: lastAcceptedHashtagInput,
                                         selection: TextSelection.collapsed(
                                           offset:
@@ -728,6 +860,260 @@ Future<void> showCreatePostDialog(
                                     prefixIcon: Icon(Icons.tag),
                                   ),
                                 ),
+                                const SizedBox(height: 8),
+                                if (canCreateProduct)
+                                  SwitchListTile(
+                                    value: isProductEnabled,
+                                    contentPadding: EdgeInsets.zero,
+                                    title: const Text('Sell Product'),
+                                    subtitle: const Text(
+                                      'Turn this post into a product listing.',
+                                    ),
+                                    onChanged: (bool value) {
+                                      setState(() {
+                                        isProductEnabled = value;
+                                        if (!value) {
+                                          selectedProductCategory = 'Lifestyle';
+                                          selectedInventoryType = 'ready_stock';
+                                          productNameController.clear();
+                                          productPriceController.clear();
+                                          productStockController.clear();
+                                          productPreorderDaysController.clear();
+                                          productPreorderNoteController.clear();
+                                          productDescriptionController.clear();
+                                          productGalleryImages.clear();
+                                        }
+                                      });
+                                    },
+                                  )
+                                else
+                                  Container(
+                                    width: double.infinity,
+                                    padding: const EdgeInsets.all(12),
+                                    decoration: BoxDecoration(
+                                      color: AppColors.gray100,
+                                      borderRadius: BorderRadius.circular(12),
+                                      border: Border.all(color: AppColors.gray300),
+                                    ),
+                                    child: const Row(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: <Widget>[
+                                        Icon(Icons.admin_panel_settings_outlined),
+                                        SizedBox(width: 10),
+                                        Expanded(
+                                          child: Text(
+                                            'Product publishing is available for admin accounts only.',
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                if (isProductEnabled) ...<Widget>[
+                                  const SizedBox(height: 8),
+                                  TextField(
+                                    controller: productNameController,
+                                    decoration: const InputDecoration(
+                                      labelText: 'Product name',
+                                      prefixIcon:
+                                          Icon(Icons.inventory_2_outlined),
+                                    ),
+                                  ),
+                                  const SizedBox(height: 8),
+                                  DropdownButtonFormField<String>(
+                                    initialValue: selectedProductCategory,
+                                    decoration: const InputDecoration(
+                                      labelText: 'Category',
+                                      prefixIcon: Icon(Icons.category_outlined),
+                                    ),
+                                    items: const <DropdownMenuItem<String>>[
+                                      DropdownMenuItem(
+                                        value: 'Lifestyle',
+                                        child: Text('Lifestyle'),
+                                      ),
+                                      DropdownMenuItem(
+                                        value: 'Fashion',
+                                        child: Text('Fashion'),
+                                      ),
+                                      DropdownMenuItem(
+                                        value: 'Beauty',
+                                        child: Text('Beauty'),
+                                      ),
+                                      DropdownMenuItem(
+                                        value: 'Home',
+                                        child: Text('Home'),
+                                      ),
+                                      DropdownMenuItem(
+                                        value: 'Art',
+                                        child: Text('Art'),
+                                      ),
+                                      DropdownMenuItem(
+                                        value: 'Accessories',
+                                        child: Text('Accessories'),
+                                      ),
+                                    ],
+                                    onChanged: (String? value) {
+                                      if (value == null) {
+                                        return;
+                                      }
+                                      setState(
+                                        () => selectedProductCategory = value,
+                                      );
+                                    },
+                                  ),
+                                  const SizedBox(height: 8),
+                                  DropdownButtonFormField<String>(
+                                    initialValue: selectedInventoryType,
+                                    decoration: const InputDecoration(
+                                      labelText: 'Inventory type',
+                                      prefixIcon: Icon(Icons.inventory_outlined),
+                                    ),
+                                    items: const <DropdownMenuItem<String>>[
+                                      DropdownMenuItem(
+                                        value: 'ready_stock',
+                                        child: Text('Ready Stock'),
+                                      ),
+                                      DropdownMenuItem(
+                                        value: 'preorder',
+                                        child: Text('Preorder'),
+                                      ),
+                                    ],
+                                    onChanged: (String? value) {
+                                      if (value == null) {
+                                        return;
+                                      }
+                                      setState(() => selectedInventoryType = value);
+                                    },
+                                  ),
+                                  const SizedBox(height: 8),
+                                  Row(
+                                    children: <Widget>[
+                                      Expanded(
+                                        child: TextField(
+                                          controller: productPriceController,
+                                          keyboardType:
+                                              const TextInputType.numberWithOptions(
+                                                decimal: true,
+                                              ),
+                                          decoration: const InputDecoration(
+                                            labelText: 'Price',
+                                            prefixIcon:
+                                                Icon(Icons.attach_money),
+                                          ),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Expanded(
+                                        child: selectedInventoryType == 'preorder'
+                                            ? TextField(
+                                                controller:
+                                                    productPreorderDaysController,
+                                                keyboardType:
+                                                    TextInputType.number,
+                                                decoration: const InputDecoration(
+                                                  labelText: 'Preorder days',
+                                                  prefixIcon: Icon(
+                                                    Icons.schedule_outlined,
+                                                  ),
+                                                ),
+                                              )
+                                            : TextField(
+                                                controller: productStockController,
+                                                keyboardType:
+                                                    TextInputType.number,
+                                                decoration: const InputDecoration(
+                                                  labelText: 'Stock',
+                                                  prefixIcon: Icon(Icons.numbers),
+                                                ),
+                                              ),
+                                      ),
+                                    ],
+                                  ),
+                                  if (selectedInventoryType == 'preorder') ...<Widget>[
+                                    const SizedBox(height: 8),
+                                    TextField(
+                                      controller: productPreorderNoteController,
+                                      minLines: 2,
+                                      maxLines: 4,
+                                      maxLength: 220,
+                                      decoration: const InputDecoration(
+                                        labelText: 'Preorder note',
+                                        alignLabelWithHint: true,
+                                        prefixIcon: Icon(Icons.info_outline),
+                                      ),
+                                    ),
+                                  ],
+                                  const SizedBox(height: 8),
+                                  TextField(
+                                    controller: productDescriptionController,
+                                    minLines: 3,
+                                    maxLines: 5,
+                                    maxLength: 500,
+                                    decoration: const InputDecoration(
+                                      labelText: 'Product description',
+                                      alignLabelWithHint: true,
+                                      prefixIcon:
+                                          Icon(Icons.description_outlined),
+                                    ),
+                                  ),
+                                  const SizedBox(height: 8),
+                                  OutlinedButton.icon(
+                                    onPressed: () async {
+                                      final ImagePicker picker = ImagePicker();
+                                      final List<XFile> files =
+                                          await picker.pickMultiImage();
+                                      if (!context.mounted || files.isEmpty) {
+                                        return;
+                                      }
+                                      setState(() {
+                                        productGalleryImages
+                                          ..clear()
+                                          ..addAll(
+                                            files
+                                                .map(
+                                                  (XFile file) =>
+                                                      File(file.path),
+                                                )
+                                                .toList(growable: false),
+                                          );
+                                      });
+                                    },
+                                    icon: const Icon(
+                                      Icons.photo_library_outlined,
+                                    ),
+                                    label: Text(
+                                      productGalleryImages.isEmpty
+                                          ? 'Select product gallery images'
+                                          : 'Selected ${productGalleryImages.length} gallery images',
+                                    ),
+                                  ),
+                                  if (productGalleryImages.isNotEmpty)
+                                    SizedBox(
+                                      height: 72,
+                                      child: ListView.separated(
+                                        scrollDirection: Axis.horizontal,
+                                        itemCount: productGalleryImages.length,
+                                        separatorBuilder:
+                                            (
+                                              BuildContext context,
+                                              int index,
+                                            ) => const SizedBox(width: 8),
+                                        itemBuilder:
+                                            (BuildContext context, int index) {
+                                              return ClipRRect(
+                                                borderRadius:
+                                                    BorderRadius.circular(10),
+                                                child: Image.file(
+                                                  productGalleryImages[index],
+                                                  width: 72,
+                                                  height: 72,
+                                                  fit: BoxFit.cover,
+                                                ),
+                                              );
+                                            },
+                                      ),
+                                    ),
+                                ],
                               ],
                             ),
                           ),
@@ -778,6 +1164,97 @@ Future<void> showCreatePostDialog(
                                         );
                                         return;
                                       }
+                                      ProductCreationData? productData;
+                                      if (isProductEnabled) {
+                                        final String productName =
+                                            productNameController.text.trim();
+                                        final double? productPrice =
+                                            double.tryParse(
+                                              productPriceController.text
+                                                  .trim(),
+                                            );
+                                        final int? productStock =
+                                            int.tryParse(
+                                              productStockController.text
+                                                  .trim(),
+                                            );
+                                        final int? preorderDays =
+                                            int.tryParse(
+                                              productPreorderDaysController.text
+                                                  .trim(),
+                                            );
+                                        final String productDescription =
+                                            productDescriptionController.text
+                                                .trim();
+                                        final String preorderNote =
+                                            productPreorderNoteController.text
+                                                .trim();
+                                        final bool isPreorder =
+                                            selectedInventoryType == 'preorder';
+                                        if (productName.isEmpty ||
+                                            productPrice == null ||
+                                            productPrice <= 0 ||
+                                            productDescription.isEmpty) {
+                                          ScaffoldMessenger.of(
+                                            rootContext,
+                                          ).showSnackBar(
+                                            const SnackBar(
+                                              content: Text(
+                                                'Please complete valid product details.',
+                                              ),
+                                            ),
+                                          );
+                                          return;
+                                        }
+                                        if (!isPreorder &&
+                                            (productStock == null ||
+                                                productStock < 0)) {
+                                          ScaffoldMessenger.of(
+                                            rootContext,
+                                          ).showSnackBar(
+                                            const SnackBar(
+                                              content: Text(
+                                                'Please enter a valid stock amount.',
+                                              ),
+                                            ),
+                                          );
+                                          return;
+                                        }
+                                        if (isPreorder &&
+                                            (preorderDays == null ||
+                                                preorderDays <= 0)) {
+                                          ScaffoldMessenger.of(
+                                            rootContext,
+                                          ).showSnackBar(
+                                            const SnackBar(
+                                              content: Text(
+                                                'Please enter valid preorder days.',
+                                              ),
+                                            ),
+                                          );
+                                          return;
+                                        }
+                                        final List<File> gallery = <File>[
+                                          selectedImage!,
+                                          ...productGalleryImages.where(
+                                            (File file) =>
+                                                file.path != selectedImage!.path,
+                                          ),
+                                        ];
+                                        productData = ProductCreationData(
+                                          category: selectedProductCategory,
+                                          inventoryType: selectedInventoryType,
+                                          preorderDays: preorderDays ?? 0,
+                                          preorderNote: preorderNote,
+                                          name: productName,
+                                          price: productPrice,
+                                          stock: isPreorder
+                                              ? 0
+                                              : (productStock ?? 0),
+                                          description: productDescription,
+                                          images: gallery,
+                                        );
+                                      }
                                       final List<String> hashtags =
                                           _parseHashtagsInput(
                                             hashtagController.text,
@@ -805,6 +1282,7 @@ Future<void> showCreatePostDialog(
                                                 .trim(),
                                             geoPoint: selectedGeoPoint,
                                             hashtags: hashtags,
+                                            productData: productData,
                                           );
 
                                       if (selectedImage != null &&
@@ -847,6 +1325,7 @@ Future<void> showCreatePostDialog(
                                             location: request.location,
                                             geoPoint: request.geoPoint,
                                             hashtags: request.hashtags,
+                                            productData: request.productData,
                                           );
 
                                       if (context.mounted) {
@@ -862,7 +1341,11 @@ Future<void> showCreatePostDialog(
                                         strokeWidth: 2,
                                       ),
                                     )
-                                  : const Text('Post'),
+                                  : Text(
+                                      isProductEnabled
+                                          ? 'Create Product Post'
+                                          : 'Post',
+                                    ),
                             ),
                           ],
                         ),
@@ -1083,6 +1566,7 @@ class HomeScreenState extends State<HomeScreen> {
     CreatePostRequest request,
     PostService postService,
   ) async {
+    final ProductService productService = context.read<ProductService>();
     bool isSuccess = false;
     final Stopwatch debugWatch = Stopwatch()..start();
     String currentStage = 'start';
@@ -1147,6 +1631,30 @@ class HomeScreenState extends State<HomeScreen> {
           isPublishing: true,
         ),
       );
+      String? productId;
+      if (request.productData != null) {
+        currentStage = 'product:create:start';
+        logStage('Creating product document and uploading gallery...');
+        final Product product = await productService
+            .createProduct(
+              CreateProductInput(
+                category: request.productData!.category,
+                inventoryType: request.productData!.inventoryType,
+                preorderDays: request.productData!.preorderDays,
+                preorderNote: request.productData!.preorderNote,
+                availableForPurchase: true,
+                name: request.productData!.name,
+                price: request.productData!.price,
+                description: request.productData!.description,
+                stock: request.productData!.stock,
+                images: request.productData!.images,
+              ),
+            )
+            .timeout(const Duration(seconds: 60));
+        productId = product.id;
+        currentStage = 'product:create:done';
+        logStage('Product create success');
+      }
       currentStage = 'firestore:write:start';
       logStage('Writing post document to Firestore...');
       await postService
@@ -1156,6 +1664,8 @@ class HomeScreenState extends State<HomeScreen> {
             location: request.location,
             geo: request.geoPoint,
             hashtags: request.hashtags,
+            type: request.isProductPost ? 'product' : 'post',
+            productId: productId,
           )
           .timeout(const Duration(seconds: 30));
       currentStage = 'firestore:write:done';
@@ -1175,7 +1685,7 @@ class HomeScreenState extends State<HomeScreen> {
     } on FirebaseException catch (e) {
       logStage('FirebaseException (${e.code}): ${e.message ?? '-'}');
       if (mounted) {
-        final String message = switch (e.code) {
+        String message = switch (e.code) {
           'permission-denied' =>
             'Permission denied. Please check Firestore/Storage rules.',
           'unauthenticated' => 'Please login again and try posting.',
@@ -1185,6 +1695,12 @@ class HomeScreenState extends State<HomeScreen> {
             'Upload failed: image URL is empty after upload.',
           _ => 'Failed to publish post (${e.code}). Please try again.',
         };
+
+        if (e.code == 'unknown' && (e.message?.contains('412') ?? false)) {
+          message =
+              'Upload failed (412). Please check your device date & time.';
+        }
+
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('$message [stage: $currentStage]')),
         );
@@ -1363,12 +1879,24 @@ class HomeScreenState extends State<HomeScreen> {
         continue;
       }
       if (_prefetchedImageUrls.add(imageUrl)) {
-        precacheImage(CachedNetworkImageProvider(imageUrl), context).catchError(
-          (Object _) {
-            _prefetchedImageUrls.remove(imageUrl);
-          },
-        );
+        unawaited(_precacheImage(imageUrl));
       }
+    }
+  }
+
+  Future<void> _precacheImage(String imageUrl) async {
+    try {
+      final Map<String, String> headers = await AppCheckHeaderService.instance
+          .headersFor(imageUrl);
+      if (!mounted) {
+        return;
+      }
+      await precacheImage(
+        CachedNetworkImageProvider(imageUrl, headers: headers),
+        context,
+      );
+    } catch (_) {
+      _prefetchedImageUrls.remove(imageUrl);
     }
   }
 
@@ -1386,6 +1914,15 @@ class HomeScreenState extends State<HomeScreen> {
         ),
         title: const Text('Sincerelysea'),
         actions: <Widget>[
+          IconButton(
+            tooltip: 'Cart',
+            onPressed: () {
+              Navigator.of(context).push(
+                MaterialPageRoute<void>(builder: (_) => const CartScreen()),
+              );
+            },
+            icon: const Icon(Icons.shopping_cart_outlined),
+          ),
           StreamBuilder<int>(
             stream: context
                 .read<NotificationCenterService>()
@@ -1909,9 +2446,7 @@ class _PostCardState extends State<PostCard>
                             if (context.mounted) {
                               ScaffoldMessenger.of(context).showSnackBar(
                                 const SnackBar(
-                                  content: Text(
-                                    'Maximum 8 hashtags per post.',
-                                  ),
+                                  content: Text('Maximum 8 hashtags per post.'),
                                 ),
                               );
                             }
@@ -2047,6 +2582,10 @@ class _PostCardState extends State<PostCard>
                 postData['likes'] as List<dynamic>? ?? <dynamic>[];
             final int commentCount = postData['commentCount'] as int? ?? 0;
             final int shareCount = postData['shareCount'] as int? ?? 0;
+            final String postType = postData['type']?.toString() ?? 'post';
+            final String productId = postData['productId']?.toString() ?? '';
+            final bool isProductPost =
+                postType == 'product' && productId.isNotEmpty;
 
             final Timestamp? timestamp = postData['timestamp'] is Timestamp
                 ? postData['timestamp'] as Timestamp
@@ -2469,24 +3008,25 @@ class _PostCardState extends State<PostCard>
                           Expanded(
                             child: FutureBuilder<String>(
                               future: resolvePostLocationLabel(postData),
-                              builder: (
-                                BuildContext context,
-                                AsyncSnapshot<String> snapshot,
-                              ) {
-                                final String resolved =
-                                    snapshot.data?.trim().isNotEmpty == true
-                                    ? snapshot.data!.trim()
-                                    : (location ?? '-');
-                                return Text(
-                                  resolved,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: TextStyle(
-                                    color: AppColors.gray600,
-                                    fontSize: 12,
-                                  ),
-                                );
-                              },
+                              builder:
+                                  (
+                                    BuildContext context,
+                                    AsyncSnapshot<String> snapshot,
+                                  ) {
+                                    final String resolved =
+                                        snapshot.data?.trim().isNotEmpty == true
+                                        ? snapshot.data!.trim()
+                                        : (location ?? '-');
+                                    return Text(
+                                      resolved,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: TextStyle(
+                                        color: AppColors.gray600,
+                                        fontSize: 12,
+                                      ),
+                                    );
+                                  },
                             ),
                           ),
                         ],
@@ -2497,6 +3037,77 @@ class _PostCardState extends State<PostCard>
                       content,
                       padding: const EdgeInsets.symmetric(horizontal: 12.0),
                       style: TextStyle(color: AppColors.gray700),
+                    ),
+                  if (isProductPost)
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
+                      child: FutureBuilder<Product?>(
+                        future: context
+                            .read<ProductService>()
+                            .getProductOnce(productId),
+                        builder: (
+                          BuildContext context,
+                          AsyncSnapshot<Product?> productSnapshot,
+                        ) {
+                          final Product? product = productSnapshot.data;
+                          return Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: <Widget>[
+                              if (product != null)
+                                StreamBuilder<bool>(
+                                  stream: context
+                                      .read<WishlistService>()
+                                      .isProductWishlistedStream(product.id),
+                                  builder: (
+                                    BuildContext context,
+                                    AsyncSnapshot<bool> wishlistSnapshot,
+                                  ) {
+                                    final bool isWishlisted =
+                                        wishlistSnapshot.data ?? false;
+                                    return ProductCard(
+                                      product: product,
+                                      compact: true,
+                                      isWishlisted: isWishlisted,
+                                      onWishlistTap: () =>
+                                          _toggleProductWishlist(
+                                            context,
+                                            product,
+                                            isWishlisted,
+                                          ),
+                                      onTap: () {
+                                        Navigator.of(context).push(
+                                          MaterialPageRoute<void>(
+                                            builder: (_) => ProductDetailScreen(
+                                              productId: product.id,
+                                            ),
+                                          ),
+                                        );
+                                      },
+                                    );
+                                  },
+                                )
+                              else
+                                const SizedBox.shrink(),
+                              const SizedBox(height: 8),
+                              SizedBox(
+                                width: double.infinity,
+                                child: OutlinedButton(
+                                  onPressed: () {
+                                    Navigator.of(context).push(
+                                      MaterialPageRoute<void>(
+                                        builder: (_) => ProductDetailScreen(
+                                          productId: productId,
+                                        ),
+                                      ),
+                                    );
+                                  },
+                                  child: const Text('View Product'),
+                                ),
+                              ),
+                            ],
+                          );
+                        },
+                      ),
                     ),
                   Padding(
                     padding: const EdgeInsets.symmetric(
@@ -2652,18 +3263,17 @@ class _CommentsSheetState extends State<CommentsSheet> {
   String? _replyingToCommentId;
   String? _replyingToUsername;
 
-  void _openUserProfile({
-    required String? uid,
-    required String username,
-  }) {
+  void _openUserProfile({required String? uid, required String username}) {
     final String targetUid = uid?.trim() ?? '';
     if (targetUid.isEmpty) {
       return;
     }
     Navigator.of(context).push(
       MaterialPageRoute<void>(
-        builder: (_) =>
-            UserProfilePreviewScreen(userId: targetUid, initialUsername: username),
+        builder: (_) => UserProfilePreviewScreen(
+          userId: targetUid,
+          initialUsername: username,
+        ),
       ),
     );
   }
@@ -3101,7 +3711,8 @@ class _CommentsSheetState extends State<CommentsSheet> {
                                                 final Map<String, dynamic>
                                                 replyData = replyDoc.data();
                                                 final String? replyUid =
-                                                    replyData['uid']?.toString();
+                                                    replyData['uid']
+                                                        ?.toString();
                                                 final String replyUsername =
                                                     replyData['username']
                                                         ?.toString() ??
@@ -3150,9 +3761,8 @@ class _CommentsSheetState extends State<CommentsSheet> {
                                                           replyUsername,
                                                           style:
                                                               const TextStyle(
-                                                                color:
-                                                                    AppColors
-                                                                        .black,
+                                                                color: AppColors
+                                                                    .black,
                                                                 fontSize: 13,
                                                                 fontWeight:
                                                                     FontWeight
@@ -3163,7 +3773,8 @@ class _CommentsSheetState extends State<CommentsSheet> {
                                                       Text(
                                                         replyContent,
                                                         style: const TextStyle(
-                                                          color: AppColors.black,
+                                                          color:
+                                                              AppColors.black,
                                                           fontSize: 13,
                                                         ),
                                                       ),
@@ -3271,6 +3882,9 @@ class _HomeGridPostTile extends StatelessWidget {
     final String caption = post['content']?.toString() ?? '';
     final String imageUrl = post['imageUrl']?.toString() ?? '';
     final bool hasImage = imageUrl.isNotEmpty;
+    final String postType = post['type']?.toString() ?? 'post';
+    final String productId = post['productId']?.toString() ?? '';
+    final bool isProductPost = postType == 'product' && productId.isNotEmpty;
 
     return ClipRRect(
       borderRadius: BorderRadius.circular(12),
@@ -3293,13 +3907,15 @@ class _HomeGridPostTile extends StatelessWidget {
             children: <Widget>[
               Expanded(
                 child: hasImage
-                    ? CachedNetworkImage(
-                        imageUrl: imageUrl,
-                        fit: BoxFit.cover,
-                        width: double.infinity,
-                        memCacheWidth: 720,
-                        placeholder: (BuildContext context, String _) =>
-                            Container(
+                    ? Stack(
+                        fit: StackFit.expand,
+                        children: <Widget>[
+                          _AppCheckCachedNetworkImage(
+                            imageUrl: imageUrl,
+                            fit: BoxFit.cover,
+                            width: double.infinity,
+                            memCacheWidth: 720,
+                            placeholder: Container(
                               color: AppColors.gray200,
                               child: const Center(
                                 child: SizedBox(
@@ -3311,14 +3927,37 @@ class _HomeGridPostTile extends StatelessWidget {
                                 ),
                               ),
                             ),
-                        errorWidget:
-                            (BuildContext context, String _, Object error) =>
-                                Container(
-                                  color: AppColors.gray200,
-                                  child: const Center(
-                                    child: Icon(Icons.broken_image_outlined),
+                            error: Container(
+                              color: AppColors.gray200,
+                              child: const Center(
+                                child: Icon(Icons.broken_image_outlined),
+                              ),
+                            ),
+                          ),
+                          if (isProductPost)
+                            Positioned(
+                              top: 8,
+                              left: 8,
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 4,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: AppColors.black87,
+                                  borderRadius: BorderRadius.circular(999),
+                                ),
+                                child: const Text(
+                                  'SHOP',
+                                  style: TextStyle(
+                                    color: AppColors.white,
+                                    fontWeight: FontWeight.w700,
+                                    fontSize: 10,
                                   ),
                                 ),
+                              ),
+                            ),
+                        ],
                       )
                     : Container(
                         color: AppColors.gray200,
@@ -3345,6 +3984,15 @@ class _HomeGridPostTile extends StatelessWidget {
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(color: AppColors.gray700, fontSize: 12),
                     ),
+                    if (isProductPost)
+                      Text(
+                        'View Product',
+                        style: TextStyle(
+                          color: Theme.of(context).colorScheme.primary,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
                   ],
                 ),
               ),
@@ -3377,189 +4025,96 @@ class _PostDetailActionSheet extends StatelessWidget {
       builder: (BuildContext context, ScrollController scrollController) {
         return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
           stream: context.read<PostService>().getPost(postId),
-          builder: (
-            BuildContext context,
-            AsyncSnapshot<DocumentSnapshot<Map<String, dynamic>>> snapshot,
-          ) {
-            final Map<String, dynamic> postData =
-                snapshot.data?.data() ?? initialPost;
-            final String imageUrl = postData['imageUrl']?.toString() ?? '';
-            final String caption = postData['content']?.toString() ?? '';
-            final String username = postData['username']?.toString() ?? 'User';
-            final String location = postData['location']?.toString() ?? '-';
-            final String? postOwnerUid = postData['uid']?.toString();
-            final List<dynamic> hashtags =
-                postData['hashtags'] as List<dynamic>? ?? <dynamic>[];
-            final List<dynamic> likes =
-                postData['likes'] as List<dynamic>? ?? <dynamic>[];
-            final int likeCount = likes.length;
-            final int commentCount = postData['commentCount'] as int? ?? 0;
-            final int shareCount = postData['shareCount'] as int? ?? 0;
-            final int totalEngagement = likeCount + commentCount + shareCount;
-            final bool isLiked =
-                currentUser != null && likes.contains(currentUser!.uid);
-            final bool isPostOwner =
-                currentUser != null &&
-                postOwnerUid != null &&
-                currentUser!.uid == postOwnerUid;
-            final Timestamp? postTimestamp = postData['timestamp'] is Timestamp
-                ? postData['timestamp'] as Timestamp
-                : null;
+          builder:
+              (
+                BuildContext context,
+                AsyncSnapshot<DocumentSnapshot<Map<String, dynamic>>> snapshot,
+              ) {
+                final Map<String, dynamic> postData =
+                    snapshot.data?.data() ?? initialPost;
+                final String imageUrl = postData['imageUrl']?.toString() ?? '';
+                final String caption = postData['content']?.toString() ?? '';
+                final String username =
+                    postData['username']?.toString() ?? 'User';
+                final String location = postData['location']?.toString() ?? '-';
+                final String? postOwnerUid = postData['uid']?.toString();
+                final List<dynamic> hashtags =
+                    postData['hashtags'] as List<dynamic>? ?? <dynamic>[];
+                final List<dynamic> likes =
+                    postData['likes'] as List<dynamic>? ?? <dynamic>[];
+                final int likeCount = likes.length;
+                final int commentCount = postData['commentCount'] as int? ?? 0;
+                final int shareCount = postData['shareCount'] as int? ?? 0;
+                final String postType = postData['type']?.toString() ?? 'post';
+                final String productId = postData['productId']?.toString() ?? '';
+                final bool isProductPost =
+                    postType == 'product' && productId.isNotEmpty;
+                final int totalEngagement =
+                    likeCount + commentCount + shareCount;
+                final bool isLiked =
+                    currentUser != null && likes.contains(currentUser!.uid);
+                final bool isPostOwner =
+                    currentUser != null &&
+                    postOwnerUid != null &&
+                    currentUser!.uid == postOwnerUid;
+                final Timestamp? postTimestamp =
+                    postData['timestamp'] is Timestamp
+                    ? postData['timestamp'] as Timestamp
+                    : null;
 
-            return Padding(
-              padding: const EdgeInsets.all(16),
-              child: ListView(
-                controller: scrollController,
-                children: <Widget>[
-                  if (imageUrl.isNotEmpty)
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(12),
-                      child: CachedNetworkImage(
-                        imageUrl: imageUrl,
-                        height: 240,
-                        fit: BoxFit.cover,
-                        placeholder: (BuildContext context, String _) =>
-                            Container(
+                return Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: ListView(
+                    controller: scrollController,
+                    children: <Widget>[
+                      if (imageUrl.isNotEmpty)
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(12),
+                          child: _AppCheckCachedNetworkImage(
+                            imageUrl: imageUrl,
+                            height: 240,
+                            fit: BoxFit.cover,
+                            placeholder: Container(
                               height: 240,
                               color: AppColors.gray200,
                               child: const Center(
-                                child: CircularProgressIndicator(strokeWidth: 2),
-                              ),
-                            ),
-                        errorWidget:
-                            (BuildContext context, String _, Object error) =>
-                                Container(
-                                  height: 240,
-                                  color: AppColors.gray200,
-                                  child: const Center(
-                                    child: Icon(Icons.broken_image_outlined),
-                                  ),
-                                ),
-                      ),
-                    ),
-                  const SizedBox(height: 12),
-                  ListTile(
-                    contentPadding: EdgeInsets.zero,
-                    leading: CircleAvatar(
-                      backgroundColor: AppColors.gray300,
-                      child: Text(
-                        username.isNotEmpty ? username[0].toUpperCase() : '?',
-                      ),
-                    ),
-                    title: Text(
-                      username,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(fontWeight: FontWeight.w700),
-                    ),
-                    subtitle: Text(
-                      postOwnerUid == null
-                          ? 'Unknown profile'
-                          : 'Tap to view profile',
-                    ),
-                    onTap: postOwnerUid == null
-                        ? null
-                        : () {
-                            Navigator.of(context).push(
-                              MaterialPageRoute<void>(
-                                builder: (_) => UserProfilePreviewScreen(
-                                  userId: postOwnerUid,
-                                  initialUsername: username,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
                                 ),
                               ),
-                            );
-                          },
-                  ),
-                  const SizedBox(height: 8),
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: <Widget>[
-                      ActionChip(
-                        avatar: Icon(
-                          isLiked ? Icons.favorite : Icons.favorite_border,
-                          size: 18,
-                          color: isLiked ? AppColors.black : null,
-                        ),
-                        label: Text('Like ($likeCount)'),
-                        onPressed: currentUser == null
-                            ? null
-                            : () {
-                                context.read<PostService>().toggleLike(
-                                  postId,
-                                  isLiked,
-                                );
-                              },
-                      ),
-                      ActionChip(
-                        avatar: const Icon(
-                          Icons.chat_bubble_outline,
-                          size: 18,
-                        ),
-                        label: Text('Comment ($commentCount)'),
-                        onPressed: () {
-                          showModalBottomSheet<void>(
-                            context: context,
-                            isScrollControlled: true,
-                            builder: (BuildContext context) => SizedBox(
-                              height: MediaQuery.of(context).size.height * 0.75,
-                              child: CommentsSheet(postId: postId),
                             ),
-                          );
-                        },
-                      ),
-                      StreamBuilder<bool>(
-                        stream: context.read<FollowService>().isPostSavedStream(
-                          postId,
-                        ),
-                        builder: (
-                          BuildContext context,
-                          AsyncSnapshot<bool> saveSnapshot,
-                        ) {
-                          final bool isSaved = saveSnapshot.data ?? false;
-                          return ActionChip(
-                            avatar: Icon(
-                              isSaved
-                                  ? Icons.bookmark
-                                  : Icons.bookmark_border_outlined,
-                              size: 18,
+                            error: Container(
+                              height: 240,
+                              color: AppColors.gray200,
+                              child: const Center(
+                                child: Icon(Icons.broken_image_outlined),
+                              ),
                             ),
-                            label: Text(isSaved ? 'Saved' : 'Save'),
-                            onPressed: currentUser == null
-                                ? null
-                                : () async {
-                                    try {
-                                      await context
-                                          .read<FollowService>()
-                                          .toggleSavePost(
-                                            postId: postId,
-                                            postOwnerUid: postOwnerUid ?? '',
-                                            caption: caption,
-                                            imageUrl: imageUrl,
-                                            timestamp: postTimestamp,
-                                          );
-                                    } catch (e) {
-                                      if (!context.mounted) {
-                                        return;
-                                      }
-                                      ScaffoldMessenger.of(
-                                        context,
-                                      ).showSnackBar(
-                                        SnackBar(
-                                          content: Text(
-                                            'Failed to save post: $e',
-                                          ),
-                                        ),
-                                      );
-                                    }
-                                  },
-                          );
-                        },
-                      ),
-                      ActionChip(
-                        avatar: const Icon(Icons.person_outline, size: 18),
-                        label: const Text('View profile'),
-                        onPressed: postOwnerUid == null
+                          ),
+                        ),
+                      const SizedBox(height: 12),
+                      ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        leading: CircleAvatar(
+                          backgroundColor: AppColors.gray300,
+                          child: Text(
+                            username.isNotEmpty
+                                ? username[0].toUpperCase()
+                                : '?',
+                          ),
+                        ),
+                        title: Text(
+                          username,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(fontWeight: FontWeight.w700),
+                        ),
+                        subtitle: Text(
+                          postOwnerUid == null
+                              ? 'Unknown profile'
+                              : 'Tap to view profile',
+                        ),
+                        onTap: postOwnerUid == null
                             ? null
                             : () {
                                 Navigator.of(context).push(
@@ -3572,94 +4127,264 @@ class _PostDetailActionSheet extends StatelessWidget {
                                 );
                               },
                       ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  Text(
-                    caption.isEmpty ? 'No caption' : caption,
-                    style: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  FutureBuilder<String>(
-                    future: resolvePostLocationLabel(postData),
-                    builder: (
-                      BuildContext context,
-                      AsyncSnapshot<String> snapshot,
-                    ) {
-                      final String resolved =
-                          snapshot.data?.trim().isNotEmpty == true
-                          ? snapshot.data!.trim()
-                          : location;
-                      return Text(
-                        'Location: $resolved',
-                        style: TextStyle(color: AppColors.gray700),
-                      );
-                    },
-                  ),
-                  const SizedBox(height: 8),
-                  Wrap(
-                    spacing: 6,
-                    runSpacing: 6,
-                    children: hashtags
-                        .map(
-                          (dynamic tag) => Chip(
-                            label: Text(tag.toString()),
-                            visualDensity: VisualDensity.compact,
+                      const SizedBox(height: 8),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: <Widget>[
+                          ActionChip(
+                            avatar: Icon(
+                              isLiked ? Icons.favorite : Icons.favorite_border,
+                              size: 18,
+                              color: isLiked ? AppColors.black : null,
+                            ),
+                            label: Text('Like ($likeCount)'),
+                            onPressed: currentUser == null
+                                ? null
+                                : () {
+                                    context.read<PostService>().toggleLike(
+                                      postId,
+                                      isLiked,
+                                    );
+                                  },
                           ),
-                        )
-                        .toList(),
-                  ),
-                  if (isPostOwner) ...<Widget>[
-                    const SizedBox(height: 12),
-                    const Text(
-                      'Insights',
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w700,
+                          ActionChip(
+                            avatar: const Icon(
+                              Icons.chat_bubble_outline,
+                              size: 18,
+                            ),
+                            label: Text('Comment ($commentCount)'),
+                            onPressed: () {
+                              showModalBottomSheet<void>(
+                                context: context,
+                                isScrollControlled: true,
+                                builder: (BuildContext context) => SizedBox(
+                                  height:
+                                      MediaQuery.of(context).size.height * 0.75,
+                                  child: CommentsSheet(postId: postId),
+                                ),
+                              );
+                            },
+                          ),
+                          StreamBuilder<bool>(
+                            stream: context
+                                .read<FollowService>()
+                                .isPostSavedStream(postId),
+                            builder:
+                                (
+                                  BuildContext context,
+                                  AsyncSnapshot<bool> saveSnapshot,
+                                ) {
+                                  final bool isSaved =
+                                      saveSnapshot.data ?? false;
+                                  return ActionChip(
+                                    avatar: Icon(
+                                      isSaved
+                                          ? Icons.bookmark
+                                          : Icons.bookmark_border_outlined,
+                                      size: 18,
+                                    ),
+                                    label: Text(isSaved ? 'Saved' : 'Save'),
+                                    onPressed: currentUser == null
+                                        ? null
+                                        : () async {
+                                            try {
+                                              await context
+                                                  .read<FollowService>()
+                                                  .toggleSavePost(
+                                                    postId: postId,
+                                                    postOwnerUid:
+                                                        postOwnerUid ?? '',
+                                                    caption: caption,
+                                                    imageUrl: imageUrl,
+                                                    timestamp: postTimestamp,
+                                                  );
+                                            } catch (e) {
+                                              if (!context.mounted) {
+                                                return;
+                                              }
+                                              ScaffoldMessenger.of(
+                                                context,
+                                              ).showSnackBar(
+                                                SnackBar(
+                                                  content: Text(
+                                                    'Failed to save post: $e',
+                                                  ),
+                                                ),
+                                              );
+                                            }
+                                          },
+                                  );
+                                },
+                          ),
+                          ActionChip(
+                            avatar: const Icon(Icons.person_outline, size: 18),
+                            label: const Text('View profile'),
+                            onPressed: postOwnerUid == null
+                                ? null
+                                : () {
+                                    Navigator.of(context).push(
+                                      MaterialPageRoute<void>(
+                                        builder: (_) =>
+                                            UserProfilePreviewScreen(
+                                              userId: postOwnerUid,
+                                              initialUsername: username,
+                                            ),
+                                      ),
+                                    );
+                                  },
+                          ),
+                          if (isProductPost)
+                            ActionChip(
+                              avatar: const Icon(Icons.storefront_outlined, size: 18),
+                              label: const Text('View Product'),
+                              onPressed: () {
+                                Navigator.of(context).push(
+                                  MaterialPageRoute<void>(
+                                    builder: (_) => ProductDetailScreen(
+                                      productId: productId,
+                                    ),
+                                  ),
+                                );
+                              },
+                            ),
+                        ],
                       ),
-                    ),
-                    const SizedBox(height: 8),
-                    Row(
-                      children: <Widget>[
-                        Expanded(
-                          child: _InsightTile(
-                            label: 'Likes',
-                            value: likeCount.toString(),
-                            icon: Icons.favorite_border,
-                          ),
+                      const SizedBox(height: 12),
+                      Text(
+                        caption.isEmpty ? 'No caption' : caption,
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w500,
                         ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: _InsightTile(
-                            label: 'Comments',
-                            value: commentCount.toString(),
-                            icon: Icons.chat_bubble_outline,
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: _InsightTile(
-                            label: 'Shares',
-                            value: shareCount.toString(),
-                            icon: Icons.send_outlined,
-                          ),
+                      ),
+                      if (isProductPost) ...<Widget>[
+                        const SizedBox(height: 12),
+                        FutureBuilder<Product?>(
+                          future: context
+                              .read<ProductService>()
+                              .getProductOnce(productId),
+                          builder: (
+                            BuildContext context,
+                            AsyncSnapshot<Product?> productSnapshot,
+                          ) {
+                            final Product? product = productSnapshot.data;
+                            if (product == null) {
+                              return const SizedBox.shrink();
+                            }
+                            return StreamBuilder<bool>(
+                              stream: context
+                                  .read<WishlistService>()
+                                  .isProductWishlistedStream(product.id),
+                              builder: (
+                                BuildContext context,
+                                AsyncSnapshot<bool> wishlistSnapshot,
+                              ) {
+                                final bool isWishlisted =
+                                    wishlistSnapshot.data ?? false;
+                                return ProductCard(
+                                  product: product,
+                                  compact: true,
+                                  isWishlisted: isWishlisted,
+                                  onWishlistTap: () => _toggleProductWishlist(
+                                    context,
+                                    product,
+                                    isWishlisted,
+                                  ),
+                                  onTap: () {
+                                    Navigator.of(context).push(
+                                      MaterialPageRoute<void>(
+                                        builder: (_) => ProductDetailScreen(
+                                          productId: product.id,
+                                        ),
+                                      ),
+                                    );
+                                  },
+                                );
+                              },
+                            );
+                          },
                         ),
                       ],
-                    ),
-                    const SizedBox(height: 8),
-                    _InsightTile(
-                      label: 'Total Engagement',
-                      value: totalEngagement.toString(),
-                      icon: Icons.insights_outlined,
-                    ),
-                  ],
-                ],
-              ),
-            );
-          },
+                      const SizedBox(height: 8),
+                      FutureBuilder<String>(
+                        future: resolvePostLocationLabel(postData),
+                        builder:
+                            (
+                              BuildContext context,
+                              AsyncSnapshot<String> snapshot,
+                            ) {
+                              final String resolved =
+                                  snapshot.data?.trim().isNotEmpty == true
+                                  ? snapshot.data!.trim()
+                                  : location;
+                              return Text(
+                                'Location: $resolved',
+                                style: TextStyle(color: AppColors.gray700),
+                              );
+                            },
+                      ),
+                      const SizedBox(height: 8),
+                      Wrap(
+                        spacing: 6,
+                        runSpacing: 6,
+                        children: hashtags
+                            .map(
+                              (dynamic tag) => Chip(
+                                label: Text(tag.toString()),
+                                visualDensity: VisualDensity.compact,
+                              ),
+                            )
+                            .toList(),
+                      ),
+                      if (isPostOwner) ...<Widget>[
+                        const SizedBox(height: 12),
+                        const Text(
+                          'Insights',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Row(
+                          children: <Widget>[
+                            Expanded(
+                              child: _InsightTile(
+                                label: 'Likes',
+                                value: likeCount.toString(),
+                                icon: Icons.favorite_border,
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: _InsightTile(
+                                label: 'Comments',
+                                value: commentCount.toString(),
+                                icon: Icons.chat_bubble_outline,
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: _InsightTile(
+                                label: 'Shares',
+                                value: shareCount.toString(),
+                                icon: Icons.send_outlined,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        _InsightTile(
+                          label: 'Total Engagement',
+                          value: totalEngagement.toString(),
+                          icon: Icons.insights_outlined,
+                        ),
+                      ],
+                    ],
+                  ),
+                );
+              },
         );
       },
     );
@@ -3830,10 +4555,13 @@ class _SmoothPostImage extends StatefulWidget {
 class _SmoothPostImageState extends State<_SmoothPostImage> {
   Timer? _timeoutTimer;
   bool _useFallbackNetwork = false;
+  bool _headersReady = false;
+  Map<String, String> _httpHeaders = const <String, String>{};
 
   @override
   void initState() {
     super.initState();
+    _loadHeaders();
     _startTimeout();
   }
 
@@ -3842,8 +4570,45 @@ class _SmoothPostImageState extends State<_SmoothPostImage> {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.imageUrl != widget.imageUrl) {
       _useFallbackNetwork = false;
+      _headersReady = false;
+      _httpHeaders = const <String, String>{};
       _timeoutTimer?.cancel();
+      _loadHeaders();
       _startTimeout();
+    }
+  }
+
+  Future<void> _loadHeaders() async {
+    final String imageUrl = widget.imageUrl;
+    try {
+      if (!AppCheckHeaderService.instance.requiresHeaderFor(imageUrl)) {
+        if (!mounted) {
+          return;
+        }
+        setState(() {
+          _httpHeaders = const <String, String>{};
+          _headersReady = true;
+        });
+        return;
+      }
+
+      final Map<String, String> headers = await AppCheckHeaderService.instance
+          .headersFor(imageUrl);
+      if (!mounted || imageUrl != widget.imageUrl) {
+        return;
+      }
+      setState(() {
+        _httpHeaders = headers;
+        _headersReady = true;
+      });
+    } catch (_) {
+      if (!mounted || imageUrl != widget.imageUrl) {
+        return;
+      }
+      setState(() {
+        _httpHeaders = const <String, String>{};
+        _headersReady = true;
+      });
     }
   }
 
@@ -3864,6 +4629,25 @@ class _SmoothPostImageState extends State<_SmoothPostImage> {
   @override
   Widget build(BuildContext context) {
     final String imageUrl = widget.imageUrl;
+    if (!_headersReady) {
+      return AspectRatio(
+        aspectRatio: 1,
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(10),
+          child: Container(
+            color: AppColors.gray200,
+            child: const Center(
+              child: SizedBox(
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
     return AspectRatio(
       aspectRatio: 1,
       child: ClipRRect(
@@ -3872,6 +4656,7 @@ class _SmoothPostImageState extends State<_SmoothPostImage> {
             ? Image.network(
                 imageUrl,
                 fit: BoxFit.cover,
+                headers: _httpHeaders,
                 loadingBuilder:
                     (
                       BuildContext context,
@@ -3906,6 +4691,7 @@ class _SmoothPostImageState extends State<_SmoothPostImage> {
               )
             : CachedNetworkImage(
                 imageUrl: imageUrl,
+                httpHeaders: _httpHeaders,
                 fit: BoxFit.cover,
                 memCacheWidth: 1080,
                 fadeInDuration: const Duration(milliseconds: 220),
@@ -3928,6 +4714,133 @@ class _SmoothPostImageState extends State<_SmoothPostImage> {
                     ),
               ),
       ),
+    );
+  }
+}
+
+class _AppCheckCachedNetworkImage extends StatefulWidget {
+  const _AppCheckCachedNetworkImage({
+    required this.imageUrl,
+    required this.placeholder,
+    required this.error,
+    this.fit,
+    this.width,
+    this.height,
+    this.memCacheWidth,
+  });
+
+  final String imageUrl;
+  final Widget placeholder;
+  final Widget error;
+  final BoxFit? fit;
+  final double? width;
+  final double? height;
+  final int? memCacheWidth;
+
+  @override
+  State<_AppCheckCachedNetworkImage> createState() =>
+      _AppCheckCachedNetworkImageState();
+}
+
+class _AppCheckCachedNetworkImageState
+    extends State<_AppCheckCachedNetworkImage> {
+  bool _headersReady = false;
+  Map<String, String> _httpHeaders = const <String, String>{};
+
+  @override
+  void initState() {
+    super.initState();
+    _loadHeaders();
+  }
+
+  @override
+  void didUpdateWidget(covariant _AppCheckCachedNetworkImage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.imageUrl != widget.imageUrl) {
+      _headersReady = false;
+      _httpHeaders = const <String, String>{};
+      _loadHeaders();
+    }
+  }
+
+  Future<void> _loadHeaders() async {
+    final String imageUrl = widget.imageUrl;
+    try {
+      if (!AppCheckHeaderService.instance.requiresHeaderFor(imageUrl)) {
+        if (!mounted) {
+          return;
+        }
+        setState(() {
+          _httpHeaders = const <String, String>{};
+          _headersReady = true;
+        });
+        return;
+      }
+
+      final Map<String, String> headers = await AppCheckHeaderService.instance
+          .headersFor(imageUrl);
+      if (!mounted || imageUrl != widget.imageUrl) {
+        return;
+      }
+      setState(() {
+        _httpHeaders = headers;
+        _headersReady = true;
+      });
+    } catch (_) {
+      if (!mounted || imageUrl != widget.imageUrl) {
+        return;
+      }
+      setState(() {
+        _httpHeaders = const <String, String>{};
+        _headersReady = true;
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (!_headersReady) {
+      return widget.placeholder;
+    }
+
+    return CachedNetworkImage(
+      imageUrl: widget.imageUrl,
+      fit: widget.fit,
+      width: widget.width,
+      height: widget.height,
+      memCacheWidth: widget.memCacheWidth,
+      fadeInDuration: const Duration(milliseconds: 220),
+      httpHeaders: _httpHeaders,
+      placeholder: (BuildContext context, String _) => widget.placeholder,
+      errorWidget: (BuildContext context, String _, Object error) =>
+          widget.error,
+    );
+  }
+}
+
+Future<void> _toggleProductWishlist(
+  BuildContext context,
+  Product product,
+  bool isWishlisted,
+) async {
+  try {
+    await context.read<WishlistService>().toggleProductWishlist(product);
+    if (!context.mounted) {
+      return;
+    }
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          isWishlisted ? 'Removed from wishlist' : 'Added to wishlist',
+        ),
+      ),
+    );
+  } catch (e) {
+    if (!context.mounted) {
+      return;
+    }
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Failed to update wishlist: $e')),
     );
   }
 }

@@ -11,10 +11,17 @@ class AuthService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final GoogleSignIn _googleSignIn = GoogleSignIn.instance;
   bool _googleInitialized = false;
+  static const String _androidServerClientId =
+      '215566920705-vgsplkm55ie45plp5ep2cg0qlsnls756.apps.googleusercontent.com';
 
   Future<void> _ensureGoogleInitialized() async {
     if (_googleInitialized) return;
-    await _googleSignIn.initialize();
+    await _googleSignIn.initialize(
+      serverClientId:
+          defaultTargetPlatform == TargetPlatform.android
+          ? _androidServerClientId
+          : null,
+    );
     _googleInitialized = true;
   }
 
@@ -65,6 +72,13 @@ class AuthService {
       await _ensureGoogleInitialized();
       final GoogleSignInAccount googleUser = await _googleSignIn.authenticate();
       final GoogleSignInAuthentication googleAuth = googleUser.authentication;
+      if (googleAuth.idToken == null || googleAuth.idToken!.isEmpty) {
+        throw FirebaseAuthException(
+          code: 'google-id-token-missing',
+          message:
+              'Google Sign-In failed. Missing ID token. Please recheck Firebase OAuth setup.',
+        );
+      }
       final AuthCredential credential = GoogleAuthProvider.credential(
         idToken: googleAuth.idToken,
       );
@@ -78,11 +92,28 @@ class AuthService {
       return userCredential;
     } on GoogleSignInException catch (e) {
       if (e.code == GoogleSignInExceptionCode.canceled ||
-          e.code == GoogleSignInExceptionCode.interrupted ||
-          e.code == GoogleSignInExceptionCode.uiUnavailable) {
+          e.code == GoogleSignInExceptionCode.interrupted) {
         return null;
       }
-      rethrow;
+      if (e.code == GoogleSignInExceptionCode.clientConfigurationError ||
+          e.code == GoogleSignInExceptionCode.providerConfigurationError) {
+        throw FirebaseAuthException(
+          code: 'google-signin-config-error',
+          message:
+              'Google Sign-In configuration is invalid. Check package name, SHA-1/SHA-256, and google-services.json.',
+        );
+      }
+      if (e.code == GoogleSignInExceptionCode.uiUnavailable) {
+        throw FirebaseAuthException(
+          code: 'google-signin-ui-unavailable',
+          message:
+              'Google Sign-In UI is unavailable on this device/session. Please try again.',
+        );
+      }
+      throw FirebaseAuthException(
+        code: 'google-signin-failed',
+        message: e.description ?? 'Google Sign-In failed.',
+      );
     } catch (e) {
       debugPrint('Google sign-in error: $e');
       rethrow;
@@ -220,6 +251,7 @@ class AuthService {
         'displayName':
             user.displayName ?? user.email?.split('@').first ?? 'Anonymous',
         'photoUrl': user.photoURL ?? '',
+        'role': 'user',
         'username': username,
         'usernameLower': usernameLower,
         'usernameChangedOnce': false,

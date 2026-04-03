@@ -7,6 +7,12 @@ import 'package:permission_handler/permission_handler.dart' as ph;
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sincerelysea/screens/legal/privacy_policy_screen.dart';
+import 'package:sincerelysea/screens/admin/admin_dashboard_screen.dart';
+import 'package:sincerelysea/screens/admin/admin_user_roles_screen.dart';
+import 'package:sincerelysea/screens/orders/order_history_screen.dart';
+import 'package:sincerelysea/screens/orders/seller_orders_screen.dart';
+import 'package:sincerelysea/screens/product/manage_products_screen.dart';
+import 'package:sincerelysea/screens/product/saved_products_screen.dart';
 import 'package:sincerelysea/screens/legal/terms_of_service_screen.dart';
 import 'package:sincerelysea/screens/profile/change_password_screen.dart';
 import 'package:sincerelysea/screens/profile/profile_settings_screen.dart';
@@ -17,8 +23,10 @@ import 'package:sincerelysea/screens/settings/notification_preferences_screen.da
 import 'package:sincerelysea/screens/settings/privacy_controls_screen.dart';
 import 'package:sincerelysea/screens/settings/session_management_screen.dart';
 import 'package:sincerelysea/screens/support/contact_support_screen.dart';
+import 'package:sincerelysea/services/admin_service.dart';
 import 'package:sincerelysea/services/auth_service.dart';
 import 'package:sincerelysea/services/local_notification_service.dart';
+import 'package:sincerelysea/services/product_service.dart';
 import 'package:sincerelysea/theme/app_semantic_colors.dart';
 
 class ProfileSettingsMenuScreen extends StatefulWidget {
@@ -188,6 +196,111 @@ class _ProfileSettingsMenuScreenState extends State<ProfileSettingsMenuScreen> {
                 onTap: _clearingCache ? null : _confirmAndClearMediaCache,
               ),
             ],
+          ),
+          const SizedBox(height: 14),
+          _SectionCard(
+            title: 'Commerce',
+            items: <Widget>[
+              _SettingsItem(
+                icon: Icons.receipt_long_outlined,
+                title: 'My Orders',
+                subtitle: 'Track purchases and order status',
+                onTap: () => Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                    builder: (_) => const OrderHistoryScreen(),
+                  ),
+                ),
+              ),
+              Divider(height: 1, color: semantic.divider),
+              _SettingsItem(
+                icon: Icons.favorite_border,
+                title: 'Saved Products',
+                subtitle: 'Quick access to products you wishlisted',
+                onTap: () => Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                    builder: (_) => const SavedProductsScreen(),
+                  ),
+                ),
+              ),
+              FutureBuilder<bool>(
+                future: context.read<ProductService>().isCurrentUserAdmin(),
+                builder: (
+                  BuildContext context,
+                  AsyncSnapshot<bool> snapshot,
+                ) {
+                  if (snapshot.data != true) {
+                    return const SizedBox.shrink();
+                  }
+                  return Column(
+                    children: <Widget>[
+                      Divider(height: 1, color: semantic.divider),
+                      _SettingsItem(
+                        icon: Icons.inventory_2_outlined,
+                        title: 'Manage Products',
+                        subtitle:
+                            'Update stock, preorder settings, and availability',
+                        onTap: () => Navigator.of(context).push(
+                          MaterialPageRoute<void>(
+                            builder: (_) => const ManageProductsScreen(),
+                          ),
+                        ),
+                      ),
+                      Divider(height: 1, color: semantic.divider),
+                      _SettingsItem(
+                        icon: Icons.store_mall_directory_outlined,
+                        title: 'Seller Orders',
+                        subtitle: 'Manage incoming orders for your products',
+                        onTap: () => Navigator.of(context).push(
+                          MaterialPageRoute<void>(
+                            builder: (_) => const SellerOrdersScreen(),
+                          ),
+                        ),
+                      ),
+                    ],
+                  );
+                },
+              ),
+            ],
+          ),
+          FutureBuilder<bool>(
+            future: context.read<AdminService>().isCurrentUserAdmin(),
+            builder: (
+              BuildContext context,
+              AsyncSnapshot<bool> snapshot,
+            ) {
+              if (snapshot.data != true) {
+                return const SizedBox.shrink();
+              }
+              return Padding(
+                padding: const EdgeInsets.only(top: 14),
+                child: _SectionCard(
+                  title: 'Admin',
+                  items: <Widget>[
+                    _SettingsItem(
+                      icon: Icons.space_dashboard_outlined,
+                      title: 'Admin Dashboard',
+                      subtitle: 'Monitor users, products, orders, and role logs',
+                      onTap: () => Navigator.of(context).push(
+                        MaterialPageRoute<void>(
+                          builder: (_) => const AdminDashboardScreen(),
+                        ),
+                      ),
+                    ),
+                    Divider(height: 1, color: semantic.divider),
+                    _SettingsItem(
+                      icon: Icons.admin_panel_settings_outlined,
+                      title: 'Manage Roles',
+                      subtitle: 'Promote or demote admins securely',
+                      onTap: () => Navigator.of(context).push(
+                        MaterialPageRoute<void>(
+                          builder: (_) => const AdminUserRolesScreen(),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            },
           ),
           const SizedBox(height: 14),
           _SectionCard(

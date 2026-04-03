@@ -58,6 +58,8 @@ class PostService {
     GeoPoint? geo,
     List<String>? hashtags,
     String visibility = 'public',
+    String type = 'post',
+    String? productId,
   }) async {
     final user = _auth.currentUser;
     if (user != null && (content.trim().isNotEmpty || imageUrl != null)) {
@@ -80,6 +82,9 @@ class PostService {
         location?.trim() ?? '',
       );
       final List<String> sanitizedHashtags = _sanitizeHashtags(hashtags);
+      final String normalizedType =
+          type.trim().toLowerCase() == 'product' ? 'product' : 'post';
+      final String normalizedProductId = productId?.trim() ?? '';
       await _firestore.collection('posts').add({
         'content': content.trim(),
         'username': username,
@@ -92,6 +97,8 @@ class PostService {
         'uid': user.uid,
         'visibility': normalizedVisibility,
         'allowComments': 'everyone',
+        'type': normalizedType,
+        'productId': normalizedProductId.isEmpty ? null : normalizedProductId,
         'timestamp': FieldValue.serverTimestamp(),
         'likes': [],
         'commentCount': 0,
@@ -169,8 +176,6 @@ class PostService {
       imageFile.absolute.path,
       targetPath,
       quality: quality,
-      minWidth: 1440,
-      minHeight: 1440,
       format: CompressFormat.jpeg,
       keepExif: true,
       autoCorrectionAngle: true,
@@ -209,6 +214,40 @@ class PostService {
       'locationName': location?.trim() ?? '',
       'hashtags': sanitizedHashtags,
     });
+  }
+
+  // Delete a post (owner only, validated client-side and by Firestore rules).
+  Future<void> deletePost(String postId) async {
+    final User? user = _auth.currentUser;
+    if (user == null) {
+      throw FirebaseAuthException(
+        code: 'unauthenticated',
+        message: 'Please login again.',
+      );
+    }
+
+    final DocumentReference<Map<String, dynamic>> postRef = _firestore
+        .collection('posts')
+        .doc(postId);
+    final DocumentSnapshot<Map<String, dynamic>> postSnapshot =
+        await postRef.get();
+    if (!postSnapshot.exists) {
+      return;
+    }
+
+    final Map<String, dynamic> data = postSnapshot.data() ?? <String, dynamic>{};
+    final String ownerUid = data['uid']?.toString() ?? '';
+    final String imageUrl = data['imageUrl']?.toString().trim() ?? '';
+    if (ownerUid != user.uid) {
+      throw FirebaseAuthException(
+        code: 'permission-denied',
+        message: 'Only post owner can delete this post.',
+      );
+    }
+
+    await _deleteCommentsTree(postRef);
+    await postRef.delete();
+    await _deleteImageIfFirebaseUrl(imageUrl);
   }
 
   List<String> _sanitizeHashtags(List<String>? hashtags) {
@@ -425,6 +464,24 @@ class PostService {
         .snapshots();
   }
 
+  Future<void> _deleteCommentsTree(
+    DocumentReference<Map<String, dynamic>> postRef,
+  ) async {
+    final QuerySnapshot<Map<String, dynamic>> commentsSnapshot = await postRef
+        .collection('comments')
+        .get();
+    for (final QueryDocumentSnapshot<Map<String, dynamic>> commentDoc
+        in commentsSnapshot.docs) {
+      final QuerySnapshot<Map<String, dynamic>> repliesSnapshot =
+          await commentDoc.reference.collection('replies').get();
+      for (final QueryDocumentSnapshot<Map<String, dynamic>> replyDoc
+          in repliesSnapshot.docs) {
+        await replyDoc.reference.delete();
+      }
+      await commentDoc.reference.delete();
+    }
+  }
+
   bool _isLikelyHttpImageUrl(String value) {
     final Uri? uri = Uri.tryParse(value.trim());
     if (uri == null) {
@@ -438,6 +495,21 @@ class PostService {
     final String url = value.trim();
     return url.startsWith('https://firebasestorage.googleapis.com/') ||
         url.startsWith('https://storage.googleapis.com/');
+  }
+
+  Future<void> _deleteImageIfFirebaseUrl(String imageUrl) async {
+    final String trimmed = imageUrl.trim();
+    if (trimmed.isEmpty) {
+      return;
+    }
+    if (!_isFirebaseStorageHttpUrl(trimmed) && !trimmed.startsWith('gs://')) {
+      return;
+    }
+    try {
+      await _storage.refFromURL(trimmed).delete();
+    } catch (_) {
+      // Ignore storage cleanup errors so post deletion still succeeds.
+    }
   }
 
   /// Audit posts imageUrl values to find invalid or legacy URL patterns.

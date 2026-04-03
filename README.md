@@ -4,6 +4,15 @@ SincerelySea adalah aplikasi mobile berbasis Flutter yang dirancang sebagai plat
 
 ---
 
+## 📘 Documentation
+
+Mulai 2026-04-03, setiap perubahan kode wajib didokumentasikan di file Markdown.
+
+- Changelog utama: [docs/CHANGELOG.md](/Users/abc/SincerelySea/sincerelysea/docs/CHANGELOG.md)
+- Aturan dokumentasi: [docs/DOCUMENTATION_POLICY.md](/Users/abc/SincerelySea/sincerelysea/docs/DOCUMENTATION_POLICY.md)
+
+---
+
 ## 🚀 Features
 
 - 🔐 Authentication (Login & Register)
@@ -162,6 +171,6 @@ This project is licensed under the MIT License.
 
 ---
 
-## 🌊 About SincerelySea
+## About SincerelySea
 
 SincerelySea hadir sebagai ruang digital untuk berbagi cerita yang tulus, membangun komunitas positif, dan menciptakan koneksi yang bermakna.

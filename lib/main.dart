@@ -7,6 +7,7 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:provider/provider.dart';
 import 'package:sincerelysea/l10n/app_localizations.dart';
 import 'package:sincerelysea/services/account_lifecycle_service.dart';
+import 'package:sincerelysea/services/admin_service.dart';
 import 'package:sincerelysea/services/auth_service.dart';
 import 'package:sincerelysea/services/deep_link_service.dart';
 import 'package:sincerelysea/services/discovery_service.dart';
@@ -15,16 +16,25 @@ import 'package:sincerelysea/services/local_notification_service.dart';
 import 'package:sincerelysea/services/moderation_service.dart';
 import 'package:sincerelysea/services/notification_center_service.dart';
 import 'package:sincerelysea/services/post_service.dart';
+import 'package:sincerelysea/services/product_service.dart';
 import 'package:sincerelysea/services/support_service.dart';
+import 'package:sincerelysea/services/app_check_header_service.dart';
 import 'package:sincerelysea/services/theme_service.dart';
 import 'package:sincerelysea/services/user_profile_service.dart';
 import 'package:sincerelysea/services/wishlist_service.dart';
+import 'package:sincerelysea/services/cart_service.dart';
+import 'package:sincerelysea/services/order_service.dart';
 import 'screens/splash/splash_redirect.dart';
 import 'package:firebase_core/firebase_core.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp();
+  try {
+    await AppCheckHeaderService.instance.initialize();
+  } catch (_) {
+    // Keep app booting even when App Check can't initialize.
+  }
   FlutterError.onError = FirebaseCrashlytics.instance.recordFlutterFatalError;
   await LocalNotificationService.instance.init();
   runApp(const MyApp());
@@ -38,10 +48,14 @@ class MyApp extends StatelessWidget {
     return MultiProvider(
       providers: [
         Provider<AuthService>(create: (_) => AuthService()),
+        Provider<AdminService>(create: (_) => AdminService()),
         ChangeNotifierProvider<DeepLinkService>(
           create: (_) => DeepLinkService()..start(),
         ),
         Provider<PostService>(create: (_) => PostService()),
+        Provider<ProductService>(create: (_) => ProductService()),
+        Provider<CartService>(create: (_) => CartService()),
+        Provider<OrderService>(create: (_) => OrderService()),
         Provider<SupportService>(create: (_) => SupportService()),
         Provider<FollowService>(create: (_) => FollowService()),
         Provider<UserProfileService>(create: (_) => UserProfileService()),

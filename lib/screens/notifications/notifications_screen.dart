@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:sincerelysea/theme/app_semantic_colors.dart';
 import 'package:provider/provider.dart';
 import 'package:sincerelysea/screens/post/shared_post_detail_screen.dart';
+import 'package:sincerelysea/screens/product/product_detail_screen.dart';
 import 'package:sincerelysea/screens/profile/user_profile_preview_screen.dart';
 import 'package:sincerelysea/services/notification_center_service.dart';
 
@@ -66,6 +67,7 @@ class NotificationsScreen extends StatelessWidget {
                   final bool isRead = data['read'] == true;
                   final String? actorUid = data['actorUid']?.toString();
                   final String? postId = data['postId']?.toString();
+                  final String? productId = data['productId']?.toString();
                   final Color iconColor = isRead
                       ? semantic.notificationIconMuted
                       : semantic.notificationIcon;
@@ -94,6 +96,15 @@ class NotificationsScreen extends StatelessWidget {
                           MaterialPageRoute<void>(
                             builder: (_) =>
                                 SharedPostDetailScreen(postId: postId),
+                          ),
+                        );
+                        return;
+                      }
+                      if (productId != null && productId.isNotEmpty) {
+                        await Navigator.of(context).push(
+                          MaterialPageRoute<void>(
+                            builder: (_) =>
+                                ProductDetailScreen(productId: productId),
                           ),
                         );
                         return;
@@ -129,6 +140,8 @@ class NotificationsScreen extends StatelessWidget {
         return '@$actor requested to follow you';
       case 'share':
         return '@$actor shared your post';
+      case 'back_in_stock':
+        return 'A saved product is back in stock';
       default:
         return '@$actor has new activity';
     }
@@ -145,6 +158,8 @@ class NotificationsScreen extends StatelessWidget {
         return Icons.person_add_alt_1;
       case 'share':
         return Icons.ios_share;
+      case 'back_in_stock':
+        return Icons.inventory_2_outlined;
       default:
         return Icons.notifications_none;
     }

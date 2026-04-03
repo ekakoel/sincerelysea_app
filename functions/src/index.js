@@ -24,6 +24,7 @@ async function createNotification({
   actorUid,
   actorUsername,
   postId = null,
+  productId = null,
   message = '',
   eventId,
 }) {
@@ -32,7 +33,8 @@ async function createNotification({
   }
 
   const safePostId = postId || 'none';
-  const docId = `${type}_${actorUid}_${safePostId}_${eventId || Date.now()}`;
+  const safeProductId = productId || 'none';
+  const docId = `${type}_${actorUid}_${safePostId}_${safeProductId}_${eventId || Date.now()}`;
 
   await notificationsRef(targetUid).doc(docId).set(
     {
@@ -40,6 +42,7 @@ async function createNotification({
       actorUid,
       actorUsername,
       postId,
+      productId,
       message,
       read: false,
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
@@ -307,3 +310,60 @@ exports.onPostUpdated = onDocumentUpdated('posts/{postId}', async (event) => {
     }
   }
 });
+
+exports.onProductUpdated = onDocumentUpdated(
+  'products/{productId}',
+  async (event) => {
+    const before = event.data.before.data();
+    const after = event.data.after.data();
+    if (!before || !after) return;
+
+    const beforeStock = Number(before.stock || 0);
+    const afterStock = Number(after.stock || 0);
+    if (beforeStock > 0 || afterStock <= 0) {
+      return;
+    }
+
+    const ownerUid = after.userId || null;
+    if (!ownerUid) {
+      return;
+    }
+
+    const ownerSnap = await db.collection('users').doc(ownerUid).get();
+    const ownerUsername = ownerSnap.data()?.username || 'seller';
+    const productName = after.name || 'Product';
+
+    const wishlistSnapshot = await db
+      .collectionGroup('wishlists')
+      .where('type', '==', 'product')
+      .where('productId', '==', event.params.productId)
+      .where('status', '==', 'active')
+      .get();
+
+    const uniqueUids = new Set();
+    const tasks = [];
+
+    for (const doc of wishlistSnapshot.docs) {
+      const uid = doc.data()?.uid;
+      if (!uid || uniqueUids.has(uid)) {
+        continue;
+      }
+      uniqueUids.add(uid);
+      tasks.push(
+        createNotification({
+          targetUid: uid,
+          type: 'back_in_stock',
+          actorUid: ownerUid,
+          actorUsername: ownerUsername,
+          productId: event.params.productId,
+          message: `${productName} is back in stock`,
+          eventId: event.id,
+        }),
+      );
+    }
+
+    if (tasks.length > 0) {
+      await Promise.allSettled(tasks);
+    }
+  },
+);

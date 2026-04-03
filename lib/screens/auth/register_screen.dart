@@ -239,7 +239,11 @@ class _RegisterPageState extends State<RegisterPage> {
       final UserCredential? credential = await _auth.signInWithGoogle();
       if (credential == null && mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Google sign-up cancelled')),
+          const SnackBar(
+            content: Text(
+              'Google sign-up cancelled. If this repeats after selecting account, check SHA-1/SHA-256 in Firebase.',
+            ),
+          ),
         );
       }
     } on FirebaseAuthException catch (e) {

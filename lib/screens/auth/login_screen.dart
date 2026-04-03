@@ -3,6 +3,7 @@ import 'package:sincerelysea/theme/app_colors.dart';
 import 'package:sincerelysea/theme/app_semantic_colors.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:provider/provider.dart';
+import 'package:sincerelysea/widgets/app_check_network_image.dart';
 
 import '../../services/auth_service.dart';
 import 'register_screen.dart';
@@ -68,7 +69,18 @@ class _LoginScreenState extends State<LoginScreen> {
 
     try {
       // The AuthWrapper will handle navigation
-      await context.read<AuthService>().signInWithGoogle();
+      final UserCredential? credential = await context
+          .read<AuthService>()
+          .signInWithGoogle();
+      if (credential == null && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Google sign-in cancelled. If this keeps happening after choosing an account, check SHA-1/SHA-256 in Firebase.',
+            ),
+          ),
+        );
+      }
     } on FirebaseAuthException catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(
@@ -235,8 +247,9 @@ class _LoginScreenState extends State<LoginScreen> {
                     height: 48,
                     child: OutlinedButton.icon(
                       onPressed: _isLoading ? null : _signInWithGoogle,
-                      icon: Image.network(
-                        'https://pngimg.com/uploads/google/google_PNG19635.png',
+                      icon: const AppCheckImageNetwork(
+                        imageUrl:
+                            'https://pngimg.com/uploads/google/google_PNG19635.png',
                         height: 24,
                       ),
                       label: const Text('Continue with Google'),

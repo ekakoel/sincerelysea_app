@@ -5,7 +5,9 @@ import 'package:sincerelysea/screens/discovery/discovery_screen.dart';
 import 'package:sincerelysea/screens/home/home_screen.dart';
 import 'package:sincerelysea/screens/map/map_posts_screen.dart';
 import 'package:sincerelysea/screens/post/shared_post_detail_screen.dart';
+import 'package:sincerelysea/screens/product/product_catalog_screen.dart';
 import 'package:sincerelysea/screens/profile/profile_screen.dart';
+import 'package:sincerelysea/services/cart_service.dart';
 import 'package:sincerelysea/services/deep_link_service.dart';
 
 class MainNavigationScreen extends StatefulWidget {
@@ -74,6 +76,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
       const HomeScreen(),
       const DiscoveryScreen(),
       _currentIndex == 2 ? const MapPostsScreen() : const SizedBox.shrink(),
+      const ProductCatalogScreen(),
       const ProfileScreen(),
     ];
     return Scaffold(
@@ -107,6 +110,23 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
               child: const Icon(Icons.explore),
             ),
             label: 'Explore',
+          ),
+          BottomNavigationBarItem(
+            icon: Padding(
+              padding: const EdgeInsets.only(top: _bottomNavIconTopPadding),
+              child: StreamBuilder<int>(
+                stream: context.read<CartService>().cartItemCountStream(),
+                builder: (BuildContext context, AsyncSnapshot<int> snapshot) {
+                  final int totalItems = snapshot.data ?? 0;
+                  return Badge(
+                    isLabelVisible: totalItems > 0,
+                    label: Text(totalItems > 99 ? '99+' : '$totalItems'),
+                    child: const Icon(Icons.storefront_outlined),
+                  );
+                },
+              ),
+            ),
+            label: 'Shop',
           ),
           BottomNavigationBarItem(
             icon: Padding(
