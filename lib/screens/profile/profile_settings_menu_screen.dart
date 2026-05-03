@@ -8,6 +8,7 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sincerelysea/screens/legal/privacy_policy_screen.dart';
 import 'package:sincerelysea/screens/admin/admin_dashboard_screen.dart';
+import 'package:sincerelysea/screens/admin/developer_console_screen.dart';
 import 'package:sincerelysea/screens/admin/community_reports_screen.dart';
 import 'package:sincerelysea/screens/admin/sales_reports_screen.dart';
 import 'package:sincerelysea/screens/admin/admin_user_roles_screen.dart';
@@ -20,6 +21,7 @@ import 'package:sincerelysea/screens/profile/change_password_screen.dart';
 import 'package:sincerelysea/screens/profile/profile_settings_screen.dart';
 import 'package:sincerelysea/screens/settings/app_permissions_screen.dart';
 import 'package:sincerelysea/screens/settings/app_version_screen.dart';
+import 'package:sincerelysea/screens/settings/firebase_health_check_screen.dart';
 import 'package:sincerelysea/screens/settings/hidden_content_screen.dart';
 import 'package:sincerelysea/screens/settings/notification_preferences_screen.dart';
 import 'package:sincerelysea/screens/settings/privacy_controls_screen.dart';
@@ -284,6 +286,36 @@ class _ProfileSettingsMenuScreenState extends State<ProfileSettingsMenuScreen> {
             },
           ),
           FutureBuilder<bool>(
+            future: context.read<AdminService>().isCurrentUserDeveloper(),
+            builder: (
+              BuildContext context,
+              AsyncSnapshot<bool> snapshot,
+            ) {
+              if (snapshot.data != true) {
+                return const SizedBox.shrink();
+              }
+              return Padding(
+                padding: const EdgeInsets.only(top: 14),
+                child: _SectionCard(
+                  title: 'Developer',
+                  items: <Widget>[
+                    _SettingsItem(
+                      icon: Icons.developer_mode_outlined,
+                      title: 'Developer Console',
+                      subtitle:
+                          'Akses penuh untuk mengelola fitur, user, role, dan sistem',
+                      onTap: () => Navigator.of(context).push(
+                        MaterialPageRoute<void>(
+                          builder: (_) => const DeveloperConsoleScreen(),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            },
+          ),
+          FutureBuilder<bool>(
             future: context.read<AdminService>().hasCurrentUserScope('orders'),
             builder: (BuildContext context, AsyncSnapshot<bool> snapshot) {
               if (snapshot.data != true) {
@@ -432,6 +464,17 @@ class _ProfileSettingsMenuScreenState extends State<ProfileSettingsMenuScreen> {
           _SectionCard(
             title: 'About',
             items: <Widget>[
+              _SettingsItem(
+                icon: Icons.health_and_safety_outlined,
+                title: 'Firebase Health Check',
+                subtitle: 'Verify active Firebase project and Firestore access',
+                onTap: () => Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                    builder: (_) => const FirebaseHealthCheckScreen(),
+                  ),
+                ),
+              ),
+              Divider(height: 1, color: semantic.divider),
               _SettingsItem(
                 icon: Icons.info_outline,
                 title: 'App Version',

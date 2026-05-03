@@ -91,6 +91,7 @@ class ProductCard extends StatelessWidget {
             Padding(
               padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
               child: Column(
+                mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: <Widget>[
                   Wrap(
@@ -109,9 +110,11 @@ class ProductCard extends StatelessWidget {
                           ),
                           child: Text(
                             product.category,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                             style: TextStyle(
                               color: AppColors.gray700,
-                              fontSize: 11,
+                              fontSize: 10,
                               fontWeight: FontWeight.w600,
                             ),
                           ),
@@ -129,47 +132,53 @@ class ProductCard extends StatelessWidget {
                         ),
                         child: Text(
                           product.inventoryLabel,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                           style: TextStyle(
                             color: product.isPreorder
                                 ? Colors.orange.shade800
                                 : Colors.green.shade800,
-                            fontSize: 11,
+                            fontSize: 10,
                             fontWeight: FontWeight.w700,
                           ),
                         ),
                       ),
                     ],
                   ),
-                  const SizedBox(height: 6),
+                  const SizedBox(height: 5),
                   Text(
                     product.name,
-                    maxLines: compact ? 1 : 2,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 14,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    _formatCurrency(product.price),
+                    maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
                       fontWeight: FontWeight.w700,
                       fontSize: 15,
                     ),
                   ),
-                  const SizedBox(height: 6),
-                  Text(
-                    _formatCurrency(product.price),
-                    style: const TextStyle(
-                      fontWeight: FontWeight.w700,
-                      fontSize: 16,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
+                  const SizedBox(height: 3),
                   Text(
                     product.isPreorder
                         ? (product.preorderDays > 0
-                              ? 'Ships in about ${product.preorderDays} day(s)'
+                              ? 'Ships in ${product.preorderDays} day(s)'
                               : 'Made to order')
                         : (product.inStock
                               ? 'Stock: ${product.stock}'
                               : 'Out of stock'),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                     style: TextStyle(
                       color: product.canPurchase ? AppColors.gray700 : Colors.red,
-                      fontSize: 12,
+                      fontSize: 11,
                     ),
                   ),
                 ],

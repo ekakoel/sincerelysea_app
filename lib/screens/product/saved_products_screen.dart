@@ -6,6 +6,7 @@ import 'package:sincerelysea/screens/product/product_detail_screen.dart';
 import 'package:sincerelysea/services/product_service.dart';
 import 'package:sincerelysea/services/wishlist_service.dart';
 import 'package:sincerelysea/theme/app_colors.dart';
+import 'package:sincerelysea/widgets/app_check_network_image.dart';
 import 'package:sincerelysea/widgets/product_card.dart';
 
 class SavedProductsScreen extends StatelessWidget {
@@ -181,10 +182,20 @@ class _UnavailableSavedProductCard extends StatelessWidget {
                         child: Icon(Icons.inventory_2_outlined),
                       ),
                     )
-                  : Image.network(
-                      imageUrl,
+                  : AppCheckCachedNetworkImage(
+                      imageUrl: imageUrl,
                       fit: BoxFit.cover,
-                      errorBuilder: (_, _, _) => Container(
+                      placeholder: Container(
+                        color: AppColors.gray200,
+                        child: const Center(
+                          child: SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          ),
+                        ),
+                      ),
+                      error: Container(
                         color: AppColors.gray200,
                         child: const Center(
                           child: Icon(Icons.broken_image_outlined),

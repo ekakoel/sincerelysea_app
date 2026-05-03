@@ -67,17 +67,26 @@ class PostService {
           <String>{'public', 'followers', 'private'}.contains(visibility)
           ? visibility
           : 'public';
-      final DocumentSnapshot<Map<String, dynamic>> userDoc = await _firestore
-          .collection('users')
-          .doc(user.uid)
-          .get();
-      final Map<String, dynamic> userData =
-          userDoc.data() ?? <String, dynamic>{};
-      final String username =
-          userData['username']?.toString() ??
-          user.displayName ??
-          user.email?.split('@')[0] ??
-          'Anonymous';
+      String username =
+          user.displayName?.trim().isNotEmpty == true
+          ? user.displayName!.trim()
+          : (user.email?.split('@')[0] ?? 'Anonymous');
+      try {
+        final DocumentSnapshot<Map<String, dynamic>> userDoc = await _firestore
+            .collection('users')
+            .doc(user.uid)
+            .get()
+            .timeout(const Duration(seconds: 3));
+        final Map<String, dynamic> userData =
+            userDoc.data() ?? <String, dynamic>{};
+        final String? profileUsername = userData['username']?.toString().trim();
+        if (profileUsername != null && profileUsername.isNotEmpty) {
+          username = profileUsername;
+        }
+      } catch (_) {
+        // Firestore profile lookup is best-effort only. Post creation should
+        // still proceed using Firebase Auth fallback identity data.
+      }
       final List<String> locationKeywords = _buildLocationKeywords(
         location?.trim() ?? '',
       );
@@ -85,7 +94,7 @@ class PostService {
       final String normalizedType =
           type.trim().toLowerCase() == 'product' ? 'product' : 'post';
       final String normalizedProductId = productId?.trim() ?? '';
-      await _firestore.collection('posts').add({
+      final Map<String, dynamic> payload = <String, dynamic>{
         'content': content.trim(),
         'username': username,
         'imageUrl': imageUrl?.trim(),
@@ -103,9 +112,29 @@ class PostService {
         'likes': [],
         'commentCount': 0,
         'shareCount': 0,
-      });
-      await TelemetryService.instance.logPostCreated();
+      };
+      try {
+        await _createPostDocument(payload);
+      } on FirebaseException catch (e) {
+        if (e.code != 'unavailable') {
+          rethrow;
+        }
+        try {
+          await _firestore.enableNetwork();
+        } catch (_) {}
+        await Future<void>.delayed(const Duration(milliseconds: 600));
+        await _createPostDocument(payload);
+      }
+      try {
+        await TelemetryService.instance.logPostCreated();
+      } catch (_) {
+        // Telemetry must never block post creation success.
+      }
     }
+  }
+
+  Future<void> _createPostDocument(Map<String, dynamic> payload) {
+    return _firestore.collection('posts').add(payload);
   }
 
   // Upload image to Firebase Storage

@@ -23,6 +23,19 @@ class TelemetryService {
     await _analytics.logEvent(name: 'follow_user');
   }
 
+  Future<void> logShopProductCreated({
+    required String productId,
+    required String category,
+  }) async {
+    await _analytics.logEvent(
+      name: 'shop_product_created',
+      parameters: <String, Object>{
+        'product_id': productId,
+        'category': category,
+      },
+    );
+  }
+
   Future<void> logSharePost({
     required String method,
     String? postId,

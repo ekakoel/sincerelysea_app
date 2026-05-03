@@ -1,30 +1,16 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:sincerelysea/services/admin_service.dart';
 
 class CommunityManagementService {
   CommunityManagementService();
 
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseAuth _auth = FirebaseAuth.instance;
+  final AdminService _adminService = AdminService();
 
   Future<bool> canCurrentUserManageCommunity() async {
-    final User? user = _auth.currentUser;
-    if (user == null) {
-      return false;
-    }
-    final DocumentSnapshot<Map<String, dynamic>> snapshot = await _firestore
-        .collection('users')
-        .doc(user.uid)
-        .get();
-    final Map<String, dynamic> data = snapshot.data() ?? <String, dynamic>{};
-    if (data['role']?.toString().trim().toLowerCase() != 'admin') {
-      return false;
-    }
-    final List<dynamic>? scopes = data['adminScopes'] as List<dynamic>?;
-    if (scopes == null || scopes.isEmpty) {
-      return true;
-    }
-    return scopes.map((dynamic scope) => scope.toString()).contains('community');
+    return _adminService.hasCurrentUserScope('community');
   }
 
   Stream<QuerySnapshot<Map<String, dynamic>>> reportsStream({

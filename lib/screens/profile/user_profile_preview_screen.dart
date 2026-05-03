@@ -47,7 +47,9 @@ class UserProfilePreviewScreen extends StatelessWidget {
             final String? photoUrl = data['photoUrl']?.toString();
             final bool isPrivate = data['isPrivate'] == true;
             final bool isAdmin =
-                data['role']?.toString().trim().toLowerCase() == 'admin';
+                <String>{'admin', 'developer'}.contains(
+                  data['role']?.toString().trim().toLowerCase(),
+                );
 
             return Scaffold(
               appBar: AppBar(

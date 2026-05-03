@@ -87,7 +87,7 @@ class ProductCreationData {
 class CreatePostRequest {
   const CreatePostRequest({
     required this.caption,
-    required this.imageFile,
+    this.imageFile,
     required this.location,
     required this.geoPoint,
     required this.hashtags,
@@ -95,7 +95,7 @@ class CreatePostRequest {
   });
 
   final String caption;
-  final File imageFile;
+  final File? imageFile;
   final String location;
   final GeoPoint? geoPoint;
   final List<String> hashtags;
@@ -308,7 +308,23 @@ Future<void> showCreatePostDialog(
   final ProductService productService = rootContext.read<ProductService>();
   final String barrierLabel =
       MaterialLocalizations.of(rootContext).modalBarrierDismissLabel;
-  final bool canCreateProduct = await productService.isCurrentUserAdmin();
+  bool canCreateProduct = false;
+  try {
+    canCreateProduct = await productService
+        .isCurrentUserAdmin()
+        .timeout(const Duration(seconds: 3));
+  } catch (_) {
+    canCreateProduct = false;
+    if (rootContext.mounted) {
+      ScaffoldMessenger.of(rootContext).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Post composer opened with basic mode. Product mode is temporarily unavailable.',
+          ),
+        ),
+      );
+    }
+  }
   if (!rootContext.mounted) {
     return;
   }
@@ -1152,13 +1168,14 @@ Future<void> showCreatePostDialog(
                                         );
                                         return;
                                       }
-                                      if (selectedImage == null) {
+                                      if (trimmedContent.isEmpty &&
+                                          selectedImage == null) {
                                         ScaffoldMessenger.of(
                                           rootContext,
                                         ).showSnackBar(
                                           const SnackBar(
                                             content: Text(
-                                              'Please add an image first',
+                                              'Please add a caption or image first',
                                             ),
                                           ),
                                         );
@@ -1277,7 +1294,7 @@ Future<void> showCreatePostDialog(
                                       final CreatePostRequest request =
                                           CreatePostRequest(
                                             caption: trimmedContent,
-                                            imageFile: selectedImage!,
+                                            imageFile: selectedImage,
                                             location: locationController.text
                                                 .trim(),
                                             geoPoint: selectedGeoPoint,
@@ -1321,7 +1338,7 @@ Future<void> showCreatePostDialog(
                                       final CreatePostRequest finalRequest =
                                           CreatePostRequest(
                                             caption: request.caption,
-                                            imageFile: selectedImage!,
+                                            imageFile: selectedImage,
                                             location: request.location,
                                             geoPoint: request.geoPoint,
                                             hashtags: request.hashtags,
@@ -1582,55 +1599,61 @@ class HomeScreenState extends State<HomeScreen> {
 
     logStage('Create post flow started');
     try {
-      currentStage = 'upload:start';
-      logStage('Uploading image to Storage...');
-      final String? imageUrl = await postService
-          .uploadImage(
-            request.imageFile,
-            onProgress: (double progress) {
-              final int percent = (progress * 100)
-                  .round()
-                  .clamp(0, 100)
-                  .toInt();
-              if (mounted) {
-                setState(() => _uploadProgress = progress);
-              }
-              if (kDebugMode &&
-                  (_lastDebugLoggedPercent < 0 ||
-                      percent >= _lastDebugLoggedPercent + 25 ||
-                      percent == 100)) {
-                _lastDebugLoggedPercent = percent;
-                logStage('Upload progress: $percent%');
-              }
-              final bool shouldNotify =
-                  _lastNotifiedUploadPercent < 0 ||
-                  percent >= _lastNotifiedUploadPercent + 5 ||
-                  percent == 100;
-              if (shouldNotify) {
-                _lastNotifiedUploadPercent = percent;
-                unawaited(
-                  LocalNotificationService.instance
-                      .showUploadProgressNotification(progress: percent),
-                );
-              }
-            },
-          )
-          .timeout(const Duration(seconds: 60));
-      currentStage = 'upload:done';
-      logStage('Upload finished');
-      if (imageUrl == null || imageUrl.trim().isEmpty) {
-        throw FirebaseException(
-          plugin: 'post_publish',
-          code: 'upload-empty-url',
-          message: 'Upload completed without download URL.',
+      String? imageUrl;
+      if (request.imageFile != null) {
+        currentStage = 'upload:start';
+        logStage('Uploading image to Storage...');
+        imageUrl = await postService
+            .uploadImage(
+              request.imageFile!,
+              onProgress: (double progress) {
+                final int percent = (progress * 100)
+                    .round()
+                    .clamp(0, 100)
+                    .toInt();
+                if (mounted) {
+                  setState(() => _uploadProgress = progress);
+                }
+                if (kDebugMode &&
+                    (_lastDebugLoggedPercent < 0 ||
+                        percent >= _lastDebugLoggedPercent + 25 ||
+                        percent == 100)) {
+                  _lastDebugLoggedPercent = percent;
+                  logStage('Upload progress: $percent%');
+                }
+                final bool shouldNotify =
+                    _lastNotifiedUploadPercent < 0 ||
+                    percent >= _lastNotifiedUploadPercent + 5 ||
+                    percent == 100;
+                if (shouldNotify) {
+                  _lastNotifiedUploadPercent = percent;
+                  unawaited(
+                    LocalNotificationService.instance
+                        .showUploadProgressNotification(progress: percent),
+                  );
+                }
+              },
+            )
+            .timeout(const Duration(seconds: 60));
+        currentStage = 'upload:done';
+        logStage('Upload finished');
+        if (imageUrl == null || imageUrl.trim().isEmpty) {
+          throw FirebaseException(
+            plugin: 'post_publish',
+            code: 'upload-empty-url',
+            message: 'Upload completed without download URL.',
+          );
+        }
+        unawaited(
+          LocalNotificationService.instance.showUploadProgressNotification(
+            progress: 100,
+            isPublishing: true,
+          ),
         );
+      } else {
+        currentStage = 'upload:skipped';
+        logStage('No image selected, skipping upload');
       }
-      unawaited(
-        LocalNotificationService.instance.showUploadProgressNotification(
-          progress: 100,
-          isPublishing: true,
-        ),
-      );
       String? productId;
       if (request.productData != null) {
         currentStage = 'product:create:start';
@@ -1712,7 +1735,7 @@ class HomeScreenState extends State<HomeScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              'Post publish timed out at stage: $currentStage. Check connection and retry.',
+              'Post publish timed out at stage: $currentStage. Firestore may be unavailable or still provisioning. Check connection and retry.',
             ),
           ),
         );
@@ -1740,9 +1763,10 @@ class HomeScreenState extends State<HomeScreen> {
       await LocalNotificationService.instance
           .cancelUploadProgressNotification();
       _lastNotifiedUploadPercent = -1;
-      if (_isGeneratedSquarePreview(request.imageFile)) {
+      if (request.imageFile != null &&
+          _isGeneratedSquarePreview(request.imageFile!)) {
         try {
-          await request.imageFile.delete();
+          await request.imageFile!.delete();
         } catch (_) {}
       }
       if (mounted) {
@@ -1908,8 +1932,20 @@ class HomeScreenState extends State<HomeScreen> {
       appBar: AppBar(
         leading: IconButton(
           icon: const Icon(Icons.add),
-          onPressed: () {
-            showCreatePostDialog(context, onSubmit: _submitPostInBackground);
+          onPressed: () async {
+            try {
+              await showCreatePostDialog(
+                context,
+                onSubmit: _submitPostInBackground,
+              );
+            } catch (e) {
+              if (!context.mounted) {
+                return;
+              }
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text('Failed to open post composer: $e')),
+              );
+            }
           },
         ),
         title: const Text('Sincerelysea'),
@@ -4695,16 +4731,21 @@ class _SmoothPostImageState extends State<_SmoothPostImage> {
                 fit: BoxFit.cover,
                 memCacheWidth: 1080,
                 fadeInDuration: const Duration(milliseconds: 220),
-                placeholder: (BuildContext context, String _) => Container(
-                  color: AppColors.gray200,
-                  child: const Center(
-                    child: SizedBox(
-                      width: 20,
-                      height: 20,
-                      child: CircularProgressIndicator(strokeWidth: 2),
+                progressIndicatorBuilder:
+                    (
+                      BuildContext context,
+                      String _,
+                      DownloadProgress _,
+                    ) => Container(
+                      color: AppColors.gray200,
+                      child: const Center(
+                        child: SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        ),
+                      ),
                     ),
-                  ),
-                ),
                 errorWidget: (BuildContext context, String _, Object error) =>
                     Container(
                       color: AppColors.gray200,
@@ -4811,7 +4852,12 @@ class _AppCheckCachedNetworkImageState
       memCacheWidth: widget.memCacheWidth,
       fadeInDuration: const Duration(milliseconds: 220),
       httpHeaders: _httpHeaders,
-      placeholder: (BuildContext context, String _) => widget.placeholder,
+      progressIndicatorBuilder:
+          (
+            BuildContext context,
+            String _,
+            DownloadProgress _,
+          ) => widget.placeholder,
       errorWidget: (BuildContext context, String _, Object error) =>
           widget.error,
     );

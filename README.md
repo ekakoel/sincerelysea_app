@@ -247,4 +247,5 @@ This project is licensed under the MIT License.
 
 ## About SincerelySea
 
-SincerelySea hadir sebagai ruang digital untuk berbagi cerita yang tulus sekaligus membangun official store experience yang terhubung langsung dengan komunitasnya.
+SincerelySea hadir sebagai ruang digital untuk berbagi cerita yang tulus sekaligus membangun official store experience yang 
+terhubung langsung dengan komunitasnya.

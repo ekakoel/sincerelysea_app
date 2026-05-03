@@ -2,6 +2,27 @@
 
 Semua perubahan proyek wajib dicatat di file ini mulai sekarang.
 
+## 2026-04-13
+
+### Changed
+- Konfigurasi Android di `android/app/build.gradle.kts` disesuaikan agar `applicationId` mengikuti package Firebase client yang saat ini ada di `android/app/google-services.json` (`com.sincerelysea.app`), sambil mempertahankan `namespace` existing untuk meminimalkan perubahan struktur kode Android.
+- Konfigurasi Google Sign-In iOS disinkronkan dengan project Firebase aktif di `ios/Runner/GoogleService-Info.plist` dan `ios/Runner/Info.plist`, termasuk `CLIENT_ID`, `REVERSED_CLIENT_ID`, dan URL scheme callback yang benar untuk bundle `com.sincerelysea.app`.
+- `AppCheckHeaderService` sekarang menonaktifkan injeksi header App Check secara aman pada platform/versi OS Apple yang tidak mendukung provider attestation, sehingga warning `firebase_app_check/code-unsupported` tidak lagi berkembang menjadi gangguan UI.
+
+### Fixed
+- `AppCheckCachedNetworkImage` tidak lagi mengirim `placeholder` dan `progressIndicatorBuilder` secara bersamaan ke `CachedNetworkImage`, sehingga assertion `octo_image` saat register/login dengan akun Google tidak lagi terpancing oleh render gambar placeholder.
+- Konfigurasi Firebase proyek dipindahkan agar mengikuti project baru `SincerelySea` (`gen-lang-client-0026437130`) pada Android dan iOS.
+- Target iOS `Runner` sekarang memakai bundle identifier `com.sincerelysea.app` agar selaras dengan konfigurasi Firebase project baru.
+- File Firebase iOS di `ios/GoogleService-Info.plist`, `ios/Runner/GoogleService-Info.plist`, dan `ios/AppFrameworkInfo.plist` diperbarui agar menunjuk ke project `gen-lang-client-0026437130`.
+- `AuthService` sekarang memakai Android Google Sign-In `serverClientId` dari project Firebase baru agar login Google di Android tidak lagi memakai client ID project lama.
+- Alur `Create Post` diperbaiki agar post biasa tidak lagi mewajibkan gambar. Sekarang user bisa publish selama ada caption atau gambar, dan upload Storage hanya dijalankan jika file gambar memang dipilih.
+- Logging analytics setelah `posts.add(...)` di `PostService` dibuat best-effort agar kegagalan telemetry tidak lagi membuat publish post terlihat gagal walaupun dokumen Firestore sudah berhasil ditulis.
+- Lookup profil `users/{uid}` sebelum publish post di `PostService` dibuat best-effort dengan timeout pendek. Jika Firestore sementara `unavailable`, post tetap akan ditulis memakai fallback nama dari Firebase Auth.
+- Publish post sekarang otomatis mencoba sekali lagi jika Firestore mengembalikan `unavailable`, dengan re-enable network Firestore sebelum retry untuk membantu koneksi ke project Firebase baru yang masih belum stabil.
+- Konfigurasi Firebase CLI di `.firebaserc` dipindahkan ke project baru `gen-lang-client-0026437130` agar deploy rules berikutnya tidak lagi mengarah ke project lama.
+- Widget image berbasis App Check sekarang otomatis retry tanpa header jika request image Firebase Storage gagal. Ini membantu menampilkan image legacy dari bucket/project lama pada halaman selain post.
+- Kartu unavailable product di `saved_products_screen.dart` juga dipindahkan ke `AppCheckCachedNetworkImage` agar perilaku loading image konsisten dengan halaman lain.
+
 ## 2026-04-03
 
 ### Added

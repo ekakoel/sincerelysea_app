@@ -20,6 +20,7 @@ import 'package:sincerelysea/services/product_service.dart';
 import 'package:sincerelysea/services/support_service.dart';
 import 'package:sincerelysea/services/app_check_header_service.dart';
 import 'package:sincerelysea/services/sales_reporting_service.dart';
+import 'package:sincerelysea/services/shop_settings_service.dart';
 import 'package:sincerelysea/services/theme_service.dart';
 import 'package:sincerelysea/services/user_profile_service.dart';
 import 'package:sincerelysea/services/wishlist_service.dart';
@@ -28,10 +29,25 @@ import 'package:sincerelysea/services/community_management_service.dart';
 import 'package:sincerelysea/services/order_service.dart';
 import 'screens/splash/splash_redirect.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:flutter/foundation.dart';
+import 'package:sincerelysea/firebase_options.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await Firebase.initializeApp();
+  FirebaseApp firebaseApp;
+  try {
+    firebaseApp = await Firebase.initializeApp(
+      options: DefaultFirebaseOptions.currentPlatform,
+    );
+  } on UnsupportedError {
+    // Fallback for platforms that still use native config files.
+    firebaseApp = await Firebase.initializeApp();
+  }
+  if (kDebugMode) {
+    debugPrint(
+      'Firebase initialized: projectId=${firebaseApp.options.projectId}, appId=${firebaseApp.options.appId}, platform=${defaultTargetPlatform.name}',
+    );
+  }
   try {
     await AppCheckHeaderService.instance.initialize();
   } catch (_) {
@@ -62,6 +78,7 @@ class MyApp extends StatelessWidget {
         ),
         Provider<OrderService>(create: (_) => OrderService()),
         Provider<SalesReportingService>(create: (_) => SalesReportingService()),
+        Provider<ShopSettingsService>(create: (_) => ShopSettingsService()),
         Provider<SupportService>(create: (_) => SupportService()),
         Provider<FollowService>(create: (_) => FollowService()),
         Provider<UserProfileService>(create: (_) => UserProfileService()),

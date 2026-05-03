@@ -9,6 +9,7 @@ class AppCheckHeaderService {
   String? _token;
   DateTime? _expiresAt;
   bool _initialized = false;
+  bool _disabled = false;
   Future<void>? _initializing;
 
   bool _isFirebaseStorageHttpUrl(String value) {
@@ -22,7 +23,7 @@ class AppCheckHeaderService {
   }
 
   Future<void> initialize() async {
-    if (_initialized) {
+    if (_initialized || _disabled) {
       return;
     }
     if (_initializing != null) {
@@ -38,22 +39,35 @@ class AppCheckHeaderService {
   }
 
   Future<void> _initializeInternal() async {
-    await FirebaseAppCheck.instance.activate(
-      providerAndroid: kDebugMode
-          ? const AndroidDebugProvider()
-          : const AndroidPlayIntegrityProvider(),
-      providerApple: kDebugMode
-          ? const AppleDebugProvider()
-          : const AppleAppAttestWithDeviceCheckFallbackProvider(),
-    );
+    try {
+      await FirebaseAppCheck.instance.activate(
+        providerAndroid: kDebugMode
+            ? const AndroidDebugProvider()
+            : const AndroidPlayIntegrityProvider(),
+        providerApple: kDebugMode
+            ? const AppleDebugProvider()
+            : const AppleAppAttestWithDeviceCheckFallbackProvider(),
+      );
 
-    await FirebaseAppCheck.instance.setTokenAutoRefreshEnabled(true);
-    _initialized = true;
-    await _refreshToken(force: true);
+      await FirebaseAppCheck.instance.setTokenAutoRefreshEnabled(true);
+      _initialized = true;
+      await _refreshToken(force: true);
+    } on FirebaseException catch (e) {
+      if (_isUnsupportedFirebaseAppCheckError(e)) {
+        _disableService();
+        if (kDebugMode) {
+          debugPrint(
+            'AppCheckHeaderService disabled: App Check provider unsupported on this platform/OS.',
+          );
+        }
+        return;
+      }
+      rethrow;
+    }
   }
 
   Future<void> _refreshToken({bool force = false}) async {
-    if (!_initialized) {
+    if (!_initialized || _disabled) {
       return;
     }
 
@@ -65,7 +79,22 @@ class AppCheckHeaderService {
       return;
     }
 
-    final String? token = await FirebaseAppCheck.instance.getToken(force);
+    String? token;
+    try {
+      token = await FirebaseAppCheck.instance.getToken(force);
+    } on FirebaseException catch (e) {
+      if (_isUnsupportedFirebaseAppCheckError(e)) {
+        _disableService();
+        if (kDebugMode) {
+          debugPrint(
+            'AppCheckHeaderService disabled while fetching token: provider unsupported on this platform/OS.',
+          );
+        }
+        return;
+      }
+      rethrow;
+    }
+
     if (token == null || token.isEmpty) {
       _token = null;
       _expiresAt = null;
@@ -77,7 +106,7 @@ class AppCheckHeaderService {
   }
 
   Future<Map<String, String>> headersFor(String imageUrl) async {
-    if (!_isFirebaseStorageHttpUrl(imageUrl)) {
+    if (!_isFirebaseStorageHttpUrl(imageUrl) || _disabled) {
       return const <String, String>{};
     }
 
@@ -99,5 +128,19 @@ class AppCheckHeaderService {
     }
 
     return <String, String>{'X-Firebase-AppCheck': token};
+  }
+
+  bool _isUnsupportedFirebaseAppCheckError(FirebaseException e) {
+    if (e.plugin != 'firebase_app_check') {
+      return false;
+    }
+    return e.code == 'unsupported' || e.code == 'code-unsupported';
+  }
+
+  void _disableService() {
+    _disabled = true;
+    _initialized = false;
+    _token = null;
+    _expiresAt = null;
   }
 }

@@ -4,6 +4,12 @@ import 'package:firebase_auth/firebase_auth.dart';
 class AdminService {
   AdminService();
 
+  static const List<String> supportedRoles = <String>[
+    'user',
+    'admin',
+    'developer',
+  ];
+
   static const List<String> supportedScopes = <String>[
     'products',
     'orders',
@@ -20,11 +26,29 @@ class AdminService {
     return isAdminData(data);
   }
 
+  Future<bool> isCurrentUserDeveloper() async {
+    final Map<String, dynamic>? data = await _currentUserData();
+    return isDeveloperData(data);
+  }
+
+  String roleFromData(Map<String, dynamic>? data) {
+    final String role = data?['role']?.toString().trim().toLowerCase() ?? 'user';
+    return supportedRoles.contains(role) ? role : 'user';
+  }
+
   bool isAdminData(Map<String, dynamic>? data) {
-    return data?['role']?.toString().trim().toLowerCase() == 'admin';
+    final String role = roleFromData(data);
+    return role == 'admin' || role == 'developer';
+  }
+
+  bool isDeveloperData(Map<String, dynamic>? data) {
+    return roleFromData(data) == 'developer';
   }
 
   List<String> adminScopesFromData(Map<String, dynamic>? data) {
+    if (isDeveloperData(data)) {
+      return List<String>.from(supportedScopes);
+    }
     final List<dynamic>? rawScopes = data?['adminScopes'] as List<dynamic>?;
     if (rawScopes == null || rawScopes.isEmpty) {
       return List<String>.from(supportedScopes);
@@ -73,7 +97,7 @@ class AdminService {
   Stream<QuerySnapshot<Map<String, dynamic>>> usersStream() {
     return _firestore
         .collection('users')
-        .orderBy('usernameLower')
+        .orderBy('createdAt', descending: true)
         .snapshots();
   }
 
@@ -93,7 +117,11 @@ class AdminService {
     await updateUserAccess(
       userId: userId,
       role: role,
-      adminScopes: role.trim().toLowerCase() == 'admin'
+      adminScopes: role.trim().toLowerCase() == 'user'
+          ? const <String>[]
+          : role.trim().toLowerCase() == 'developer'
+          ? List<String>.from(supportedScopes)
+          : role.trim().toLowerCase() == 'admin'
           ? adminScopesFromData(targetData)
           : const <String>[],
     );
@@ -105,7 +133,7 @@ class AdminService {
     required List<String> adminScopes,
   }) async {
     final String normalizedRole = role.trim().toLowerCase();
-    if (!<String>{'user', 'admin'}.contains(normalizedRole)) {
+    if (!supportedRoles.contains(normalizedRole)) {
       throw ArgumentError.value(role, 'role', 'Unsupported role.');
     }
     if (!await canCurrentUserManageAdminAccess()) {
@@ -128,16 +156,17 @@ class AdminService {
         actorSnapshot.data() ?? <String, dynamic>{};
     final Map<String, dynamic> targetData =
         targetSnapshot.data() ?? <String, dynamic>{};
-    final String previousRole =
-        targetData['role']?.toString().trim().toLowerCase() == 'admin'
-        ? 'admin'
-        : 'user';
-    final List<String> previousScopes = previousRole == 'admin'
-        ? adminScopesFromData(targetData)
-        : const <String>[];
-    final List<String> normalizedScopes = normalizedRole == 'admin'
-        ? _normalizeScopes(adminScopes)
-        : const <String>[];
+    final String previousRole = roleFromData(targetData);
+    final List<String> previousScopes = previousRole == 'user'
+        ? const <String>[]
+        : adminScopesFromData(targetData);
+    final List<String> normalizedScopes = normalizedRole == 'user'
+        ? const <String>[]
+        : _normalizeScopes(adminScopes);
+    if (normalizedRole == 'developer' &&
+        normalizedScopes.length != supportedScopes.length) {
+      throw Exception('Developer accounts must keep all admin scopes enabled.');
+    }
     if (previousRole == normalizedRole &&
         _sameScopes(previousScopes, normalizedScopes)) {
       return;
@@ -153,7 +182,9 @@ class AdminService {
 
     batch.set(userRef, {
       'role': normalizedRole,
-      'adminScopes': normalizedScopes,
+      'adminScopes': normalizedRole == 'developer'
+          ? List<String>.from(supportedScopes)
+          : normalizedScopes,
       'updatedAt': FieldValue.serverTimestamp(),
     }, SetOptions(merge: true));
     batch.set(logRef, {
@@ -167,7 +198,9 @@ class AdminService {
       'previousRole': previousRole,
       'newRole': normalizedRole,
       'previousScopes': previousScopes,
-      'newScopes': normalizedScopes,
+      'newScopes': normalizedRole == 'developer'
+          ? List<String>.from(supportedScopes)
+          : normalizedScopes,
       'createdAt': FieldValue.serverTimestamp(),
     });
     await batch.commit();
@@ -179,7 +212,7 @@ class AdminService {
         .where((String scope) => supportedScopes.contains(scope))
         .toSet()
         .toList(growable: false);
-    return normalized;
+    return normalized.isEmpty ? List<String>.from(supportedScopes) : normalized;
   }
 
   bool _sameScopes(List<String> a, List<String> b) {

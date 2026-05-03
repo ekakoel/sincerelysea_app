@@ -180,7 +180,9 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                       seller.data?.data() ?? <String, dynamic>{};
                   final bool isAdmin =
                       product.managedByAdmins ||
-                      data['role']?.toString().trim().toLowerCase() == 'admin';
+                      <String>{'admin', 'developer'}.contains(
+                        data['role']?.toString().trim().toLowerCase(),
+                      );
                   final String sellerName = product.storeName;
                   return ListTile(
                     contentPadding: EdgeInsets.zero,

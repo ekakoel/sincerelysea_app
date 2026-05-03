@@ -235,6 +235,10 @@ class _AdminUserRolesScreenState extends State<AdminUserRolesScreen> {
                       items: const <DropdownMenuItem<String>>[
                         DropdownMenuItem(value: 'user', child: Text('User')),
                         DropdownMenuItem(value: 'admin', child: Text('Admin')),
+                        DropdownMenuItem(
+                          value: 'developer',
+                          child: Text('Developer'),
+                        ),
                       ],
                       onChanged: isSelf
                           ? null
@@ -244,8 +248,12 @@ class _AdminUserRolesScreenState extends State<AdminUserRolesScreen> {
                               }
                               setModalState(() {
                                 selectedRole = value;
-                                if (selectedRole != 'admin') {
+                                if (selectedRole == 'user') {
                                   selectedScopes.clear();
+                                } else if (selectedRole == 'developer') {
+                                  selectedScopes
+                                    ..clear()
+                                    ..addAll(AdminService.supportedScopes);
                                 } else if (selectedScopes.isEmpty) {
                                   selectedScopes.addAll(
                                     AdminService.supportedScopes,
@@ -254,7 +262,7 @@ class _AdminUserRolesScreenState extends State<AdminUserRolesScreen> {
                               });
                             },
                     ),
-                    if (selectedRole == 'admin') ...<Widget>[
+                    if (selectedRole != 'user') ...<Widget>[
                       const SizedBox(height: 16),
                       const Text(
                         'Admin Responsibilities',
@@ -266,10 +274,11 @@ class _AdminUserRolesScreenState extends State<AdminUserRolesScreen> {
                         runSpacing: 8,
                         children: AdminService.supportedScopes.map((String scope) {
                           final bool selected = selectedScopes.contains(scope);
+                          final bool lockScope = selectedRole == 'developer';
                           return FilterChip(
                             selected: selected,
                             label: Text(_scopeLabel(scope)),
-                            onSelected: isSelf
+                            onSelected: isSelf || lockScope
                                 ? null
                                 : (bool value) {
                                     setModalState(() {
@@ -288,6 +297,14 @@ class _AdminUserRolesScreenState extends State<AdminUserRolesScreen> {
                         'Use products for catalog managers, orders for operational order admins, finance for transaction reporting, community for moderation, and roles for access management.',
                         style: TextStyle(color: AppColors.black54, height: 1.35),
                       ),
+                      if (selectedRole == 'developer')
+                        const Padding(
+                          padding: EdgeInsets.only(top: 8),
+                          child: Text(
+                            'Developer role always has all scopes enabled.',
+                            style: TextStyle(color: AppColors.black54),
+                          ),
+                        ),
                     ],
                     const SizedBox(height: 20),
                     SizedBox(
@@ -404,6 +421,7 @@ class _UserAccessTile extends StatelessWidget {
         ? data['displayName'].toString().trim()
         : username;
     final String email = data['email']?.toString().trim() ?? '';
+    final String role = adminService.roleFromData(data);
     final bool isAdmin = adminService.isAdminData(data);
     final List<String> scopes = isAdmin
         ? adminService.adminScopesFromData(data)
@@ -434,7 +452,7 @@ class _UserAccessTile extends StatelessWidget {
               ),
             ),
             const SizedBox(width: 8),
-            _RoleChip(role: isAdmin ? 'admin' : 'user'),
+            _RoleChip(role: role),
           ],
         ),
         subtitle: Column(
@@ -509,16 +527,23 @@ class _RoleChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final bool isAdmin = role == 'admin';
+    final bool isDeveloper = role == 'developer';
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
       decoration: BoxDecoration(
-        color: isAdmin ? AppColors.black : AppColors.gray200,
+        color: isDeveloper
+            ? Colors.indigo
+            : (isAdmin ? AppColors.black : AppColors.gray200),
         borderRadius: BorderRadius.circular(999),
       ),
       child: Text(
-        isAdmin ? 'ADMIN' : 'USER',
+        switch (role) {
+          'developer' => 'DEVELOPER',
+          'admin' => 'ADMIN',
+          _ => 'USER',
+        },
         style: TextStyle(
-          color: isAdmin ? AppColors.white : AppColors.black87,
+          color: (isAdmin || isDeveloper) ? AppColors.white : AppColors.black87,
           fontSize: 11,
           fontWeight: FontWeight.w700,
           letterSpacing: 0.5,

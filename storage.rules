@@ -9,35 +9,45 @@ service firebase.storage {
     // Writer is restricted to file name prefixed by own uid: {uid}_{timestamp}.jpg
     match /post_images/{fileName} {
       allow read: if true;
-      allow write, delete: if signedIn()
+      allow write: if signedIn()
         && request.resource != null
         && request.resource.contentType.matches('image/.*')
+        && fileName.matches('^' + request.auth.uid + '_.*$');
+      allow delete: if signedIn()
         && fileName.matches('^' + request.auth.uid + '_.*$');
     }
 
     // Profile image path: profile_images/{uid}.jpg
     match /profile_images/{fileName} {
       allow read: if true;
-      allow write, delete: if signedIn()
+      allow write: if signedIn()
+        && fileName == request.auth.uid + '.jpg'
+        && request.resource != null
+        && request.resource.contentType.matches('image/.*');
+      allow delete: if signedIn()
         && fileName == request.auth.uid + '.jpg';
     }
 
     // Support attachment path: support_attachments/{uid}/{fileName}
     match /support_attachments/{uid}/{fileName} {
       allow read: if signedIn() && request.auth.uid == uid;
-      allow write, delete: if signedIn()
+      allow write: if signedIn()
         && request.auth.uid == uid
         && request.resource != null
         && request.resource.contentType.matches('image/.*');
+      allow delete: if signedIn()
+        && request.auth.uid == uid;
     }
 
     // Product gallery path: users/{uid}/products/{productId}/{fileName}
     match /users/{uid}/products/{productId}/{fileName} {
       allow read: if true;
-      allow write, delete: if signedIn()
+      allow write: if signedIn()
         && request.auth.uid == uid
         && request.resource != null
         && request.resource.contentType.matches('image/.*');
+      allow delete: if signedIn()
+        && request.auth.uid == uid;
     }
 
     // Deny other storage paths by default.

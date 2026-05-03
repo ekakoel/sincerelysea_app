@@ -33,7 +33,10 @@ class _ProductCatalogScreenState extends State<ProductCatalogScreen> {
   String _searchQuery = '';
   String _selectedCategory = 'All';
   String _selectedInventoryFilter = 'all';
+  double? _minPrice;
+  double? _maxPrice;
   bool _wishlistOnly = false;
+  List<String> _categories = const <String>['All'];
 
   @override
   void initState() {
@@ -76,12 +79,23 @@ class _ProductCatalogScreenState extends State<ProductCatalogScreen> {
       setState(() {
         _isLoading = true;
         _products.clear();
+        _categories = const <String>['All'];
         _lastDocument = null;
         _hasMore = true;
       });
     }
 
     try {
+      final List<String> categories = await context.read<ProductService>()
+          .getProductCategories();
+      if (mounted) {
+        setState(() {
+          _categories = <String>['All', ...categories];
+          if (!_categories.contains(_selectedCategory)) {
+            _selectedCategory = 'All';
+          }
+        });
+      }
       await _fetchProducts();
     } finally {
       if (mounted) {
@@ -109,7 +123,13 @@ class _ProductCatalogScreenState extends State<ProductCatalogScreen> {
         .getProductsPage(
           limit: _pageSize,
           startAfter: _lastDocument,
-          sort: _sortOption,
+          options: ProductQueryOptions(
+            sort: _sortOption,
+            category: _selectedCategory == 'All' ? null : _selectedCategory,
+            inventoryType: _selectedInventoryFilter,
+            minPrice: _minPrice,
+            maxPrice: _maxPrice,
+          ),
         );
 
     if (snapshot.docs.length < _pageSize) {
@@ -210,7 +230,7 @@ class _ProductCatalogScreenState extends State<ProductCatalogScreen> {
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
             children: <Widget>[
               _buildToolbar(),
-              const SizedBox(height: 16),
+              const SizedBox(height: 12),
               GridView.builder(
                 shrinkWrap: true,
                 physics: const NeverScrollableScrollPhysics(),
@@ -219,7 +239,7 @@ class _ProductCatalogScreenState extends State<ProductCatalogScreen> {
                   crossAxisCount: 2,
                   crossAxisSpacing: 12,
                   mainAxisSpacing: 12,
-                  childAspectRatio: 0.72,
+                  childAspectRatio: 0.67,
                 ),
                 itemBuilder: (BuildContext context, int index) {
                   return Container(
@@ -241,9 +261,25 @@ class _ProductCatalogScreenState extends State<ProductCatalogScreen> {
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
             children: <Widget>[
               _buildToolbar(),
-              const SizedBox(height: 120),
-              const Center(
-                child: Text('No products available yet.'),
+              const SizedBox(height: 80),
+              Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: AppColors.gray100,
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: AppColors.gray300),
+                ),
+                child: const Column(
+                  children: <Widget>[
+                    Icon(Icons.storefront_outlined, size: 36),
+                    SizedBox(height: 10),
+                    Text(
+                      'No products available yet.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                  ],
+                ),
               ),
             ],
           );
@@ -255,15 +291,22 @@ class _ProductCatalogScreenState extends State<ProductCatalogScreen> {
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
           children: <Widget>[
             _buildToolbar(),
-            const SizedBox(height: 16),
+            const SizedBox(height: 12),
             if (visibleProducts.isEmpty)
-              Padding(
-                padding: const EdgeInsets.only(top: 72),
+              Container(
+                margin: const EdgeInsets.only(top: 40),
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: AppColors.gray100,
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: AppColors.gray300),
+                ),
                 child: Center(
                   child: Text(
                     _wishlistOnly
                         ? 'No wishlisted products match this filter.'
-                        : 'No products match your search.',
+                        : 'No products match your filter.',
+                    textAlign: TextAlign.center,
                   ),
                 ),
               )
@@ -276,7 +319,7 @@ class _ProductCatalogScreenState extends State<ProductCatalogScreen> {
                   crossAxisCount: 2,
                   crossAxisSpacing: 12,
                   mainAxisSpacing: 12,
-                  childAspectRatio: 0.72,
+                  childAspectRatio: 0.67,
                 ),
                 itemBuilder: (BuildContext context, int index) {
                   if (index >= visibleProducts.length) {
@@ -314,129 +357,262 @@ class _ProductCatalogScreenState extends State<ProductCatalogScreen> {
   }
 
   Widget _buildToolbar() {
-    final Set<String> categorySet = <String>{'All'};
-    for (final Product product in _products) {
-      final String category = product.category.trim();
-      if (category.isNotEmpty) {
-        categorySet.add(category);
-      }
-    }
-    final List<String> categories = categorySet.toList(growable: false);
-
+    final int activeFilters = _activeFilterCount();
     return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
+        const Text(
+          'Discover Products',
+          style: TextStyle(fontSize: 22, fontWeight: FontWeight.w700),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          '${_products.length} items available',
+          style: const TextStyle(color: AppColors.black54),
+        ),
+        const SizedBox(height: 12),
         TextField(
           controller: _searchController,
-          decoration: const InputDecoration(
-            prefixIcon: Icon(Icons.search),
+          decoration: InputDecoration(
+            prefixIcon: const Icon(Icons.search),
             hintText: 'Search products',
+            suffixIcon: _searchQuery.isEmpty
+                ? null
+                : IconButton(
+                    onPressed: () {
+                      _searchController.clear();
+                      setState(() => _searchQuery = '');
+                    },
+                    icon: const Icon(Icons.close),
+                  ),
           ),
         ),
         const SizedBox(height: 12),
-        Row(
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
           children: <Widget>[
-            const Text(
-              'Sort by',
-              style: TextStyle(fontWeight: FontWeight.w600),
+            ActionChip(
+              avatar: const Icon(Icons.swap_vert, size: 18),
+              label: Text(_sortLabel(_sortOption)),
+              onPressed: _openSortSheet,
             ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                child: Wrap(
-                  spacing: 8,
-                  children: <Widget>[
-                    ChoiceChip(
-                      label: const Text('Newest'),
-                      selected: _sortOption == ProductSortOption.newest,
-                      onSelected: (_) => _changeSort(ProductSortOption.newest),
-                    ),
-                    ChoiceChip(
-                      label: const Text('Lowest Price'),
-                      selected:
-                          _sortOption == ProductSortOption.priceLowToHigh,
-                      onSelected: (_) => _changeSort(
-                        ProductSortOption.priceLowToHigh,
-                      ),
-                    ),
-                    ChoiceChip(
-                      label: const Text('Highest Price'),
-                      selected:
-                          _sortOption == ProductSortOption.priceHighToLow,
-                      onSelected: (_) => _changeSort(
-                        ProductSortOption.priceHighToLow,
-                      ),
-                    ),
-                  ],
-                ),
+            ActionChip(
+              avatar: const Icon(Icons.tune, size: 18),
+              label: Text(
+                activeFilters == 0 ? 'Filters' : 'Filters ($activeFilters)',
               ),
+              onPressed: _openFilterSheet,
+            ),
+            FilterChip(
+              selected: _wishlistOnly,
+              label: const Text('Wishlist'),
+              onSelected: (bool value) => setState(() => _wishlistOnly = value),
             ),
           ],
         ),
-        const SizedBox(height: 12),
+        const SizedBox(height: 10),
         SingleChildScrollView(
           scrollDirection: Axis.horizontal,
           child: Wrap(
             spacing: 8,
-            children: categories.map((String category) {
+            children: _categories.map((String category) {
               return ChoiceChip(
                 label: Text(category),
                 selected: _selectedCategory == category,
                 onSelected: (_) {
                   setState(() => _selectedCategory = category);
+                  _fetchInitialProducts();
                 },
               );
             }).toList(growable: false),
           ),
         ),
-        const SizedBox(height: 12),
-        Align(
-          alignment: Alignment.centerLeft,
-          child: Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: <Widget>[
-              ChoiceChip(
-                label: const Text('All Types'),
-                selected: _selectedInventoryFilter == 'all',
-                onSelected: (_) {
-                  setState(() => _selectedInventoryFilter = 'all');
-                },
-              ),
-              ChoiceChip(
-                label: const Text('Ready Stock'),
-                selected: _selectedInventoryFilter == 'ready_stock',
-                onSelected: (_) {
-                  setState(() => _selectedInventoryFilter = 'ready_stock');
-                },
-              ),
-              ChoiceChip(
-                label: const Text('Preorder'),
-                selected: _selectedInventoryFilter == 'preorder',
-                onSelected: (_) {
-                  setState(() => _selectedInventoryFilter = 'preorder');
-                },
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 12),
-        Align(
-          alignment: Alignment.centerLeft,
-          child: FilterChip(
-            selected: _wishlistOnly,
-            label: const Text('Wishlist Only'),
-            avatar: Icon(
-              _wishlistOnly ? Icons.favorite : Icons.favorite_border,
-              color: _wishlistOnly ? Colors.red : AppColors.gray700,
-              size: 18,
-            ),
-            onSelected: (bool value) {
-              setState(() => _wishlistOnly = value);
-            },
-          ),
-        ),
       ],
+    );
+  }
+
+  int _activeFilterCount() {
+    int count = 0;
+    if (_selectedInventoryFilter != 'all') {
+      count++;
+    }
+    if (_minPrice != null) {
+      count++;
+    }
+    if (_maxPrice != null) {
+      count++;
+    }
+    return count;
+  }
+
+  String _sortLabel(ProductSortOption sort) {
+    return switch (sort) {
+      ProductSortOption.newest => 'Newest',
+      ProductSortOption.bestSelling => 'Best Selling',
+      ProductSortOption.priceLowToHigh => 'Price: Low to High',
+      ProductSortOption.priceHighToLow => 'Price: High to Low',
+    };
+  }
+
+  Future<void> _openSortSheet() async {
+    ProductSortOption temp = _sortOption;
+    await showModalBottomSheet<void>(
+      context: context,
+      builder: (BuildContext bottomSheetContext) {
+        return StatefulBuilder(
+          builder: (BuildContext context, StateSetter setModalState) {
+            return Padding(
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  const Text(
+                    'Sort Products',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+                  ),
+                  const SizedBox(height: 12),
+                  ...ProductSortOption.values.map((ProductSortOption option) {
+                    return ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      title: Text(_sortLabel(option)),
+                      trailing: temp == option
+                          ? const Icon(Icons.check_circle, size: 20)
+                          : const Icon(Icons.circle_outlined, size: 20),
+                      onTap: () => setModalState(() => temp = option),
+                    );
+                  }),
+                  const SizedBox(height: 8),
+                  SizedBox(
+                    width: double.infinity,
+                    child: FilledButton(
+                      onPressed: () async {
+                        Navigator.of(bottomSheetContext).pop();
+                        await _changeSort(temp);
+                      },
+                      child: const Text('Apply Sort'),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Future<void> _openFilterSheet() async {
+    String inventory = _selectedInventoryFilter;
+    final TextEditingController minController = TextEditingController(
+      text: _minPrice?.toStringAsFixed(0) ?? '',
+    );
+    final TextEditingController maxController = TextEditingController(
+      text: _maxPrice?.toStringAsFixed(0) ?? '',
+    );
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      builder: (BuildContext bottomSheetContext) {
+        return StatefulBuilder(
+          builder: (BuildContext context, StateSetter setModalState) {
+            return Padding(
+              padding: EdgeInsets.fromLTRB(
+                16,
+                16,
+                16,
+                MediaQuery.of(bottomSheetContext).viewInsets.bottom + 24,
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  const Text(
+                    'Filter Products',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+                  ),
+                  const SizedBox(height: 12),
+                  Wrap(
+                    spacing: 8,
+                    children: <String>['all', 'ready_stock', 'preorder'].map((
+                      String value,
+                    ) {
+                      return ChoiceChip(
+                        selected: inventory == value,
+                        label: Text(
+                          switch (value) {
+                            'ready_stock' => 'Ready Stock',
+                            'preorder' => 'Preorder',
+                            _ => 'All Types',
+                          },
+                        ),
+                        onSelected: (_) => setModalState(() => inventory = value),
+                      );
+                    }).toList(growable: false),
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: <Widget>[
+                      Expanded(
+                        child: TextField(
+                          controller: minController,
+                          keyboardType: TextInputType.number,
+                          decoration: const InputDecoration(labelText: 'Min Price'),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: TextField(
+                          controller: maxController,
+                          keyboardType: TextInputType.number,
+                          decoration: const InputDecoration(labelText: 'Max Price'),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: <Widget>[
+                      Expanded(
+                        child: OutlinedButton(
+                          onPressed: () {
+                            setState(() {
+                              _selectedInventoryFilter = 'all';
+                              _minPrice = null;
+                              _maxPrice = null;
+                            });
+                            Navigator.of(bottomSheetContext).pop();
+                            _fetchInitialProducts();
+                          },
+                          child: const Text('Reset'),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: FilledButton(
+                          onPressed: () {
+                            setState(() {
+                              _selectedInventoryFilter = inventory;
+                              _minPrice =
+                                  double.tryParse(minController.text.trim());
+                              _maxPrice =
+                                  double.tryParse(maxController.text.trim());
+                            });
+                            Navigator.of(bottomSheetContext).pop();
+                            _fetchInitialProducts();
+                          },
+                          child: const Text('Apply Filters'),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
     );
   }
 

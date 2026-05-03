@@ -47,6 +47,7 @@ class AppCheckCachedNetworkImage extends StatefulWidget {
 class _AppCheckCachedNetworkImageState
     extends State<AppCheckCachedNetworkImage> {
   bool _headersReady = false;
+  bool _bypassHeaders = false;
   Map<String, String> _httpHeaders = const <String, String>{};
 
   @override
@@ -60,6 +61,7 @@ class _AppCheckCachedNetworkImageState
     super.didUpdateWidget(oldWidget);
     if (oldWidget.imageUrl != widget.imageUrl) {
       _headersReady = false;
+      _bypassHeaders = false;
       _httpHeaders = const <String, String>{};
       _loadHeaders();
     }
@@ -105,10 +107,16 @@ class _AppCheckCachedNetworkImageState
       return widget.placeholder ?? const SizedBox.shrink();
     }
 
+    final Map<String, String> effectiveHeaders = _bypassHeaders
+        ? const <String, String>{}
+        : _httpHeaders;
+
     return CachedNetworkImage(
-      key: widget.imageKey,
+      key: ValueKey<String>(
+        '${widget.imageUrl}|${_bypassHeaders ? 'no_headers' : 'headers'}|${widget.imageKey ?? ''}',
+      ),
       imageUrl: widget.imageUrl,
-      httpHeaders: _httpHeaders,
+      httpHeaders: effectiveHeaders,
       fit: widget.fit,
       width: widget.width,
       height: widget.height,
@@ -120,14 +128,24 @@ class _AppCheckCachedNetworkImageState
       fadeInDuration:
           widget.fadeInDuration ?? const Duration(milliseconds: 220),
       imageBuilder: widget.imageBuilder,
-      placeholder: widget.placeholder == null
-          ? null
-          : (BuildContext context, String _) => widget.placeholder!,
-      progressIndicatorBuilder: widget.placeholder == null
-          ? null
-          : (BuildContext context, String _, DownloadProgress progress) =>
-                widget.placeholder!,
+      progressIndicatorBuilder:
+          widget.placeholder == null
+              ? null
+              : (
+                BuildContext context,
+                String _,
+                DownloadProgress _,
+              ) => widget.placeholder!,
       errorWidget: (BuildContext context, String _, Object error) {
+        if (!_bypassHeaders && _httpHeaders.isNotEmpty) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (!mounted) {
+              return;
+            }
+            setState(() => _bypassHeaders = true);
+          });
+          return widget.placeholder ?? const SizedBox.shrink();
+        }
         widget.onError?.call();
         return widget.error ?? const SizedBox.shrink();
       },
@@ -159,6 +177,7 @@ class AppCheckImageNetwork extends StatefulWidget {
 
 class _AppCheckImageNetworkState extends State<AppCheckImageNetwork> {
   bool _headersReady = false;
+  bool _bypassHeaders = false;
   Map<String, String> _httpHeaders = const <String, String>{};
 
   @override
@@ -172,6 +191,7 @@ class _AppCheckImageNetworkState extends State<AppCheckImageNetwork> {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.imageUrl != widget.imageUrl) {
       _headersReady = false;
+      _bypassHeaders = false;
       _httpHeaders = const <String, String>{};
       _loadHeaders();
     }
@@ -217,12 +237,19 @@ class _AppCheckImageNetworkState extends State<AppCheckImageNetwork> {
       return widget.placeholder ?? const SizedBox.shrink();
     }
 
+    final Map<String, String> effectiveHeaders = _bypassHeaders
+        ? const <String, String>{}
+        : _httpHeaders;
+
     return Image.network(
+      key: ValueKey<String>(
+        '${widget.imageUrl}|${_bypassHeaders ? 'no_headers' : 'headers'}',
+      ),
       widget.imageUrl,
       fit: widget.fit,
       width: widget.width,
       height: widget.height,
-      headers: _httpHeaders,
+      headers: effectiveHeaders,
       loadingBuilder:
           (
             BuildContext context,
@@ -235,8 +262,18 @@ class _AppCheckImageNetworkState extends State<AppCheckImageNetwork> {
             return widget.placeholder ?? child;
           },
       errorBuilder:
-          (BuildContext context, Object error, StackTrace? stackTrace) =>
-              widget.error ?? const SizedBox.shrink(),
+          (BuildContext context, Object error, StackTrace? stackTrace) {
+            if (!_bypassHeaders && _httpHeaders.isNotEmpty) {
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                if (!mounted) {
+                  return;
+                }
+                setState(() => _bypassHeaders = true);
+              });
+              return widget.placeholder ?? const SizedBox.shrink();
+            }
+            return widget.error ?? const SizedBox.shrink();
+          },
     );
   }
 }

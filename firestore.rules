@@ -5,19 +5,31 @@ service cloud.firestore {
       return request.auth != null;
     }
 
+    function currentUserRole() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role is string
+        ? get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role
+        : '';
+    }
+
     function isOwner(uid) {
       return isSignedIn() && request.auth.uid == uid;
     }
 
     function isAdmin() {
       return isSignedIn()
-        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+        && currentUserRole().matches('^(?i)(admin|developer)$');
+    }
+
+    function isDeveloper() {
+      return isSignedIn()
+        && currentUserRole().matches('^(?i)developer$');
     }
 
     function hasAdminScope(scope) {
       return isAdmin()
         && (
-          !(get(/databases/$(database)/documents/users/$(request.auth.uid)).data.adminScopes is list)
+          currentUserRole().matches('^(?i)developer$')
+          || !(get(/databases/$(database)/documents/users/$(request.auth.uid)).data.adminScopes is list)
           || get(/databases/$(database)/documents/users/$(request.auth.uid)).data.adminScopes.size() == 0
           || get(/databases/$(database)/documents/users/$(request.auth.uid)).data.adminScopes.hasAny([scope])
           || get(/databases/$(database)/documents/users/$(request.auth.uid)).data.adminScopes.hasAny(['all'])
@@ -86,9 +98,9 @@ service cloud.firestore {
           'allowComments',
           'updatedAt'
         ])
-        && request.resource.data.username == resource.data.username
-        && request.resource.data.usernameLower == resource.data.usernameLower
-        && request.resource.data.usernameChangedOnce == resource.data.usernameChangedOnce;
+        && request.resource.data.get('username', '') == resource.data.get('username', '')
+        && request.resource.data.get('usernameLower', '') == resource.data.get('usernameLower', '')
+        && request.resource.data.get('usernameChangedOnce', false) == resource.data.get('usernameChangedOnce', false);
     }
 
     function usernameChangedOneTime() {
@@ -98,15 +110,15 @@ service cloud.firestore {
           'usernameChangedOnce',
           'updatedAt'
         ])
-        && isValidUsername(request.resource.data.usernameLower)
-        && request.resource.data.username == request.resource.data.usernameLower
-        && request.resource.data.usernameLower != resource.data.usernameLower
-        && !(resource.data.usernameChangedOnce == true)
-        && request.resource.data.usernameChangedOnce == true;
+        && isValidUsername(request.resource.data.get('usernameLower', ''))
+        && request.resource.data.get('username', '') == request.resource.data.get('usernameLower', '')
+        && request.resource.data.get('usernameLower', '') != resource.data.get('usernameLower', '')
+        && !(resource.data.get('usernameChangedOnce', false) == true)
+        && request.resource.data.get('usernameChangedOnce', false) == true;
     }
 
     function validAdminRoleValue() {
-      return request.resource.data.role in ['user', 'admin'];
+      return request.resource.data.role in ['user', 'admin', 'developer'];
     }
 
     function validAdminScopes() {
@@ -330,8 +342,8 @@ service cloud.firestore {
       allow create: if hasAdminScope('roles')
         && request.resource.data.action in ['role_updated', 'admin_access_updated']
         && request.resource.data.actorUid == request.auth.uid
-        && request.resource.data.previousRole in ['user', 'admin']
-        && request.resource.data.newRole in ['user', 'admin'];
+        && request.resource.data.previousRole in ['user', 'admin', 'developer']
+        && request.resource.data.newRole in ['user', 'admin', 'developer'];
       allow update, delete: if false;
     }
 
@@ -525,6 +537,13 @@ service cloud.firestore {
         && request.resource.data.targetId == resource.data.targetId
         && request.resource.data.reason == resource.data.reason;
       allow delete: if false;
+    }
+
+    match /app_config/{configId} {
+      // App reads feature flags/runtime config from app_config.
+      allow read: if isSignedIn();
+      // Only developer can change application-level configuration.
+      allow create, update, delete: if isDeveloper();
     }
   }
 }

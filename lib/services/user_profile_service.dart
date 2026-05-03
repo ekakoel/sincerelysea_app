@@ -107,50 +107,69 @@ class UserProfileService {
         .collection('usernames')
         .doc(normalized);
 
-    await _firestore.runTransaction((Transaction tx) async {
-      final DocumentSnapshot<Map<String, dynamic>> userSnap = await tx.get(
-        userRef,
-      );
-      if (!userSnap.exists) {
-        throw Exception('User profile not found');
-      }
-      final Map<String, dynamic> currentData =
-          userSnap.data() ?? <String, dynamic>{};
+    try {
+      await _firestore.runTransaction((Transaction tx) async {
+        final DocumentSnapshot<Map<String, dynamic>> userSnap = await tx.get(
+          userRef,
+        );
+        if (!userSnap.exists) {
+          throw Exception('User profile not found');
+        }
+        final Map<String, dynamic> currentData =
+            userSnap.data() ?? <String, dynamic>{};
 
-      final bool changedOnce = currentData['usernameChangedOnce'] == true;
-      if (changedOnce) {
-        throw Exception('Username can only be changed once.');
-      }
+        final bool changedOnce = currentData['usernameChangedOnce'] == true;
+        if (changedOnce) {
+          throw Exception('Username can only be changed once.');
+        }
 
-      final String oldLower = currentData['usernameLower']?.toString() ?? '';
-      if (oldLower == normalized) {
+        final String oldLower = currentData['usernameLower']?.toString() ?? '';
+        if (oldLower == normalized) {
+          throw Exception(
+            'New username must be different from current username.',
+          );
+        }
+
+        final DocumentSnapshot<Map<String, dynamic>> newSnap = await tx.get(
+          newUsernameRef,
+        );
+        if (newSnap.exists) {
+          throw Exception('Username is already taken.');
+        }
+
+        tx.set(newUsernameRef, {
+          'uid': user.uid,
+          'username': normalized,
+          'createdAt': FieldValue.serverTimestamp(),
+        });
+
+        if (oldLower.isNotEmpty) {
+          final DocumentReference<Map<String, dynamic>> oldUsernameRef = _firestore
+              .collection('usernames')
+              .doc(oldLower);
+          final DocumentSnapshot<Map<String, dynamic>> oldUsernameSnap = await tx
+              .get(oldUsernameRef);
+          final String oldUid = oldUsernameSnap.data()?['uid']?.toString() ?? '';
+          if (oldUsernameSnap.exists && oldUid == user.uid) {
+            tx.delete(oldUsernameRef);
+          }
+        }
+
+        tx.update(userRef, {
+          'username': normalized,
+          'usernameLower': normalized,
+          'usernameChangedOnce': true,
+          'updatedAt': FieldValue.serverTimestamp(),
+        });
+      });
+    } on FirebaseException catch (e) {
+      if (e.code == 'permission-denied') {
         throw Exception(
-          'New username must be different from current username.',
+          'Permission denied saat ganti username. Pastikan Firestore rules terbaru sudah dideploy.',
         );
       }
-
-      final DocumentSnapshot<Map<String, dynamic>> newSnap = await tx.get(
-        newUsernameRef,
-      );
-      if (newSnap.exists) {
-        throw Exception('Username is already taken.');
-      }
-
-      tx.set(newUsernameRef, {
-        'uid': user.uid,
-        'username': normalized,
-        'createdAt': FieldValue.serverTimestamp(),
-      });
-      if (oldLower.isNotEmpty) {
-        tx.delete(_firestore.collection('usernames').doc(oldLower));
-      }
-      tx.update(userRef, {
-        'username': normalized,
-        'usernameLower': normalized,
-        'usernameChangedOnce': true,
-        'updatedAt': FieldValue.serverTimestamp(),
-      });
-    });
+      rethrow;
+    }
   }
 
   Future<String> uploadProfilePhoto(File imageFile) async {

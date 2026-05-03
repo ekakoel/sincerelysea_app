@@ -3,6 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:sincerelysea/models/cart_item.dart';
 import 'package:sincerelysea/models/order.dart' as app_order;
 import 'package:sincerelysea/models/product.dart';
+import 'package:sincerelysea/services/admin_service.dart';
 import 'package:sincerelysea/services/sales_reporting_service.dart';
 
 class CheckoutInfo {
@@ -21,6 +22,7 @@ class OrderService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final SalesReportingService _salesReportingService = SalesReportingService();
+  final AdminService _adminService = AdminService();
   static const Set<String> _allowedStatuses = <String>{
     'pending',
     'cancelled',
@@ -34,23 +36,7 @@ class OrderService {
       _firestore.collection('orders');
 
   Future<bool> _isCurrentUserAdmin() async {
-    final User? user = _auth.currentUser;
-    if (user == null) {
-      return false;
-    }
-    final DocumentSnapshot<Map<String, dynamic>> snapshot = await _firestore
-        .collection('users')
-        .doc(user.uid)
-        .get();
-    final Map<String, dynamic> data = snapshot.data() ?? <String, dynamic>{};
-    if (data['role']?.toString().trim().toLowerCase() != 'admin') {
-      return false;
-    }
-    final List<dynamic>? scopes = data['adminScopes'] as List<dynamic>?;
-    if (scopes == null || scopes.isEmpty) {
-      return true;
-    }
-    return scopes.map((dynamic scope) => scope.toString()).contains('orders');
+    return _adminService.hasCurrentUserScope('orders');
   }
 
   Stream<QuerySnapshot<Map<String, dynamic>>> myOrdersStream() {

@@ -86,10 +86,13 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                   const SizedBox(width: 12),
                   Expanded(
                     child: _MetricCard(
-                      label: 'Admins',
+                      label: 'Privileged',
                       stream: FirebaseFirestore.instance
                           .collection('users')
-                          .where('role', isEqualTo: 'admin')
+                          .where('role', whereIn: const <String>[
+                            'admin',
+                            'developer',
+                          ])
                           .snapshots(),
                     ),
                   ),

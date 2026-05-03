@@ -269,7 +269,9 @@ class _ProfileHeader extends StatelessWidget {
         profileData['username']?.toString() ??
         _emailPrefix(user.email).toLowerCase();
     final bool isAdmin =
-        profileData['role']?.toString().trim().toLowerCase() == 'admin';
+        <String>{'admin', 'developer'}.contains(
+          profileData['role']?.toString().trim().toLowerCase(),
+        );
     final String? avatarUrl =
         profileData['photoUrl']?.toString().isNotEmpty == true
         ? profileData['photoUrl']?.toString()

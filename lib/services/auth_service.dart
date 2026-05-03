@@ -12,7 +12,7 @@ class AuthService {
   final GoogleSignIn _googleSignIn = GoogleSignIn.instance;
   bool _googleInitialized = false;
   static const String _androidServerClientId =
-      '215566920705-vgsplkm55ie45plp5ep2cg0qlsnls756.apps.googleusercontent.com';
+      '436229615260-jv6ds0j7foj27kmh4djomtebftgta8qf.apps.googleusercontent.com';
 
   Future<void> _ensureGoogleInitialized() async {
     if (_googleInitialized) return;
@@ -228,9 +228,17 @@ class AuthService {
     final DocumentReference<Map<String, dynamic>> userRef = _firestore
         .collection('users')
         .doc(user.uid);
-    final DocumentSnapshot<Map<String, dynamic>> snapshot = await userRef.get();
-    final Map<String, dynamic> existing =
-        snapshot.data() ?? <String, dynamic>{};
+    DocumentSnapshot<Map<String, dynamic>> snapshot;
+    try {
+      snapshot = await userRef.get();
+    } on FirebaseException catch (e) {
+      throw FirebaseAuthException(
+        code: 'firestore-profile-read-failed',
+        message:
+            'Gagal membaca profile user di Firestore. Cek koneksi Firebase project/rules. Detail: ${e.code}',
+      );
+    }
+    final Map<String, dynamic> existing = snapshot.data() ?? <String, dynamic>{};
 
     if (!snapshot.exists) {
       final String base = _slugifyUsername(
@@ -239,37 +247,53 @@ class AuthService {
       final String username = await _findAvailableUsername(base);
       final String usernameLower = username.toLowerCase();
 
-      await _firestore.collection('usernames').doc(usernameLower).set({
-        'uid': user.uid,
-        'username': username,
-        'createdAt': FieldValue.serverTimestamp(),
-      });
+      try {
+        await _firestore.collection('usernames').doc(usernameLower).set({
+          'uid': user.uid,
+          'username': username,
+          'createdAt': FieldValue.serverTimestamp(),
+        });
 
-      await userRef.set({
-        'uid': user.uid,
-        'email': user.email,
-        'displayName':
-            user.displayName ?? user.email?.split('@').first ?? 'Anonymous',
-        'photoUrl': user.photoURL ?? '',
-        'role': 'user',
-        'adminScopes': <String>[],
-        'username': username,
-        'usernameLower': usernameLower,
-        'usernameChangedOnce': false,
-        'createdAt': FieldValue.serverTimestamp(),
-        'updatedAt': FieldValue.serverTimestamp(),
-      }, SetOptions(merge: true));
+        await userRef.set({
+          'uid': user.uid,
+          'email': user.email,
+          'displayName':
+              user.displayName ?? user.email?.split('@').first ?? 'Anonymous',
+          'photoUrl': user.photoURL ?? '',
+          'role': 'user',
+          'adminScopes': <String>[],
+          'username': username,
+          'usernameLower': usernameLower,
+          'usernameChangedOnce': false,
+          'createdAt': FieldValue.serverTimestamp(),
+          'updatedAt': FieldValue.serverTimestamp(),
+        }, SetOptions(merge: true));
+      } on FirebaseException catch (e) {
+        throw FirebaseAuthException(
+          code: 'firestore-profile-create-failed',
+          message:
+              'Gagal membuat profile user di Firestore. Cek rules dan project Firebase yang aktif. Detail: ${e.code}',
+        );
+      }
       return;
     }
 
     // Existing document: only update fields allowed by firestore.rules usernameUnchanged().
-    await userRef.set({
-      'email': user.email,
-      'displayName':
-          user.displayName ?? user.email?.split('@').first ?? 'Anonymous',
-      'photoUrl': user.photoURL ?? existing['photoUrl'] ?? '',
-      'updatedAt': FieldValue.serverTimestamp(),
-    }, SetOptions(merge: true));
+    try {
+      await userRef.set({
+        'email': user.email,
+        'displayName':
+            user.displayName ?? user.email?.split('@').first ?? 'Anonymous',
+        'photoUrl': user.photoURL ?? existing['photoUrl'] ?? '',
+        'updatedAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+    } on FirebaseException catch (e) {
+      throw FirebaseAuthException(
+        code: 'firestore-profile-update-failed',
+        message:
+            'Gagal update profile user di Firestore. Cek rules dan struktur dokumen users/{uid}. Detail: ${e.code}',
+      );
+    }
   }
 
   String _slugifyUsername(String raw) {
