@@ -347,16 +347,37 @@ service cloud.firestore {
       allow update, delete: if false;
     }
 
+    # match /usernames/{usernameLower} {
+    #   allow read: if isSignedIn();
+    #   allow create: if isSignedIn()
+    #     && isValidUsername(usernameLower)
+    #     && request.resource.data.uid == request.auth.uid
+    #     && request.resource.data.username == usernameLower
+    #     && !exists(/databases/$(database)/documents/usernames/$(usernameLower));
+    #   allow delete: if isSignedIn()
+    #     && resource.data.uid == request.auth.uid;
+    #   allow update: if false;
+    # }
     match /usernames/{usernameLower} {
-      allow read: if isSignedIn();
+      # // Username availability must be readable before registration.
+      # // No sensitive user data is stored in this collection.
+      allow read: if isValidUsername(usernameLower);
+
+      // Only authenticated users can reserve a username.
       allow create: if isSignedIn()
         && isValidUsername(usernameLower)
         && request.resource.data.uid == request.auth.uid
         && request.resource.data.username == usernameLower
-        && !exists(/databases/$(database)/documents/usernames/$(usernameLower));
+        && !exists(
+          /databases/$(database)/documents/usernames/$(usernameLower)
+        );
+
+      # // Username documents cannot be modified after creation.
+      allow update: if false;
+
+      # // Only the owner can release their username.
       allow delete: if isSignedIn()
         && resource.data.uid == request.auth.uid;
-      allow update: if false;
     }
 
     match /users/{uid} {

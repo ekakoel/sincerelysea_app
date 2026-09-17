@@ -150,8 +150,94 @@ class _RegisterPageState extends State<RegisterPage> {
     return available;
   }
 
+  // Future<void> _register() async {
+  //   if (!_formKey.currentState!.validate()) return;
+  //   if (!_acceptedPolicies) {
+  //     ScaffoldMessenger.of(context).showSnackBar(
+  //       const SnackBar(
+  //         content: Text(
+  //           'Please accept the Privacy Policy and Terms of Service to continue',
+  //         ),
+  //       ),
+  //     );
+  //     return;
+  //   }
+  //   if (_usernameChecking) {
+  //     ScaffoldMessenger.of(context).showSnackBar(
+  //       const SnackBar(content: Text('Please wait for username check')),
+  //     );
+  //     return;
+  //   }
+  //   if (!await _ensureUsernameAvailableForSubmit()) {
+  //     if (mounted) {
+  //       ScaffoldMessenger.of(context).showSnackBar(
+  //         const SnackBar(content: Text('Please use another username')),
+  //       );
+  //     }
+  //     return;
+  //   }
+
+  //   setState(() => _loading = true);
+  //   try {
+  //     // 1. Create User
+  //     final user = await _auth.signUpWithEmail(
+  //       _emailController.text.trim(),
+  //       _passwordController.text.trim(),
+  //       username: _usernameController.text.trim(),
+  //     );
+
+  //     if (user != null) {
+  //       if (mounted) {
+  //         await showDialog(
+  //           context: context,
+  //           barrierDismissible: false,
+  //           builder: (context) => AlertDialog(
+  //             title: const Text('Verification Sent'),
+  //             content: Text(
+  //               'We have sent a verification link to ${_emailController.text.trim()}.\n\nPlease check your email and click the link to activate your account before logging in.',
+  //             ),
+  //             actions: [
+  //               TextButton(
+  //                 onPressed: () {
+  //                   Navigator.pop(context);
+  //                 },
+  //                 child: const Text('OK'),
+  //               ),
+  //             ],
+  //           ),
+  //         );
+  //         if (!mounted) {
+  //           return;
+  //         }
+  //         _goToLogin();
+  //       }
+  //     }
+  //   } on FirebaseAuthException catch (e) {
+  //     String message = AuthExceptionHandler.handleException(e);
+  //     if (e.code == 'username-already-in-use') {
+  //       message = 'Username already in use.';
+  //     }
+  //     if (mounted) {
+  //       ScaffoldMessenger.of(
+  //         context,
+  //       ).showSnackBar(SnackBar(content: Text(message)));
+  //     }
+  //   } catch (e) {
+  //     if (mounted) {
+  //       ScaffoldMessenger.of(
+  //         context,
+  //       ).showSnackBar(SnackBar(content: Text('Error: $e')));
+  //     }
+  //   } finally {
+  //     if (mounted) setState(() => _loading = false);
+  //   }
+  // }
   Future<void> _register() async {
-    if (!_formKey.currentState!.validate()) return;
+    if (!_formKey.currentState!.validate()) {
+      debugPrint('REGISTER: Form validation failed');
+      return;
+    }
+
     if (!_acceptedPolicies) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -162,74 +248,126 @@ class _RegisterPageState extends State<RegisterPage> {
       );
       return;
     }
+
     if (_usernameChecking) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please wait for username check')),
+        const SnackBar(
+          content: Text('Please wait for username check'),
+        ),
       );
-      return;
-    }
-    if (!await _ensureUsernameAvailableForSubmit()) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Please use another username')),
-        );
-      }
       return;
     }
 
     setState(() => _loading = true);
+
     try {
-      // 1. Create User
-      final user = await _auth.signUpWithEmail(
+      debugPrint('REGISTER: Starting registration process');
+
+      // Check username availability
+      debugPrint(
+        'REGISTER: Checking username: ${_usernameController.text.trim()}',
+      );
+
+      final bool usernameAvailable =
+          await _ensureUsernameAvailableForSubmit();
+
+      debugPrint(
+        'REGISTER: Username available = $usernameAvailable',
+      );
+
+      if (!usernameAvailable) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Please use another username'),
+            ),
+          );
+        }
+        return;
+      }
+
+      // Create Firebase Authentication user
+      debugPrint('REGISTER: Creating Firebase Authentication user');
+
+      final User? user = await _auth.signUpWithEmail(
         _emailController.text.trim(),
         _passwordController.text.trim(),
         username: _usernameController.text.trim(),
       );
 
-      if (user != null) {
-        if (mounted) {
-          await showDialog(
-            context: context,
-            barrierDismissible: false,
-            builder: (context) => AlertDialog(
-              title: const Text('Verification Sent'),
-              content: Text(
-                'We have sent a verification link to ${_emailController.text.trim()}.\n\nPlease check your email and click the link to activate your account before logging in.',
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () {
-                    Navigator.pop(context);
-                  },
-                  child: const Text('OK'),
-                ),
-              ],
-            ),
-          );
-          if (!mounted) {
-            return;
-          }
-          _goToLogin();
-        }
+      debugPrint(
+        'REGISTER: signUpWithEmail returned user = ${user?.uid}',
+      );
+
+      if (user == null) {
+        throw FirebaseAuthException(
+          code: 'registration-returned-null',
+          message: 'Registration failed: Firebase returned no user.',
+        );
       }
-    } on FirebaseAuthException catch (e) {
+
+      if (!mounted) return;
+
+      await showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => AlertDialog(
+          title: const Text('Verification Sent'),
+          content: Text(
+            'We have sent a verification link to '
+            '${_emailController.text.trim()}.\n\n'
+            'Please check your email and click the link '
+            'to activate your account before logging in.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.pop(context);
+              },
+              child: const Text('OK'),
+            ),
+          ],
+        ),
+      );
+
+      if (!mounted) return;
+
+      _goToLogin();
+    } on FirebaseAuthException catch (e, stackTrace) {
+      debugPrint(
+        'REGISTER FirebaseAuthException: ${e.code}',
+      );
+      debugPrint(
+        'REGISTER FirebaseAuthException message: ${e.message}',
+      );
+      debugPrintStack(stackTrace: stackTrace);
+
       String message = AuthExceptionHandler.handleException(e);
+
       if (e.code == 'username-already-in-use') {
         message = 'Username already in use.';
       }
+
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(message)));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(message)),
+        );
       }
-    } catch (e) {
+    } catch (e, stackTrace) {
+      debugPrint('REGISTER ERROR: $e');
+      debugPrintStack(stackTrace: stackTrace);
+
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Error: $e')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Registration failed: $e'),
+          ),
+        );
       }
     } finally {
-      if (mounted) setState(() => _loading = false);
+      if (mounted) {
+        setState(() => _loading = false);
+      }
     }
   }
 
