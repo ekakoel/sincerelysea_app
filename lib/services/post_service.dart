@@ -58,8 +58,6 @@ class PostService {
     GeoPoint? geo,
     List<String>? hashtags,
     String visibility = 'public',
-    String type = 'post',
-    String? productId,
   }) async {
     final user = _auth.currentUser;
     if (user != null && (content.trim().isNotEmpty || imageUrl != null)) {
@@ -90,10 +88,6 @@ class PostService {
         location?.trim() ?? '',
       );
       final List<String> sanitizedHashtags = _sanitizeHashtags(hashtags);
-      final String normalizedType = type.trim().toLowerCase() == 'product'
-          ? 'product'
-          : 'post';
-      final String normalizedProductId = productId?.trim() ?? '';
       final Map<String, dynamic> payload = <String, dynamic>{
         'content': content.trim(),
         'username': username,
@@ -106,8 +100,8 @@ class PostService {
         'uid': user.uid,
         'visibility': normalizedVisibility,
         'allowComments': 'everyone',
-        'type': normalizedType,
-        'productId': normalizedProductId.isEmpty ? null : normalizedProductId,
+        'type': 'post',
+        'productId': null,
         'timestamp': FieldValue.serverTimestamp(),
         'likes': [],
         'commentCount': 0,
@@ -515,15 +509,6 @@ class PostService {
     }
   }
 
-  bool _isLikelyHttpImageUrl(String value) {
-    final Uri? uri = Uri.tryParse(value.trim());
-    if (uri == null) {
-      return false;
-    }
-    return (uri.scheme == 'http' || uri.scheme == 'https') &&
-        uri.host.isNotEmpty;
-  }
-
   bool _isFirebaseStorageHttpUrl(String value) {
     final String url = value.trim();
     return url.startsWith('https://firebasestorage.googleapis.com/') ||
@@ -543,101 +528,5 @@ class PostService {
     } catch (_) {
       // Ignore storage cleanup errors so post deletion still succeeds.
     }
-  }
-
-  /// Audit posts imageUrl values to find invalid or legacy URL patterns.
-  /// Returns counts and sample post IDs for quick investigation.
-  Future<Map<String, dynamic>> auditPostImageUrls({int limit = 500}) async {
-    final QuerySnapshot<Map<String, dynamic>> snapshot = await _firestore
-        .collection('posts')
-        .orderBy('timestamp', descending: true)
-        .limit(limit)
-        .get();
-
-    int total = 0;
-    int empty = 0;
-    int invalidFormat = 0;
-    int gsScheme = 0;
-    int nonFirebaseHost = 0;
-    int valid = 0;
-
-    final List<String> sampleInvalidPostIds = <String>[];
-    final List<String> sampleGsPostIds = <String>[];
-
-    for (final QueryDocumentSnapshot<Map<String, dynamic>> doc
-        in snapshot.docs) {
-      total += 1;
-      final String imageUrl = doc.data()['imageUrl']?.toString().trim() ?? '';
-
-      if (imageUrl.isEmpty) {
-        empty += 1;
-        continue;
-      }
-
-      if (imageUrl.startsWith('gs://')) {
-        gsScheme += 1;
-        if (sampleGsPostIds.length < 20) {
-          sampleGsPostIds.add(doc.id);
-        }
-        continue;
-      }
-
-      if (!_isLikelyHttpImageUrl(imageUrl)) {
-        invalidFormat += 1;
-        if (sampleInvalidPostIds.length < 20) {
-          sampleInvalidPostIds.add(doc.id);
-        }
-        continue;
-      }
-
-      if (!_isFirebaseStorageHttpUrl(imageUrl)) {
-        nonFirebaseHost += 1;
-      }
-
-      valid += 1;
-    }
-
-    return <String, dynamic>{
-      'scanned': total,
-      'valid': valid,
-      'empty': empty,
-      'invalidFormat': invalidFormat,
-      'gsScheme': gsScheme,
-      'nonFirebaseHost': nonFirebaseHost,
-      'sampleInvalidPostIds': sampleInvalidPostIds,
-      'sampleGsPostIds': sampleGsPostIds,
-    };
-  }
-
-  /// Convert legacy gs:// URLs to HTTPS download URLs.
-  /// Returns number of updated documents.
-  Future<int> repairLegacyGsImageUrls({int limit = 500}) async {
-    final QuerySnapshot<Map<String, dynamic>> snapshot = await _firestore
-        .collection('posts')
-        .orderBy('timestamp', descending: true)
-        .limit(limit)
-        .get();
-
-    int updated = 0;
-
-    for (final QueryDocumentSnapshot<Map<String, dynamic>> doc
-        in snapshot.docs) {
-      final String imageUrl = doc.data()['imageUrl']?.toString().trim() ?? '';
-      if (!imageUrl.startsWith('gs://')) {
-        continue;
-      }
-
-      try {
-        final String downloadUrl = await _storage
-            .refFromURL(imageUrl)
-            .getDownloadURL();
-        await doc.reference.update({'imageUrl': downloadUrl});
-        updated += 1;
-      } catch (_) {
-        // Ignore failed conversion and continue scanning next docs.
-      }
-    }
-
-    return updated;
   }
 }

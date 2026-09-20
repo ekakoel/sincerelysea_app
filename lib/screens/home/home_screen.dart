@@ -30,6 +30,7 @@ import 'package:sincerelysea/services/local_notification_service.dart';
 import 'package:sincerelysea/services/moderation_service.dart';
 import 'package:sincerelysea/services/notification_center_service.dart';
 import 'package:sincerelysea/services/post_service.dart';
+import 'package:sincerelysea/services/product_service.dart';
 import 'package:sincerelysea/services/app_check_header_service.dart';
 import 'package:sincerelysea/services/wishlist_service.dart';
 import 'package:sincerelysea/utils/post_location_label.dart';
@@ -1247,7 +1248,6 @@ class HomeScreenState extends State<HomeScreen> {
             location: request.location,
             geo: request.geoPoint,
             hashtags: request.hashtags,
-            type: 'post',
           )
           .timeout(const Duration(seconds: 30));
       currentStage = 'firestore:write:done';

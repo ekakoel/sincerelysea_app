@@ -1,6 +1,6 @@
 # SincerelySea Master Product Blueprint
 
-**Status:** target product source of truth. **Current implementation authority:** repository evidence. **Last audited:** 2026-09-19.
+**Status:** target product source of truth. **Current implementation authority:** repository evidence. **Last audited:** 2026-09-20.
 
 ## What SincerelySea is
 
@@ -12,9 +12,9 @@ Users are visitors/registered customers, verified customers, verified owners, hi
 
 ## Repository evidence: current state
 
-Flutter/Firebase currently provides email and Google authentication, email activation for password users, username reservation, posts/comments/replies/likes/follows, block/report/hide controls, discovery/map, product catalog, product wishlists, cart, client-created orders, an official-store data convention, scoped admin UI, basic sales reporting, notifications, support tickets, App Check client activation, post sharing, and post-only deep links.
+Flutter/Firebase currently provides email and Google authentication, email activation for password users, username reservation, posts/comments/replies/likes/follows, block/report/hide controls, discovery/map, product catalog, product wishlists, cart, client-created orders, official-store presentation, notifications, support tickets, App Check client activation, post sharing, and post-only deep links. MOB-01 removes all mobile management UI and privileged callable clients; admin/developer accounts receive the same customer surface as ordinary accounts.
 
-Current primary navigation is **Home, Search, Explore (map), Shop, Profile**. Target navigation is **Home, Explore, +, Shop, Profile**, where Explore contains Discover and Map and `+` is contextual creation. There is one formatter test only; no emulator Rules, Functions, integration, Android device, or iOS device tests were found.
+Current primary navigation is **Home, Search, Explore (map), Shop, Profile**. The create-post action creates community posts only; existing official product posts remain readable. The separate backend website is the target management plane. The repository includes MOB-01 source-boundary tests plus SEC-01 emulator tests; broader integration, Android device, and iOS device coverage remains incomplete.
 
 ## Target account journeys
 
@@ -68,7 +68,7 @@ Historical claim -> validation -> Product instance/ownership -> Collection/histo
 
 ## Security non-negotiables
 
-Flutter is untrusted. It must never grant role, verification, official/endorsement state, ownership, claim approval, product price/stock authority, payment/order truth, order final status, attribution, points or reward balance. Use Auth custom claims; audited Cloud Functions/Cloud Run commands; payment-provider webhooks; App Check enforcement; idempotency; and Rules/Functions security tests.
+Flutter is untrusted and customer-only. It must never grant or present management for role, verification, official/endorsement state, ownership, claim approval, product price/stock authority, payment/order truth, order final status, moderation, finance, attribution, points or reward balance. Use Auth custom claims and a separate backend website backed by audited Cloud Functions/Cloud Run commands, payment-provider webhooks, App Check enforcement, idempotency, and Rules/Functions security tests.
 
 ## Target data model (incremental)
 

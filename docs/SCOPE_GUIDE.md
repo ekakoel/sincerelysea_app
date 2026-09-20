@@ -1,14 +1,14 @@
 # SincerelySea Scope Guide
 
-Dokumen ini menjelaskan pembagian tanggung jawab admin pada aplikasi `SincerelySea`.
+Dokumen ini menjelaskan pembagian otorisasi untuk backend management plane SincerelySea. Scope tetap menjadi bagian dari SEC-01, tetapi tidak membentuk menu atau route di Flutter.
 
 ## Tujuan
 
-Scope digunakan agar setiap admin hanya melihat area kerja yang relevan.
+Scope digunakan agar setiap operator backend hanya dapat mengakses area kerja yang relevan.
 
 Hal ini penting untuk:
 
-- menjaga UI tetap sederhana
+- menjaga backend management UI tetap sederhana
 - mengurangi kesalahan operasional
 - memudahkan AI/developer memahami siapa mengelola apa
 
@@ -18,15 +18,15 @@ Hal ini penting untuk:
 
 Tanggung jawab:
 
-- membuat product post
+- membuat dan menerbitkan official product post dari backend
 - mengelola katalog `SincerelySea Store`
 - mengatur stock, preorder, availability, dan metadata produk
 
 Area utama:
 
 - `products/{productId}`
-- `Manage Store Products`
-- product creation flow
+- backend catalog management
+- backend product creation/publishing flow
 
 ### `orders`
 
@@ -39,8 +39,8 @@ Tanggung jawab:
 Area utama:
 
 - `orders/{orderId}`
-- `Store Orders`
-- operational order management
+- backend order operations
+- fulfilment management
 
 ### `finance`
 
@@ -55,7 +55,7 @@ Area utama:
 
 - `sales_reports/{reportId}`
 - `journal_entries/{entryId}`
-- `Transaction Reports`
+- backend transaction reporting
 
 ### `community`
 
@@ -68,7 +68,7 @@ Tanggung jawab:
 Area utama:
 
 - `reports/{reportId}`
-- `Community Reports`
+- backend report moderation
 
 ### `roles`
 
@@ -79,9 +79,9 @@ Tanggung jawab:
 
 Area utama:
 
-- `users/{uid}.role`
-- `users/{uid}.adminScopes`
-- `Admin Access`
+- Firebase Auth custom claims `admin`, `developer`, dan `adminScopes`
+- server-written mirror `users/{uid}.role` dan `users/{uid}.adminScopes`
+- backend access-management UI
 
 ## Relasi Antar Scope
 
@@ -93,11 +93,14 @@ Area utama:
 
 Scope boleh digabung pada satu admin jika diperlukan, tetapi secara default sebaiknya tetap dipisah.
 
+Flutter tidak mengevaluasi scope untuk membuka management UI. Admin dan developer yang sign in ke aplikasi mobile memperoleh surface pelanggan yang sama dengan user lain.
+
 ## Aturan Implementasi Berikutnya
 
-1. Fitur baru harus ditempatkan ke scope yang jelas.
+1. Fitur manajemen baru harus ditempatkan ke scope backend yang jelas.
 2. Jika fitur tidak punya owner scope yang jelas, dokumentasikan dulu sebelum implementasi.
-3. Setiap perubahan scope wajib memperbarui:
+3. Jangan menambahkan dashboard, route, menu, badge otorisasi, atau callable manajemen ke Flutter.
+4. Setiap perubahan scope wajib memperbarui:
    - `README.md`
    - `docs/BUSINESS_DOMAIN.md`
    - `docs/CHANGELOG.md`

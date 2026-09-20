@@ -4,12 +4,14 @@ Dokumen ini menjelaskan arah domain bisnis commerce terbaru pada aplikasi `Since
 
 ## Model Bisnis
 
-SincerelySea menggunakan model `brand-owned marketplace`.
+SincerelySea menggunakan model official brand store dengan dua application plane yang terpisah.
 
-- `SincerelySea Store` adalah toko resmi di dalam aplikasi.
-- Produk dijual oleh brand dan dikelola secara internal.
-- User biasa berperan sebagai pembeli dan anggota komunitas.
-- User dengan role `admin` dapat dibagi lagi berdasarkan tanggung jawab:
+- Flutter mobile adalah aplikasi customer-facing untuk komunitas, discovery, shopping, review pelanggan, order pelanggan, dan account.
+- Backend website terpisah adalah management plane untuk katalog, fulfilment, moderasi, finance, user, dan role.
+- `SincerelySea Store` adalah satu-satunya toko resmi; tidak ada seller publik.
+- Produk dijual oleh brand dan dikelola secara internal melalui backend website.
+- Akun dengan claim `admin` atau `developer` tetap melihat surface pelanggan yang sama ketika membuka Flutter.
+- Otorisasi management plane dibagi berdasarkan scope:
   - `products`
   - `orders`
   - `finance`
@@ -27,7 +29,7 @@ Dokumen `products/{productId}` sekarang mengikuti konsep toko resmi:
 - `storeName: "SincerelySea Store"`
 - `managedByAdmins: true`
 
-Field `userId` tetap dipertahankan untuk menandai admin yang terakhir membuat produk, tetapi kepemilikan bisnis berada pada `ownerId`.
+Field `userId` dipertahankan untuk kompatibilitas dan attribution pengelola lama, tetapi kepemilikan bisnis berada pada `ownerId`. Flutter hanya membaca produk untuk browse/buy dan tidak membuat atau mengubah katalog.
 
 ### Orders
 
@@ -37,7 +39,7 @@ Dokumen `orders/{orderId}` sekarang membawa konteks store resmi:
 - `storeName: "SincerelySea Store"`
 - `fulfillmentMode: "admin_managed"`
 
-Dengan model ini, pengelolaan order tidak lagi bergantung pada konsep seller publik.
+Dengan model ini, Flutter hanya membuat intent order melalui checkout, membaca order milik customer, melakukan Buy Again, dan membatalkan order `pending` jika Rules mengizinkan. Perubahan fulfilment dan status operasional dilakukan oleh management plane, bukan mobile.
 
 ### Reporting
 
@@ -55,8 +57,8 @@ Sistem laporan penjualan mengikuti struktur jurnal:
 
 ## Prinsip Pengembangan Berikutnya
 
-1. Semua fitur commerce baru harus mengacu ke `SincerelySea Store`, bukan seller publik.
-2. Semua operasi katalog dan fulfilment harus diasumsikan `admin-managed`.
-3. Akses admin harus dibatasi sesuai area kerja agar product manager, order manager, dan community manager tidak saling tumpang tindih.
+1. Semua fitur commerce mobile harus mengacu ke `SincerelySea Store`, bukan seller publik.
+2. Semua operasi katalog, fulfilment, moderasi, finance, dan role harus berada di backend website.
+3. Scope admin adalah boundary otorisasi backend dan tidak boleh dipakai untuk menampilkan management UI di Flutter.
 4. Fitur laporan atau finance baru harus terhubung ke `journal_entries` dan `sales_reports`.
 5. Perubahan domain bisnis wajib dicatat di `docs/CHANGELOG.md`.

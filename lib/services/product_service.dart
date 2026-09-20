@@ -1,6 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:sincerelysea/config/official_store.dart';
 import 'package:sincerelysea/models/product.dart';
-import 'package:sincerelysea/services/sales_reporting_service.dart';
 
 enum ProductSortOption { newest, bestSelling, priceLowToHigh, priceHighToLow }
 
@@ -23,9 +23,6 @@ class ProductQueryOptions {
 }
 
 class ProductService {
-  static const String storeId = SalesReportingService.storeId;
-  static const String storeName = SalesReportingService.storeName;
-
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
   List<String>? _categoryCache;
@@ -55,7 +52,7 @@ class ProductService {
   }) async {
     Query<Map<String, dynamic>> query = _productsRef.where(
       'ownerId',
-      isEqualTo: storeId,
+      isEqualTo: OfficialStore.id,
     );
 
     if (options.requirePurchasable) {
@@ -105,7 +102,7 @@ class ProductService {
       return _categoryCache!;
     }
     final QuerySnapshot<Map<String, dynamic>> snapshot = await _productsRef
-        .where('ownerId', isEqualTo: storeId)
+        .where('ownerId', isEqualTo: OfficialStore.id)
         .get();
     final Set<String> categorySet = <String>{};
     for (final QueryDocumentSnapshot<Map<String, dynamic>> doc
@@ -121,24 +118,18 @@ class ProductService {
     return categories;
   }
 
-  Future<List<Product>> getSellerProducts(String userId) async {
-    return getStoreProducts(userId);
-  }
-
-  Future<List<Product>> getStoreProducts(String ownerId) async {
+  Future<List<Product>> getOfficialStoreProducts() async {
     QuerySnapshot<Map<String, dynamic>> snapshot = await _productsRef
-        .where('ownerId', isEqualTo: ownerId)
+        .where('ownerId', isEqualTo: OfficialStore.id)
         .get();
-    if (snapshot.docs.isEmpty && ownerId == storeId) {
+    if (snapshot.docs.isEmpty) {
       snapshot = await _productsRef.get();
     }
     final List<Product> products = snapshot.docs
         .map(Product.fromFirestore)
         .where(
           (Product product) =>
-              ownerId != storeId ||
-              product.ownerId == storeId ||
-              product.managedByAdmins,
+              product.ownerId == OfficialStore.id || product.managedByAdmins,
         )
         .where((Product product) => product.id.isNotEmpty)
         .toList(growable: false);
@@ -149,5 +140,4 @@ class ProductService {
     });
     return products;
   }
-
 }

@@ -4,9 +4,9 @@
 
 Start every change with the [Master Product Blueprint](docs/BLUEPRINT.md) and [Development Roadmap](docs/ROADMAP.md). The repository is authoritative for current implementation; the blueprint defines the target product. Supporting references: [Technical Blueprint](docs/TECHNICAL_BLUEPRINT.md), [User Flows](docs/USER_FLOWS.md), and [Architectural Decisions](docs/DECISIONS.md).
 
-**Current development phase:** Phase 0 - Blueprint and Security Gate. Phase 1 is the next task; trusted commerce remains blocked until the P0 security findings in the technical blueprint are resolved.
+**Current development phase:** `MOB-01 - Customer-Only Mobile Surface` is implemented in the repository. The Flutter app is the customer experience; privileged operations belong to a separate future backend website. SEC-01 remains at 7/8 because the fresh-token production smoke matrix is still blocked.
 
-SincerelySea adalah aplikasi mobile Flutter yang menggabungkan komunitas sosial dengan `admin-managed marketplace`. Aplikasi ini sekarang berfungsi sebagai ruang komunitas sekaligus `SincerelySea Store`, tempat brand memasarkan produk resminya langsung di dalam aplikasi.
+SincerelySea adalah aplikasi mobile Flutter khusus pelanggan yang menggabungkan komunitas sosial dengan toko resmi `SincerelySea Store`. Akun Firebase yang memiliki claim `admin` atau `developer` tetap melihat surface pelanggan yang sama dan tidak memperoleh menu manajemen di Flutter.
 
 ---
 
@@ -14,38 +14,37 @@ SincerelySea adalah aplikasi mobile Flutter yang menggabungkan komunitas sosial 
 
 Mulai 2026-04-03, setiap perubahan kode wajib didokumentasikan di file Markdown.
 
-- Changelog utama: [docs/CHANGELOG.md](/Users/abc/SincerelySea/sincerelysea/docs/CHANGELOG.md)
-- Aturan dokumentasi: [docs/DOCUMENTATION_POLICY.md](/Users/abc/SincerelySea/sincerelysea/docs/DOCUMENTATION_POLICY.md)
-- Domain bisnis: [docs/BUSINESS_DOMAIN.md](/Users/abc/SincerelySea/sincerelysea/docs/BUSINESS_DOMAIN.md)
-- Panduan scope admin: [docs/SCOPE_GUIDE.md](/Users/abc/SincerelySea/sincerelysea/docs/SCOPE_GUIDE.md)
+- Changelog utama: [docs/CHANGELOG.md](docs/CHANGELOG.md)
+- Aturan dokumentasi: [docs/DOCUMENTATION_POLICY.md](docs/DOCUMENTATION_POLICY.md)
+- Domain bisnis: [docs/BUSINESS_DOMAIN.md](docs/BUSINESS_DOMAIN.md)
+- Panduan scope backend: [docs/SCOPE_GUIDE.md](docs/SCOPE_GUIDE.md)
 - Roadmap proyek: [docs/ROADMAP.md](docs/ROADMAP.md)
 
 ---
 
 ## 🧭 Project Summary
 
-- `SincerelySea` adalah aplikasi komunitas + official store milik brand
-- marketplace bersifat `admin-managed`, bukan multi-seller publik
-- store resmi berjalan dengan nama `SincerelySea Store`
-- admin dibagi berdasarkan scope kerja agar operasional lebih rapi
+- Flutter adalah aplikasi komunitas + official store untuk pelanggan.
+- Tidak ada konsep seller publik atau surface manajemen di mobile.
+- Store resmi memakai `storeId=sincerelysea` dan `storeName=SincerelySea Store`.
+- Backend website terpisah akan menjadi management plane untuk katalog, fulfilment, moderasi, finance, dan role.
 
 ## 🧭 Business Domain
 
 - `SincerelySea Store` adalah toko resmi brand di dalam aplikasi.
-- Produk dikelola internal oleh user dengan role `admin`.
+- Produk dikelola internal melalui backend website, bukan Flutter.
 - User biasa berperan sebagai pembeli dan anggota komunitas.
 - Commerce reporting mengikuti struktur `sales_reports` dan `journal_entries`.
-- Admin internal dapat dibagi berdasarkan scope kerja:
+- Scope manajemen backend tetap dipertahankan:
   - `products`
   - `orders`
   - `finance`
   - `community`
   - `roles`
 
-Dokumen domain lengkap:
-- [docs/BUSINESS_DOMAIN.md](/Users/abc/SincerelySea/sincerelysea/docs/BUSINESS_DOMAIN.md)
+Dokumen domain lengkap: [docs/BUSINESS_DOMAIN.md](docs/BUSINESS_DOMAIN.md).
 
-## 🗂️ Admin Scope
+## 🗂️ Backend Management Scope
 
 - `products`: katalog, stock, preorder, dan pengelolaan produk
 - `orders`: operasional order, status order, dan fulfilment
@@ -53,19 +52,18 @@ Dokumen domain lengkap:
 - `community`: report komunitas, moderasi post/user
 - `roles`: pembagian akses admin
 
-Dokumen scope lengkap:
-- [docs/SCOPE_GUIDE.md](/Users/abc/SincerelySea/sincerelysea/docs/SCOPE_GUIDE.md)
+Scope tersebut adalah otorisasi management plane dan tidak membuat menu Flutter berubah. Dokumen lengkap: [docs/SCOPE_GUIDE.md](docs/SCOPE_GUIDE.md).
 
 ## 🚀 Features
 
 - Authentication dengan Firebase Auth
 - Home feed komunitas, posting, interaksi, dan profile
-- Social commerce dengan product post, cart, checkout, dan order flow
-- `SincerelySea Store` yang dikelola admin
+- Community post, image, hashtag, location, like, comment, reply, save, follow, report, dan discovery
+- Product post resmi tetap dapat dibaca; Flutter hanya dapat membuat community post biasa
+- Katalog `SincerelySea Store`, search/filter, wishlist, cart, checkout, order history/detail, cancellation yang diizinkan, dan Buy Again
 - Wishlist produk, saved products, dan official store catalog
-- Admin dashboard, role management, sales reports, dan journal entries
-- Scoped admin operations untuk product manager, order manager, dan community manager
-- Scoped finance administration untuk semua laporan transaksi dan jurnal
+- Settings pelanggan untuk account, privacy, notifications, support, legal, session, logout, dan account lifecycle
+- Tidak ada dashboard, moderation, finance, role, product, atau order-management UI di Flutter
 - Firebase Firestore, Storage, App Check, dan Cloud Functions integration
 - Android & iOS support
 
@@ -75,12 +73,7 @@ Dokumen scope lengkap:
 
 Roadmap utama proyek dipisahkan per scope agar lebih mudah diikuti AI dan developer.
 
-Fokus saat ini:
-
-- penguatan admin scope
-- operasional order yang lebih efisien
-- transaction reporting dan integrasi jurnal
-- tooling komunitas dan access control
+Fokus berikutnya setelah MOB-01 adalah menyelesaikan SEC-01 fresh-token production smoke verification tanpa mengubah surface mobile atau memperluas scope ke backend website.
 
 Dokumen roadmap lengkap:
 - [docs/ROADMAP.md](docs/ROADMAP.md)
@@ -104,9 +97,9 @@ Dokumen roadmap lengkap:
 
 ```
 lib/
-├── models/          # Product, order, cart, sales report, journal entry models
-├── services/        # Auth, post, product, order, wishlist, reporting, admin
-├── screens/         # Social, commerce, admin, settings, auth, profile screens
+├── models/          # Customer commerce and compatibility models
+├── services/        # Auth, community, customer commerce, support, notifications
+├── screens/         # Customer social, shop, settings, auth, and profile screens
 ├── widgets/         # Reusable cards, images, and UI helpers
 ├── theme/           # Theme tokens and semantic colors
 ├── l10n/            # Localization files
@@ -204,13 +197,15 @@ Koleksi Firestore utama:
 - `sales_reports/{reportId}`
 - `journal_entries/{entryId}`
 
-Scope admin utama:
+Scope management plane utama:
 
 - `products`: pengelolaan katalog dan inventori
 - `orders`: pengelolaan order dan laporan penjualan
 - `finance`: pengelolaan semua laporan transaksi dan journal entries
 - `community`: pengelolaan report komunitas
 - `roles`: pengelolaan akses admin
+
+Flutter tidak membaca koleksi finance sebagai dashboard dan tidak menyediakan aksi manajemen. Penulisan jurnal/report yang masih terjadi di transaksi customer adalah risiko SEC-02 yang belum diselesaikan dan bukan bukti bahwa finance management tersedia di mobile.
 
 Event order yang saat ini dicatat ke jurnal:
 

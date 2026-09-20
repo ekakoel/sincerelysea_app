@@ -1,6 +1,6 @@
 # SincerelySea Development Roadmap
 
-**Current Phase:** Phase 1 - Security Foundation. **Overall Status:** Security gate blocked `[!]`. **Completion:** 0 of 4 P0 security-foundation findings production-verified (0%); 7 of 8 SEC-01 checklist subtasks are verified, including production Rules deployment. **Current Milestone:** establish a reachable fresh-token execution path and complete non-destructive production authorization smoke verification. **Last Updated:** 2026-09-20.
+**Current Phase:** MOB-01 - Customer-Only Mobile Surface. **Overall Status:** MOB-01 repository implementation complete `[x]`; security gate remains blocked `[!]`. **Completion:** MOB-01 6/6 source-boundary assertions pass; SEC-01 remains 7/8. **Current Milestone:** preserve the customer-only Flutter boundary while establishing a reachable fresh-token path for the remaining SEC-01 production smoke verification. **Last Updated:** 2026-09-20.
 
 ## Status
 
@@ -8,6 +8,7 @@
 
 | Phase | Status | Scope | Dependencies and validation |
 | --- | --- | --- | --- |
+| MOB-01 | [x] | Customer-only Flutter surface | Management screens/routes/callers removed; community-only post creation, official-store customer terminology, and six source-boundary assertions verified. |
 | 0 | [x] | Audit, blueprint, architecture, P0 security gate | Repository architecture and P0 findings documented. |
 | 1 | [!] | Firebase/bootstrap, Auth, username, App Check baseline | SEC-01 implementation, emulator verification, callable deployment, identity provisioning, and claim-authoritative Rules deployment are complete. Fresh-token production smoke verification is blocked because no signed-in application session is reachable and the operator ADC lacks `iam.serviceAccounts.signBlob`. |
 | 2 | [~] | Target navigation, design system, loading/empty/error/offline | Phase 1. |
@@ -40,6 +41,15 @@
 | 29 | [ ] | Android/iOS production release | Phase 28; device, legal and release checks. |
 | 30 | [ ] | app.sincerelysea.com | Phases 25/26/release needs. |
 | 31+ | [ ] | Admin/business web backend | Mobile trusted-domain contracts. |
+
+## MOB-01 checklist
+
+- [x] Audit screens, navigation, dialogs, menus, role gates, services, providers, direct callables, Rules, Functions, and tests.
+- [x] Remove Flutter management screens, routes, role/scope presentation, and the `setUserAdminAccess` client.
+- [x] Make mobile post creation community-only while keeping existing product posts readable.
+- [x] Retain customer catalog, wishlist, cart, checkout, own-order history/detail, Buy Again, and permitted pending-order cancellation.
+- [x] Rename the legacy seller storefront to the official single-store customer surface.
+- [x] Verify ordinary/admin/developer identities share one role-independent mobile surface and preserve SEC-01 backend infrastructure.
 
 ## Gap analysis: top priorities
 
@@ -84,11 +94,21 @@ Before moving phases, verify dependencies and P0 issues, run relevant tests, upd
 
 ## Status summary
 
-- `[x]` complete phases: 1
+- `[x]` complete phases: 2
 - `[~]` partial phases: 10
 - `[!]` blocked phases: 3
 - `[ ]` not-started phases: 18
 - Phase 1 P0 security-foundation completion: 0% (0/4 production-verified; 7/8 SEC-01 checklist subtasks verified)
+
+## MOB-01 validation notes
+
+- `flutter pub get`: passed.
+- `flutter analyze`: passed with no issues.
+- `flutter test`: all 8 tests passed, including 6 MOB-01 boundary assertions.
+- Functions syntax/lint: passed.
+- Firestore Emulator: all 9 SEC-01 authorization scenarios passed.
+- Repository-wide route/label/callable search found no Flutter management route or `setUserAdminAccess` caller. Remaining seller fields are historical order-schema compatibility; remaining admin/developer/scope references are backend security, documentation, tests, or official-store data compatibility.
+- MOB-01 did not modify or deploy Firestore Rules, Storage Rules, Cloud Functions, custom claims, or production data.
 
 ## SEC-01 validation notes
 
@@ -104,7 +124,7 @@ Before moving phases, verify dependencies and P0 issues, run relevant tests, upd
 - The human operator independently verified and explicitly approved both inventoried identities. Dry runs showed no existing privileged claims and the expected mutations only.
 - `WT0trMBt9zNaMFYXQ61cs67K1x53` was provisioned as developer with `admin: true`, `developer: true`, and all supported scopes: `products`, `orders`, `finance`, `community`, and `roles`. A separate read-only Auth inventory verified the account exists, is enabled, and has exactly those privileged claims.
 - `4RWo2A35L2NYavF4NuD0VwINOmB2` was provisioned as admin with the least-privilege operational scopes `products`, `orders`, `finance`, and `community`; the `roles` scope was intentionally excluded. A separate read-only Auth inventory verified the account exists, is enabled, has `admin: true`, and does not have the developer claim.
-- The claim bootstrap retained the designed Firestore role/scope mirrors and wrote audit records; those mirrors remain non-authoritative. Rules deployment was deliberately deferred to the next separately verified transition.
+- The claim bootstrap retained the designed Firestore role/scope mirrors and wrote audit records; those mirrors remain non-authoritative. Rules deployment was then performed as a separately verified transition.
 - Immediately before deployment, the read-only Auth inventory reconfirmed the exact approved claims on both enabled accounts. A complete Rules audit found all privileged authorization derives from `request.auth.token`; Firestore role/scope mirrors are never used to authorize.
 - The nine-case Firestore Emulator gate passed after expanding its assertions to cover explicit `role=developer` rejection, protected authority-field creation and add/change/removal, and both claimed admin and developer access. Functions/bootstrap/inventory syntax checks also passed.
 - `firebase deploy --only firestore:rules --project gen-lang-client-0026437130` compiled and released only `firestore.rules`. Firebase Rules release `cloud.firestore` now points to ruleset `ed2fdf20-027d-4e7b-b271-51033f9d6c16`, independently confirmed through the read-only Rules API with update time `2026-09-19T23:11:01.939251Z`.

@@ -1,6 +1,6 @@
 # SincerelySea Target User Flows
 
-Target only; trusted actions are server-controlled.
+Target only; trusted actions are server-controlled. Flutter is customer-facing, while management actions belong to the separate backend website.
 
 ```mermaid
 flowchart TD
@@ -25,7 +25,7 @@ flowchart TD
 
 ```mermaid
 flowchart TD
-  A[Create product post] --> B[Select owned instance or catalog product] --> C[Caption photos rating] --> D[Choose area or precise location] --> E[Preview] --> F[Publish]
+  A[Create community post in Flutter] --> B[Caption and optional image] --> C[Hashtags] --> D[Choose area or precise location] --> E[Preview] --> F[Publish normal post]
 ```
 
 ```mermaid

@@ -13,7 +13,7 @@ The `role` and `adminScopes` fields in `users/{uid}` are display and migration m
 
 ## Trusted role changes
 
-The Flutter admin interface calls the deployed callable function `setUserAdminAccess`. The function:
+The future backend website may call the deployed callable function `setUserAdminAccess`. Flutter has no user-facing caller after MOB-01. The function:
 
 1. requires an authenticated caller with trusted `developer` or `admin` plus the `roles` scope;
 2. rejects self-access changes;
@@ -21,6 +21,12 @@ The Flutter admin interface calls the deployed callable function `setUserAdminAc
 4. validates the requested role and scopes;
 5. preserves unrelated custom claims while replacing SincerelySea role claims;
 6. mirrors non-authoritative display metadata to Firestore and writes `admin_audit_logs`.
+
+## Mobile management boundary
+
+Flutter is customer-facing for every Firebase identity. An account with `admin`, `developer`, or `adminScopes` claims receives the same mobile navigation and settings as an ordinary customer. The application contains no management route, role/scope presentation, catalog editor, fulfilment control, report moderation, finance dashboard, audit-log UI, or `setUserAdminAccess` caller.
+
+This product boundary does not replace authorization. Claim-aware Firestore Rules, trusted Admin SDK scripts, the deployed callable, and `admin_audit_logs` remain intact for the future backend management plane.
 
 A target user must exist in both Firebase Auth and `users/{uid}`. A changed user must sign out and back in, or otherwise force an ID-token refresh, before the new authorization is visible to Flutter and Firestore Rules.
 

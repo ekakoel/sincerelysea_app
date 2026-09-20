@@ -4,7 +4,7 @@ import 'package:provider/provider.dart';
 import 'package:sincerelysea/models/product.dart';
 import 'package:sincerelysea/screens/cart/cart_screen.dart';
 import 'package:sincerelysea/screens/checkout/checkout_screen.dart';
-import 'package:sincerelysea/screens/product/seller_storefront_screen.dart';
+import 'package:sincerelysea/screens/product/official_store_screen.dart';
 import 'package:sincerelysea/services/cart_service.dart';
 import 'package:sincerelysea/services/product_service.dart';
 import 'package:sincerelysea/services/wishlist_service.dart';
@@ -188,10 +188,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                         : () {
                             Navigator.of(context).push(
                               MaterialPageRoute<void>(
-                                builder: (_) => SellerStorefrontScreen(
-                                  sellerUserId: product.ownerId,
-                                  sellerName: product.storeName,
-                                ),
+                                builder: (_) => const OfficialStoreScreen(),
                               ),
                             );
                           },

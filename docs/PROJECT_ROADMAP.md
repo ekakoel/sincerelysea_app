@@ -2,15 +2,18 @@
 
 > **Superseded for active development.** This pre-audit document is retained as historical context. Use [ROADMAP.md](ROADMAP.md), [BLUEPRINT.md](BLUEPRINT.md), and [TECHNICAL_BLUEPRINT.md](TECHNICAL_BLUEPRINT.md) as the current source of truth.
 
+> **MOB-01 alignment:** Flutter is customer-facing only. Every product, order, finance, moderation, user, and role administration target below belongs to the separate backend website; it must not be restored as a Flutter route.
+
 Dokumen ini menjadi peta pengembangan tingkat tinggi agar AI dan developer berikutnya mudah memahami prioritas proyek.
 
 ## Current State
 
 SincerelySea saat ini adalah:
 
-- aplikasi komunitas berbasis Flutter + Firebase
-- official `SincerelySea Store` yang dikelola admin
-- memiliki scope admin terpisah untuk `products`, `orders`, `finance`, `community`, dan `roles`
+- aplikasi customer community + official store berbasis Flutter + Firebase
+- mobile surface tanpa management UI untuk ordinary, admin, maupun developer account
+- official `SincerelySea Store` yang dikelola dari backend website terpisah
+- memiliki scope backend terpisah untuk `products`, `orders`, `finance`, `community`, dan `roles`
 - memiliki dasar reporting melalui `sales_reports` dan `journal_entries`
 
 ## Product Roadmap
@@ -18,6 +21,8 @@ SincerelySea saat ini adalah:
 ### 1. Store & Catalog
 
 Owner scope: `products`
+
+Plane: backend website.
 
 Target:
 
@@ -31,6 +36,8 @@ Target:
 
 Owner scope: `orders`
 
+Plane: backend website.
+
 Target:
 
 - bulk order actions
@@ -42,6 +49,8 @@ Target:
 ### 3. Transaction Reporting
 
 Owner scope: `finance`
+
+Plane: backend website.
 
 Target:
 
@@ -55,6 +64,8 @@ Target:
 
 Owner scope: `community`
 
+Plane: backend website.
+
 Target:
 
 - dashboard report moderation
@@ -65,6 +76,8 @@ Target:
 ### 5. Access Control
 
 Owner scope: `roles`
+
+Plane: backend website.
 
 Target:
 
@@ -77,20 +90,20 @@ Target:
 
 ### Short Term
 
-- rapikan naming file/class yang masih memakai istilah `seller`
+- pertahankan MOB-01 customer-only route boundary dengan source tests
 - tambah migrasi data untuk product/order lama agar konsisten dengan `SincerelySea Store`
-- tambah test coverage untuk admin scope dan commerce reporting
+- selesaikan SEC-01 fresh-token production smoke matrix
 
 ### Mid Term
 
-- pisahkan dashboard per scope
+- bangun dashboard backend website per scope
 - tambah Cloud Functions untuk reporting automation
 - tambah export service untuk finance
 
 ### Long Term
 
 - integrasi sistem jurnal final
-- dashboard operasional internal yang lebih komprehensif
+- dashboard operasional internal pada backend website
 - workflow approval untuk perubahan produk, order, dan finance
 
 ## Documentation Rules

@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:sincerelysea/config/official_store.dart';
 import 'package:sincerelysea/models/cart_item.dart';
 import 'package:sincerelysea/models/order.dart' as app_order;
 import 'package:sincerelysea/models/product.dart';
@@ -177,8 +178,8 @@ class OrderService {
 
       tx.set(orderRef, <String, dynamic>{
         'userId': user.uid,
-        'storeId': SalesReportingService.storeId,
-        'storeName': SalesReportingService.storeName,
+        'storeId': OfficialStore.id,
+        'storeName': OfficialStore.name,
         'items': orderItems
             .map((app_order.OrderItem item) => item.toMap())
             .toList(),
@@ -189,7 +190,7 @@ class OrderService {
         'customerName': checkoutInfo.customerName.trim(),
         'phone': checkoutInfo.phone.trim(),
         'address': checkoutInfo.address.trim(),
-        'fulfillmentMode': 'admin_managed',
+        'fulfillmentMode': OfficialStore.fulfillmentMode,
       });
       _salesReportingService.recordOrderPlaced(
         tx: tx,

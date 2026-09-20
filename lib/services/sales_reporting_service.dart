@@ -1,11 +1,9 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:sincerelysea/config/official_store.dart';
 import 'package:sincerelysea/models/journal_entry.dart';
 
 class SalesReportingService {
   SalesReportingService();
-
-  static const String storeId = 'sincerelysea';
-  static const String storeName = 'SincerelySea Store';
 
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
@@ -40,8 +38,8 @@ class SalesReportingService {
         salesReportRefForDate(occurredAt);
 
     tx.set(journalRef, <String, dynamic>{
-      'storeId': storeId,
-      'storeName': storeName,
+      'storeId': OfficialStore.id,
+      'storeName': OfficialStore.name,
       'orderId': orderId,
       'entryType': 'order_created',
       'memo': 'Customer order created for SincerelySea Store.',
@@ -63,8 +61,8 @@ class SalesReportingService {
     });
 
     tx.set(reportRef, <String, dynamic>{
-      'storeId': storeId,
-      'storeName': storeName,
+      'storeId': OfficialStore.id,
+      'storeName': OfficialStore.name,
       'reportDateKey': reportKeyForDate(occurredAt),
       'orderCount': FieldValue.increment(1),
       'paidOrderCount': FieldValue.increment(0),
@@ -90,8 +88,8 @@ class SalesReportingService {
         salesReportRefForDate(occurredAt);
 
     tx.set(journalRef, <String, dynamic>{
-      'storeId': storeId,
-      'storeName': storeName,
+      'storeId': OfficialStore.id,
+      'storeName': OfficialStore.name,
       'orderId': orderId,
       'entryType': 'order_cancelled',
       'memo': 'Order cancelled and reversed for SincerelySea Store.',
@@ -113,8 +111,8 @@ class SalesReportingService {
     });
 
     tx.set(reportRef, <String, dynamic>{
-      'storeId': storeId,
-      'storeName': storeName,
+      'storeId': OfficialStore.id,
+      'storeName': OfficialStore.name,
       'reportDateKey': reportKeyForDate(occurredAt),
       'cancelledOrderCount': FieldValue.increment(1),
       'cancelledSales': FieldValue.increment(totalPrice),

@@ -2,8 +2,18 @@
 
 ## 2026-09-20
 
+### MOB-01 - Customer-Only Mobile Surface
+- Declared Flutter customer-facing only for ordinary, admin, and developer identities; privileged management belongs to a separate future backend website.
+- Removed the mobile admin dashboard, access management, developer console, community moderation, sales/finance reports, seller order operations, product management, and Firebase health-check surfaces plus their dedicated client services/routes.
+- Removed admin/developer badges and claim-gated menus from customer profiles and settings.
+- Made PostService.addPost structurally community-only and removed dead client post audit/repair helpers; existing official product posts remain readable in feed and shared-post detail.
+- Renamed SellerStorefrontScreen to OfficialStoreScreen, removed seller parameters, and centralized the official store identity and fulfilment constants.
+- Retained customer catalog/search/filter, wishlist, cart, checkout, own-order history/detail, Buy Again, and pending-order cancellation.
+- Added six MOB-01 source-boundary tests for customer navigation/settings, role-independent mobile behavior, removed management routes, community-only creation, official-store naming, and preservation of SEC-01 infrastructure.
+- Preserved setUserAdminAccess, Firebase Auth custom claims, claim-aware Firestore Rules, trusted Admin SDK scripts, and admin_audit_logs; Firestore Rules, Storage Rules, Functions behavior, and production deployment state were not changed by MOB-01.
+
 ### Security
-- Implemented the SEC-01 trust boundary by moving admin/developer/scope authorization from mutable Firestore user fields to Firebase Auth custom claims; production Rules activation and smoke verification remain pending.
+- Implemented the SEC-01 trust boundary by moving admin/developer/scope authorization from mutable Firestore user fields to Firebase Auth custom claims; claim-authoritative production Rules are active, while the fresh-token privileged smoke matrix remains incomplete.
 - Firestore Rules now reject privileged authority fields during customer registration and keep all authority fields immutable to clients.
 - Added an audited callable role-management command plus a trusted local Admin SDK bootstrap/migration script.
 - Added nine Firestore Emulator tests for registration, explicit admin/developer escalation attempts, protected authority-field creation and add/change/removal, ordinary profile updates, trusted admin/developer access, unauthenticated access, non-admin access, and forged legacy roles.
@@ -20,7 +30,7 @@
 
 ### Changed
 - Registration no longer writes legacy role or scope defaults from Flutter.
-- Flutter admin gates and role-management actions now use token claims and the callable backend.
+- Flutter no longer contains admin gates or role-management actions; the callable backend remains available for the future backend website.
 - Added `SECURITY.md` and synchronized the roadmap, technical blueprint, and architectural decisions with the implemented trust boundary.
 - Repaired the incomplete Functions dependency installation that omitted the Firebase SDK executable shim, using a lockfile-consistent clean install under Node.js 22 and npm 10.
 - Moved the Functions runtime from Node.js 20 to supported Node.js 22; retained `firebase-functions` 5.1.1 and `firebase-admin` 12.7.0 after compatibility validation rather than introducing unrelated major upgrades.
