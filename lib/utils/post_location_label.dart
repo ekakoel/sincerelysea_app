@@ -4,7 +4,8 @@ import 'package:geocoding/geocoding.dart';
 final RegExp _coordinateLocationPattern = RegExp(
   r'^\s*-?\d+(\.\d+)?\s*,\s*-?\d+(\.\d+)?\s*$',
 );
-final Map<String, Future<String>> _locationLabelCache = <String, Future<String>>{};
+final Map<String, Future<String>> _locationLabelCache =
+    <String, Future<String>>{};
 
 bool _looksLikeCoordinateLocation(String value) {
   return _coordinateLocationPattern.hasMatch(value.trim());

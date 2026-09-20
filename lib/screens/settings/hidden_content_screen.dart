@@ -121,101 +121,119 @@ class _HiddenContentScreenState extends State<HiddenContentScreen> {
           const SizedBox(height: 8),
           StreamBuilder<List<QueryDocumentSnapshot<Map<String, dynamic>>>>(
             stream: context.read<ModerationService>().hiddenPostsStream(),
-            builder: (
-              BuildContext context,
-              AsyncSnapshot<List<QueryDocumentSnapshot<Map<String, dynamic>>>>
-              snapshot,
-            ) {
-              if (snapshot.connectionState == ConnectionState.waiting) {
-                return const Card(
-                  child: Padding(
-                    padding: EdgeInsets.all(16),
-                    child: Center(child: CircularProgressIndicator()),
-                  ),
-                );
-              }
-              final List<QueryDocumentSnapshot<Map<String, dynamic>>> hiddenDocs =
-                  snapshot.data ?? <QueryDocumentSnapshot<Map<String, dynamic>>>[];
-              if (hiddenDocs.isEmpty) {
-                return const Card(
-                  child: Padding(
-                    padding: EdgeInsets.all(16),
-                    child: Text('No hidden posts.'),
-                  ),
-                );
-              }
-              return Card(
-                child: Column(
-                  children: hiddenDocs
-                      .map((QueryDocumentSnapshot<Map<String, dynamic>> doc) {
+            builder:
+                (
+                  BuildContext context,
+                  AsyncSnapshot<
+                    List<QueryDocumentSnapshot<Map<String, dynamic>>>
+                  >
+                  snapshot,
+                ) {
+                  if (snapshot.connectionState == ConnectionState.waiting) {
+                    return const Card(
+                      child: Padding(
+                        padding: EdgeInsets.all(16),
+                        child: Center(child: CircularProgressIndicator()),
+                      ),
+                    );
+                  }
+                  final List<QueryDocumentSnapshot<Map<String, dynamic>>>
+                  hiddenDocs =
+                      snapshot.data ??
+                      <QueryDocumentSnapshot<Map<String, dynamic>>>[];
+                  if (hiddenDocs.isEmpty) {
+                    return const Card(
+                      child: Padding(
+                        padding: EdgeInsets.all(16),
+                        child: Text('No hidden posts.'),
+                      ),
+                    );
+                  }
+                  return Card(
+                    child: Column(
+                      children: hiddenDocs.map((
+                        QueryDocumentSnapshot<Map<String, dynamic>> doc,
+                      ) {
                         final Map<String, dynamic> data = doc.data();
                         final String postId =
                             data['postId']?.toString() ?? doc.id;
                         return Column(
                           children: <Widget>[
-                            FutureBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+                            FutureBuilder<
+                              DocumentSnapshot<Map<String, dynamic>>
+                            >(
                               future: FirebaseFirestore.instance
                                   .collection('posts')
                                   .doc(postId)
                                   .get(),
-                              builder: (
-                                BuildContext context,
-                                AsyncSnapshot<DocumentSnapshot<Map<String, dynamic>>>
-                                postSnapshot,
-                              ) {
-                                final Map<String, dynamic>? postData =
-                                    postSnapshot.data?.data();
-                                final String username = (postData?['username']
-                                                ?.toString()
-                                                .trim()
-                                                .isNotEmpty ==
-                                            true
-                                        ? postData!['username'].toString().trim()
-                                        : data['postOwnerUsername']
-                                              ?.toString()
-                                              .trim()) ??
-                                    '';
-                                final String caption = (postData?['content']
-                                                ?.toString()
-                                                .trim()
-                                                .isNotEmpty ==
-                                            true
-                                        ? postData!['content'].toString().trim()
-                                        : data['postCaption']
-                                              ?.toString()
-                                              .trim()) ??
-                                    '';
-                                return ListTile(
-                                  title: Text(
-                                    username.isNotEmpty
-                                        ? '@$username'
-                                        : 'Unknown user',
-                                  ),
-                                  subtitle: Text(
-                                    caption.isNotEmpty ? caption : 'No caption',
-                                    maxLines: 2,
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                  trailing: TextButton(
-                                    onPressed: () async {
-                                      await context
-                                          .read<ModerationService>()
-                                          .unhidePost(postId);
-                                    },
-                                    child: const Text('Unhide'),
-                                  ),
-                                );
-                              },
+                              builder:
+                                  (
+                                    BuildContext context,
+                                    AsyncSnapshot<
+                                      DocumentSnapshot<Map<String, dynamic>>
+                                    >
+                                    postSnapshot,
+                                  ) {
+                                    final Map<String, dynamic>? postData =
+                                        postSnapshot.data?.data();
+                                    final String username =
+                                        (postData?['username']
+                                                    ?.toString()
+                                                    .trim()
+                                                    .isNotEmpty ==
+                                                true
+                                            ? postData!['username']
+                                                  .toString()
+                                                  .trim()
+                                            : data['postOwnerUsername']
+                                                  ?.toString()
+                                                  .trim()) ??
+                                        '';
+                                    final String caption =
+                                        (postData?['content']
+                                                    ?.toString()
+                                                    .trim()
+                                                    .isNotEmpty ==
+                                                true
+                                            ? postData!['content']
+                                                  .toString()
+                                                  .trim()
+                                            : data['postCaption']
+                                                  ?.toString()
+                                                  .trim()) ??
+                                        '';
+                                    return ListTile(
+                                      title: Text(
+                                        username.isNotEmpty
+                                            ? '@$username'
+                                            : 'Unknown user',
+                                      ),
+                                      subtitle: Text(
+                                        caption.isNotEmpty
+                                            ? caption
+                                            : 'No caption',
+                                        maxLines: 2,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                      trailing: TextButton(
+                                        onPressed: () async {
+                                          await context
+                                              .read<ModerationService>()
+                                              .unhidePost(postId);
+                                        },
+                                        child: const Text('Unhide'),
+                                      ),
+                                    );
+                                  },
                             ),
                             if (hiddenDocs.last.id != doc.id)
                               const Divider(height: 1),
                           ],
                         );
-                      })
-                      .toList(),
-                ),
-              );
-            },
+                      }).toList(),
+                    ),
+                  );
+                },
           ),
         ],
       ),
@@ -223,7 +241,8 @@ class _HiddenContentScreenState extends State<HiddenContentScreen> {
   }
 
   Future<void> _loadPreferences() async {
-    final HiddenContentPreferences preferences = await _preferencesService.load();
+    final HiddenContentPreferences preferences = await _preferencesService
+        .load();
     if (!mounted) {
       return;
     }

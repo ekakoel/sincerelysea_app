@@ -55,7 +55,8 @@ class HiddenContentPreferencesService {
 
     if (preferences.hidePostsWithMutedKeywords &&
         preferences.mutedKeywords.isNotEmpty) {
-      final String content = postData['content']?.toString().toLowerCase() ?? '';
+      final String content =
+          postData['content']?.toString().toLowerCase() ?? '';
       final List<String> hashtags =
           (postData['hashtags'] as List<dynamic>? ?? <dynamic>[])
               .map((dynamic tag) => tag.toString().toLowerCase())

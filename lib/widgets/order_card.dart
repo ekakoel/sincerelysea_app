@@ -78,10 +78,14 @@ class OrderCard extends StatelessWidget {
                               : AppCheckCachedNetworkImage(
                                   imageUrl: item.productImageUrl,
                                   fit: BoxFit.cover,
-                                  placeholder: Container(color: AppColors.gray200),
+                                  placeholder: Container(
+                                    color: AppColors.gray200,
+                                  ),
                                   error: Container(
                                     color: AppColors.gray200,
-                                    child: const Icon(Icons.broken_image_outlined),
+                                    child: const Icon(
+                                      Icons.broken_image_outlined,
+                                    ),
                                   ),
                                 ),
                         ),
@@ -92,10 +96,14 @@ class OrderCard extends StatelessWidget {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: <Widget>[
                             Text(
-                              item.productName.isEmpty ? 'Product' : item.productName,
+                              item.productName.isEmpty
+                                  ? 'Product'
+                                  : item.productName,
                               maxLines: 2,
                               overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(fontWeight: FontWeight.w600),
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w600,
+                              ),
                             ),
                             const SizedBox(height: 4),
                             Text(
@@ -143,13 +151,19 @@ class OrderCard extends StatelessWidget {
                     DropdownButton<String>(
                       value: order.status,
                       items: const <DropdownMenuItem<String>>[
-                        DropdownMenuItem(value: 'pending', child: Text('Pending')),
+                        DropdownMenuItem(
+                          value: 'pending',
+                          child: Text('Pending'),
+                        ),
                         DropdownMenuItem(value: 'paid', child: Text('Paid')),
                         DropdownMenuItem(
                           value: 'processing',
                           child: Text('Processing'),
                         ),
-                        DropdownMenuItem(value: 'shipped', child: Text('Shipped')),
+                        DropdownMenuItem(
+                          value: 'shipped',
+                          child: Text('Shipped'),
+                        ),
                         DropdownMenuItem(
                           value: 'completed',
                           child: Text('Completed'),

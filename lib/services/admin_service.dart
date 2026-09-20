@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
 class AdminService {
@@ -20,19 +21,25 @@ class AdminService {
 
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseAuth _auth = FirebaseAuth.instance;
+  final FirebaseFunctions _functions = FirebaseFunctions.instance;
 
-  Future<bool> isCurrentUserAdmin() async {
-    final Map<String, dynamic>? data = await _currentUserData();
-    return isAdminData(data);
+  Future<bool> isCurrentUserAdmin({bool forceRefresh = false}) async {
+    final Map<String, dynamic> claims = await _currentUserClaims(
+      forceRefresh: forceRefresh,
+    );
+    return claims['admin'] == true || claims['developer'] == true;
   }
 
-  Future<bool> isCurrentUserDeveloper() async {
-    final Map<String, dynamic>? data = await _currentUserData();
-    return isDeveloperData(data);
+  Future<bool> isCurrentUserDeveloper({bool forceRefresh = false}) async {
+    final Map<String, dynamic> claims = await _currentUserClaims(
+      forceRefresh: forceRefresh,
+    );
+    return claims['developer'] == true;
   }
 
   String roleFromData(Map<String, dynamic>? data) {
-    final String role = data?['role']?.toString().trim().toLowerCase() ?? 'user';
+    final String role =
+        data?['role']?.toString().trim().toLowerCase() ?? 'user';
     return supportedRoles.contains(role) ? role : 'user';
   }
 
@@ -62,11 +69,22 @@ class AdminService {
   }
 
   Future<List<String>> currentUserScopes() async {
-    final Map<String, dynamic>? data = await _currentUserData();
-    if (!isAdminData(data)) {
+    final Map<String, dynamic> claims = await _currentUserClaims();
+    if (claims['admin'] != true && claims['developer'] != true) {
       return const <String>[];
     }
-    return adminScopesFromData(data);
+    if (claims['developer'] == true) {
+      return List<String>.from(supportedScopes);
+    }
+    final dynamic rawScopes = claims['adminScopes'];
+    if (rawScopes is! List<dynamic> || rawScopes.isEmpty) {
+      return List<String>.from(supportedScopes);
+    }
+    return rawScopes
+        .map((dynamic scope) => scope.toString().trim().toLowerCase())
+        .where((String scope) => supportedScopes.contains(scope))
+        .toSet()
+        .toList(growable: false);
   }
 
   Future<bool> hasCurrentUserScope(String scope) async {
@@ -82,16 +100,15 @@ class AdminService {
     return hasCurrentUserScope('roles');
   }
 
-  Future<Map<String, dynamic>?> _currentUserData() async {
+  Future<Map<String, dynamic>> _currentUserClaims({
+    bool forceRefresh = false,
+  }) async {
     final User? user = _auth.currentUser;
     if (user == null) {
-      return null;
+      return const <String, dynamic>{};
     }
-    final DocumentSnapshot<Map<String, dynamic>> snapshot = await _firestore
-        .collection('users')
-        .doc(user.uid)
-        .get();
-    return snapshot.data();
+    final IdTokenResult token = await user.getIdTokenResult(forceRefresh);
+    return token.claims ?? const <String, dynamic>{};
   }
 
   Stream<QuerySnapshot<Map<String, dynamic>>> usersStream() {
@@ -136,30 +153,9 @@ class AdminService {
     if (!supportedRoles.contains(normalizedRole)) {
       throw ArgumentError.value(role, 'role', 'Unsupported role.');
     }
-    if (!await canCurrentUserManageAdminAccess()) {
-      throw Exception('Only authorized admins can manage admin access.');
-    }
-    final User? actor = _auth.currentUser;
-    if (actor == null) {
+    if (_auth.currentUser == null) {
       throw Exception('User not authenticated.');
     }
-
-    final DocumentSnapshot<Map<String, dynamic>> actorSnapshot =
-        await _firestore.collection('users').doc(actor.uid).get();
-    final DocumentSnapshot<Map<String, dynamic>> targetSnapshot =
-        await _firestore.collection('users').doc(userId).get();
-    if (!targetSnapshot.exists) {
-      throw Exception('Target user not found.');
-    }
-
-    final Map<String, dynamic> actorData =
-        actorSnapshot.data() ?? <String, dynamic>{};
-    final Map<String, dynamic> targetData =
-        targetSnapshot.data() ?? <String, dynamic>{};
-    final String previousRole = roleFromData(targetData);
-    final List<String> previousScopes = previousRole == 'user'
-        ? const <String>[]
-        : adminScopesFromData(targetData);
     final List<String> normalizedScopes = normalizedRole == 'user'
         ? const <String>[]
         : _normalizeScopes(adminScopes);
@@ -167,43 +163,16 @@ class AdminService {
         normalizedScopes.length != supportedScopes.length) {
       throw Exception('Developer accounts must keep all admin scopes enabled.');
     }
-    if (previousRole == normalizedRole &&
-        _sameScopes(previousScopes, normalizedScopes)) {
-      return;
-    }
-
-    final WriteBatch batch = _firestore.batch();
-    final DocumentReference<Map<String, dynamic>> userRef = _firestore
-        .collection('users')
-        .doc(userId);
-    final DocumentReference<Map<String, dynamic>> logRef = _firestore
-        .collection('admin_audit_logs')
-        .doc();
-
-    batch.set(userRef, {
+    final HttpsCallable callable = _functions.httpsCallable(
+      'setUserAdminAccess',
+    );
+    await callable.call<void>(<String, dynamic>{
+      'userId': userId,
       'role': normalizedRole,
       'adminScopes': normalizedRole == 'developer'
           ? List<String>.from(supportedScopes)
           : normalizedScopes,
-      'updatedAt': FieldValue.serverTimestamp(),
-    }, SetOptions(merge: true));
-    batch.set(logRef, {
-      'action': 'admin_access_updated',
-      'actorUid': actor.uid,
-      'actorUsername': actorData['username']?.toString() ?? '',
-      'actorDisplayName': actorData['displayName']?.toString() ?? '',
-      'targetUid': userId,
-      'targetUsername': targetData['username']?.toString() ?? '',
-      'targetDisplayName': targetData['displayName']?.toString() ?? '',
-      'previousRole': previousRole,
-      'newRole': normalizedRole,
-      'previousScopes': previousScopes,
-      'newScopes': normalizedRole == 'developer'
-          ? List<String>.from(supportedScopes)
-          : normalizedScopes,
-      'createdAt': FieldValue.serverTimestamp(),
     });
-    await batch.commit();
   }
 
   List<String> _normalizeScopes(List<String> scopes) {
@@ -213,15 +182,6 @@ class AdminService {
         .toSet()
         .toList(growable: false);
     return normalized.isEmpty ? List<String>.from(supportedScopes) : normalized;
-  }
-
-  bool _sameScopes(List<String> a, List<String> b) {
-    if (a.length != b.length) {
-      return false;
-    }
-    final Set<String> first = a.toSet();
-    final Set<String> second = b.toSet();
-    return first.containsAll(second) && second.containsAll(first);
   }
 
   Future<Map<String, dynamic>?> _getUserData(String userId) async {

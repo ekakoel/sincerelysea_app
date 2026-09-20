@@ -80,56 +80,65 @@ class _AdminUserRolesScreenState extends State<AdminUserRolesScreen> {
               Expanded(
                 child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
                   stream: adminService.usersStream(),
-                  builder: (
-                    BuildContext context,
-                    AsyncSnapshot<QuerySnapshot<Map<String, dynamic>>> snapshot,
-                  ) {
-                    if (snapshot.connectionState == ConnectionState.waiting) {
-                      return const Center(child: CircularProgressIndicator());
-                    }
+                  builder:
+                      (
+                        BuildContext context,
+                        AsyncSnapshot<QuerySnapshot<Map<String, dynamic>>>
+                        snapshot,
+                      ) {
+                        if (snapshot.connectionState ==
+                            ConnectionState.waiting) {
+                          return const Center(
+                            child: CircularProgressIndicator(),
+                          );
+                        }
 
-                    final List<QueryDocumentSnapshot<Map<String, dynamic>>> docs =
-                        snapshot.data?.docs ??
-                        <QueryDocumentSnapshot<Map<String, dynamic>>>[];
-                    final List<QueryDocumentSnapshot<Map<String, dynamic>>> filteredDocs =
-                        docs.where(_matchesSearch).toList(growable: false);
-                    final int adminCount = docs.where((doc) {
-                      return adminService.isAdminData(doc.data());
-                    }).length;
+                        final List<QueryDocumentSnapshot<Map<String, dynamic>>>
+                        docs =
+                            snapshot.data?.docs ??
+                            <QueryDocumentSnapshot<Map<String, dynamic>>>[];
+                        final List<QueryDocumentSnapshot<Map<String, dynamic>>>
+                        filteredDocs = docs
+                            .where(_matchesSearch)
+                            .toList(growable: false);
+                        final int adminCount = docs.where((doc) {
+                          return adminService.isAdminData(doc.data());
+                        }).length;
 
-                    if (filteredDocs.isEmpty) {
-                      return ListView(
-                        padding: const EdgeInsets.all(24),
-                        children: const <Widget>[
-                          SizedBox(height: 40),
-                          Text(
-                            'No users match this search.',
-                            textAlign: TextAlign.center,
-                          ),
-                        ],
-                      );
-                    }
+                        if (filteredDocs.isEmpty) {
+                          return ListView(
+                            padding: const EdgeInsets.all(24),
+                            children: const <Widget>[
+                              SizedBox(height: 40),
+                              Text(
+                                'No users match this search.',
+                                textAlign: TextAlign.center,
+                              ),
+                            ],
+                          );
+                        }
 
-                    return ListView(
-                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
-                      children: <Widget>[
-                        _AdminSummaryCard(
-                          totalUsers: docs.length,
-                          adminUsers: adminCount,
-                          filteredUsers: filteredDocs.length,
-                        ),
-                        const SizedBox(height: 12),
-                        ...filteredDocs.map(
-                          (QueryDocumentSnapshot<Map<String, dynamic>> doc) =>
-                              _UserAccessTile(
+                        return ListView(
+                          padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+                          children: <Widget>[
+                            _AdminSummaryCard(
+                              totalUsers: docs.length,
+                              adminUsers: adminCount,
+                              filteredUsers: filteredDocs.length,
+                            ),
+                            const SizedBox(height: 12),
+                            ...filteredDocs.map(
+                              (
+                                QueryDocumentSnapshot<Map<String, dynamic>> doc,
+                              ) => _UserAccessTile(
                                 document: doc,
                                 isUpdating: _updatingUserId == doc.id,
                                 onManageTap: () => _showAccessSheet(doc),
                               ),
-                        ),
-                      ],
-                    );
-                  },
+                            ),
+                          ],
+                        );
+                      },
                 ),
               ),
             ],
@@ -156,8 +165,7 @@ class _AdminUserRolesScreenState extends State<AdminUserRolesScreen> {
   ) async {
     final AdminService adminService = context.read<AdminService>();
     final Map<String, dynamic> data = document.data();
-    String selectedRole =
-        adminService.isAdminData(data) ? 'admin' : 'user';
+    String selectedRole = adminService.isAdminData(data) ? 'admin' : 'user';
     final Set<String> selectedScopes = adminService
         .adminScopesFromData(data)
         .toSet();
@@ -272,30 +280,38 @@ class _AdminUserRolesScreenState extends State<AdminUserRolesScreen> {
                       Wrap(
                         spacing: 8,
                         runSpacing: 8,
-                        children: AdminService.supportedScopes.map((String scope) {
-                          final bool selected = selectedScopes.contains(scope);
-                          final bool lockScope = selectedRole == 'developer';
-                          return FilterChip(
-                            selected: selected,
-                            label: Text(_scopeLabel(scope)),
-                            onSelected: isSelf || lockScope
-                                ? null
-                                : (bool value) {
-                                    setModalState(() {
-                                      if (value) {
-                                        selectedScopes.add(scope);
-                                      } else {
-                                        selectedScopes.remove(scope);
-                                      }
-                                    });
-                                  },
-                          );
-                        }).toList(growable: false),
+                        children: AdminService.supportedScopes
+                            .map((String scope) {
+                              final bool selected = selectedScopes.contains(
+                                scope,
+                              );
+                              final bool lockScope =
+                                  selectedRole == 'developer';
+                              return FilterChip(
+                                selected: selected,
+                                label: Text(_scopeLabel(scope)),
+                                onSelected: isSelf || lockScope
+                                    ? null
+                                    : (bool value) {
+                                        setModalState(() {
+                                          if (value) {
+                                            selectedScopes.add(scope);
+                                          } else {
+                                            selectedScopes.remove(scope);
+                                          }
+                                        });
+                                      },
+                              );
+                            })
+                            .toList(growable: false),
                       ),
                       const SizedBox(height: 8),
                       const Text(
                         'Use products for catalog managers, orders for operational order admins, finance for transaction reporting, community for moderation, and roles for access management.',
-                        style: TextStyle(color: AppColors.black54, height: 1.35),
+                        style: TextStyle(
+                          color: AppColors.black54,
+                          height: 1.35,
+                        ),
                       ),
                       if (selectedRole == 'developer')
                         const Padding(
@@ -367,9 +383,15 @@ class _AdminSummaryCard extends StatelessWidget {
       ),
       child: Row(
         children: <Widget>[
-          Expanded(child: _SummaryMetric(label: 'Users', value: totalUsers)),
-          Expanded(child: _SummaryMetric(label: 'Admins', value: adminUsers)),
-          Expanded(child: _SummaryMetric(label: 'Visible', value: filteredUsers)),
+          Expanded(
+            child: _SummaryMetric(label: 'Users', value: totalUsers),
+          ),
+          Expanded(
+            child: _SummaryMetric(label: 'Admins', value: adminUsers),
+          ),
+          Expanded(
+            child: _SummaryMetric(label: 'Visible', value: filteredUsers),
+          ),
         ],
       ),
     );
@@ -413,7 +435,8 @@ class _UserAccessTile extends StatelessWidget {
     final AdminService adminService = context.read<AdminService>();
     final Map<String, dynamic> data = document.data();
     final User? currentUser = FirebaseAuth.instance.currentUser;
-    final String username = data['username']?.toString().trim().isNotEmpty == true
+    final String username =
+        data['username']?.toString().trim().isNotEmpty == true
         ? data['username'].toString().trim()
         : 'user';
     final String displayName =
@@ -431,7 +454,10 @@ class _UserAccessTile extends StatelessWidget {
     return Card(
       margin: const EdgeInsets.only(bottom: 10),
       child: ListTile(
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 16,
+          vertical: 10,
+        ),
         leading: CircleAvatar(
           backgroundColor: isAdmin ? AppColors.black : AppColors.gray300,
           child: Text(
@@ -466,32 +492,34 @@ class _UserAccessTile extends StatelessWidget {
               Wrap(
                 spacing: 6,
                 runSpacing: 6,
-                children: scopes.map((String scope) {
-                  return Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 4,
-                    ),
-                    decoration: BoxDecoration(
-                      color: AppColors.gray100,
-                      borderRadius: BorderRadius.circular(999),
-                    ),
-                    child: Text(
-                      switch (scope) {
-                        'products' => 'Products',
-                        'orders' => 'Orders',
-                        'finance' => 'Finance',
-                        'community' => 'Community',
-                        'roles' => 'Roles',
-                        _ => scope,
-                      },
-                      style: const TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  );
-                }).toList(growable: false),
+                children: scopes
+                    .map((String scope) {
+                      return Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 4,
+                        ),
+                        decoration: BoxDecoration(
+                          color: AppColors.gray100,
+                          borderRadius: BorderRadius.circular(999),
+                        ),
+                        child: Text(
+                          switch (scope) {
+                            'products' => 'Products',
+                            'orders' => 'Orders',
+                            'finance' => 'Finance',
+                            'community' => 'Community',
+                            'roles' => 'Roles',
+                            _ => scope,
+                          },
+                          style: const TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      );
+                    })
+                    .toList(growable: false),
               ),
             ],
             if (isSelf)

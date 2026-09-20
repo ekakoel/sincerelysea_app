@@ -21,7 +21,9 @@ class ProductCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final String imageUrl = product.images.isNotEmpty ? product.images.first : '';
+    final String imageUrl = product.images.isNotEmpty
+        ? product.images.first
+        : '';
     return InkWell(
       borderRadius: BorderRadius.circular(14),
       onTap: onTap,
@@ -53,7 +55,9 @@ class ProductCard extends StatelessWidget {
                             placeholder: Container(
                               color: AppColors.gray200,
                               child: const Center(
-                                child: CircularProgressIndicator(strokeWidth: 2),
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
                               ),
                             ),
                             error: Container(
@@ -78,8 +82,12 @@ class ProductCard extends StatelessWidget {
                         child: Padding(
                           padding: const EdgeInsets.all(8),
                           child: Icon(
-                            isWishlisted ? Icons.favorite : Icons.favorite_border,
-                            color: isWishlisted ? Colors.red : AppColors.gray700,
+                            isWishlisted
+                                ? Icons.favorite
+                                : Icons.favorite_border,
+                            color: isWishlisted
+                                ? Colors.red
+                                : AppColors.gray700,
                             size: 20,
                           ),
                         ),
@@ -177,7 +185,9 @@ class ProductCard extends StatelessWidget {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
-                      color: product.canPurchase ? AppColors.gray700 : Colors.red,
+                      color: product.canPurchase
+                          ? AppColors.gray700
+                          : Colors.red,
                       fontSize: 11,
                     ),
                   ),

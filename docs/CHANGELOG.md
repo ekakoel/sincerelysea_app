@@ -1,5 +1,40 @@
 # SincerelySea Change Log
 
+## 2026-09-20
+
+### Security
+- Implemented the SEC-01 trust boundary by moving admin/developer/scope authorization from mutable Firestore user fields to Firebase Auth custom claims; production Rules activation and smoke verification remain pending.
+- Firestore Rules now reject privileged authority fields during customer registration and keep all authority fields immutable to clients.
+- Added an audited callable role-management command plus a trusted local Admin SDK bootstrap/migration script.
+- Added nine Firestore Emulator tests for registration, explicit admin/developer escalation attempts, protected authority-field creation and add/change/removal, ordinary profile updates, trusted admin/developer access, unauthenticated access, non-admin access, and forged legacy roles.
+- Hardened the local claim bootstrap so it requires the exact production project, explicit UID/role/scopes, a dry run, and a separate `--confirm` execution.
+- Added a read-only legacy privileged-account inventory that reports candidate UIDs and claim state without exposing email addresses or granting access.
+- Audited the production inventory command as read-only, verified its exact-project rejection guard, confirmed Google Cloud CLI/Application Default Credentials, and completed the inventory against `gen-lang-client-0026437130`.
+- Recorded the operator's explicit identity approval and provisioned `WT0trMBt9zNaMFYXQ61cs67K1x53` as developer with all five supported scopes.
+- Provisioned `4RWo2A35L2NYavF4NuD0VwINOmB2` as admin with the operational scopes `products`, `orders`, `finance`, and `community`; intentionally withheld the privilege-delegating `roles` scope.
+- Independently verified both enabled Firebase Auth accounts and their exact custom claims after provisioning and again immediately before Rules deployment.
+- Deployed only claim-authoritative Firestore Rules to `gen-lang-client-0026437130` with `firebase deploy --only firestore:rules --project gen-lang-client-0026437130`; the active Rules API release points to ruleset `ed2fdf20-027d-4e7b-b271-51033f9d6c16`.
+- Kept production authorization smoke verification separate from Rules deployment and required fresh privileged tokens before attempting it.
+- Added a project-locked, read-only SEC-01 production verifier that uses in-memory authentication, bounded Firestore reads, no mutation APIs, and no token output.
+- Reconfirmed both approved Auth claim sets and verified in production that unauthenticated `admin_audit_logs` access is denied. The remaining privileged smoke cases stopped before Firestore access because operator ADC lacks `iam.serviceAccounts.signBlob` and no reachable signed-in application session was available; no IAM, Rules, claims, or production data were changed.
+
+### Changed
+- Registration no longer writes legacy role or scope defaults from Flutter.
+- Flutter admin gates and role-management actions now use token claims and the callable backend.
+- Added `SECURITY.md` and synchronized the roadmap, technical blueprint, and architectural decisions with the implemented trust boundary.
+- Repaired the incomplete Functions dependency installation that omitted the Firebase SDK executable shim, using a lockfile-consistent clean install under Node.js 22 and npm 10.
+- Moved the Functions runtime from Node.js 20 to supported Node.js 22; retained `firebase-functions` 5.1.1 and `firebase-admin` 12.7.0 after compatibility validation rather than introducing unrelated major upgrades.
+- Deployed only `setUserAdminAccess` to `gen-lang-client-0026437130`; the production Functions inventory confirms the v2 callable is active in `us-central1` on Node.js 22.
+- Kept SEC-01 at 7/8 and blocked because the refreshed privileged application sessions are not reachable by the verifier; developer/admin positive reads, admin `roles` denial, and authenticated profile reads remain. Recorded the separate Artifact Registry cleanup-policy warning emitted after successful Function creation and the non-blocking Rules compiler warnings for existing unused helpers.
+
+## 2026-09-19
+
+### Added
+- Master product blueprint, technical architecture/security audit, dependency-ordered roadmap, user flows, and decision log.
+
+### Changed
+- Documentation policy now requires blueprint/roadmap review and evidence-based roadmap updates.
+
 Semua perubahan proyek wajib dicatat di file ini mulai sekarang.
 
 ## 2026-04-13

@@ -67,8 +67,7 @@ class PostService {
           <String>{'public', 'followers', 'private'}.contains(visibility)
           ? visibility
           : 'public';
-      String username =
-          user.displayName?.trim().isNotEmpty == true
+      String username = user.displayName?.trim().isNotEmpty == true
           ? user.displayName!.trim()
           : (user.email?.split('@')[0] ?? 'Anonymous');
       try {
@@ -91,8 +90,9 @@ class PostService {
         location?.trim() ?? '',
       );
       final List<String> sanitizedHashtags = _sanitizeHashtags(hashtags);
-      final String normalizedType =
-          type.trim().toLowerCase() == 'product' ? 'product' : 'post';
+      final String normalizedType = type.trim().toLowerCase() == 'product'
+          ? 'product'
+          : 'post';
       final String normalizedProductId = productId?.trim() ?? '';
       final Map<String, dynamic> payload = <String, dynamic>{
         'content': content.trim(),
@@ -258,13 +258,14 @@ class PostService {
     final DocumentReference<Map<String, dynamic>> postRef = _firestore
         .collection('posts')
         .doc(postId);
-    final DocumentSnapshot<Map<String, dynamic>> postSnapshot =
-        await postRef.get();
+    final DocumentSnapshot<Map<String, dynamic>> postSnapshot = await postRef
+        .get();
     if (!postSnapshot.exists) {
       return;
     }
 
-    final Map<String, dynamic> data = postSnapshot.data() ?? <String, dynamic>{};
+    final Map<String, dynamic> data =
+        postSnapshot.data() ?? <String, dynamic>{};
     final String ownerUid = data['uid']?.toString() ?? '';
     final String imageUrl = data['imageUrl']?.toString().trim() ?? '';
     if (ownerUid != user.uid) {
@@ -354,7 +355,10 @@ class PostService {
       'shareCount': FieldValue.increment(1),
       'lastShareActorUid': user.uid,
     });
-    await TelemetryService.instance.logSharePost(method: method, postId: postId);
+    await TelemetryService.instance.logSharePost(
+      method: method,
+      postId: postId,
+    );
   }
 
   // Add a comment

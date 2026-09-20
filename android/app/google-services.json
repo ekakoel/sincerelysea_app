@@ -23,6 +23,14 @@
           }
         },
         {
+          "client_id": "436229615260-cj25p21f612766hjkpficvu2b3fuvi5k.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.sincerelysea.app",
+            "certificate_hash": "e18f6cf74871fd5a07dc5b70da4b3fd9cad87b9c"
+          }
+        },
+        {
           "client_id": "436229615260-jv6ds0j7foj27kmh4djomtebftgta8qf.apps.googleusercontent.com",
           "client_type": 3
         }

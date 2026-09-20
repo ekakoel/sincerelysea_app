@@ -24,19 +24,19 @@ class CartService {
     if (user == null) {
       return Stream<int>.value(0);
     }
-    return _cartRef(user.uid).snapshots().map(
-      (QuerySnapshot<Map<String, dynamic>> snapshot) {
-        int total = 0;
-        for (final QueryDocumentSnapshot<Map<String, dynamic>> doc
-            in snapshot.docs) {
-          final int quantity = doc.data()['quantity'] is num
-              ? (doc.data()['quantity'] as num).toInt()
-              : 0;
-          total += quantity;
-        }
-        return total;
-      },
-    );
+    return _cartRef(user.uid).snapshots().map((
+      QuerySnapshot<Map<String, dynamic>> snapshot,
+    ) {
+      int total = 0;
+      for (final QueryDocumentSnapshot<Map<String, dynamic>> doc
+          in snapshot.docs) {
+        final int quantity = doc.data()['quantity'] is num
+            ? (doc.data()['quantity'] as num).toInt()
+            : 0;
+        total += quantity;
+      }
+      return total;
+    });
   }
 
   Future<List<CartItem>> getCartItems() async {
@@ -53,10 +53,7 @@ class CartService {
         .toList(growable: false);
   }
 
-  Future<void> addToCart({
-    required String productId,
-    int quantity = 1,
-  }) async {
+  Future<void> addToCart({required String productId, int quantity = 1}) async {
     final User? user = _auth.currentUser;
     if (user == null) {
       throw Exception('User not authenticated');

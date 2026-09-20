@@ -10,8 +10,8 @@ import 'package:sincerelysea/services/product_service.dart';
 
 class CheckoutScreen extends StatefulWidget {
   const CheckoutScreen.cart({super.key})
-      : buyNowProduct = null,
-        buyNowQuantity = 1;
+    : buyNowProduct = null,
+      buyNowQuantity = 1;
 
   const CheckoutScreen.buyNow({
     super.key,
@@ -54,10 +54,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
       appBar: AppBar(title: const Text('Checkout')),
       body: FutureBuilder<_CheckoutData>(
         future: _loadCheckoutData(context),
-        builder: (
-          BuildContext context,
-          AsyncSnapshot<_CheckoutData> snapshot,
-        ) {
+        builder: (BuildContext context, AsyncSnapshot<_CheckoutData> snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator());
           }
@@ -66,7 +63,8 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
               child: Text('Failed to load checkout data: ${snapshot.error}'),
             );
           }
-          final _CheckoutData data = snapshot.data ?? const _CheckoutData.empty();
+          final _CheckoutData data =
+              snapshot.data ?? const _CheckoutData.empty();
           if (data.items.isEmpty) {
             return const Center(child: Text('Nothing to checkout.'));
           }
@@ -305,17 +303,18 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     setState(() => _placingOrder = true);
     try {
       final Map<String, Product> productsById = <String, Product>{
-        for (final _CheckoutItem item in data.items) item.product.id: item.product,
+        for (final _CheckoutItem item in data.items)
+          item.product.id: item.product,
       };
       final String orderId = await orderService.placeOrder(
-            cartItems: data.cartItems,
-            productsById: productsById,
-            checkoutInfo: CheckoutInfo(
-              customerName: _nameController.text,
-              phone: _phoneController.text,
-              address: _addressController.text,
-            ),
-          );
+        cartItems: data.cartItems,
+        productsById: productsById,
+        checkoutInfo: CheckoutInfo(
+          customerName: _nameController.text,
+          phone: _phoneController.text,
+          address: _addressController.text,
+        ),
+      );
 
       if (widget.buyNowProduct == null) {
         await cartService.clearCart();
@@ -324,9 +323,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
       if (!mounted) {
         return;
       }
-      messenger.showSnackBar(
-        SnackBar(content: Text('Order placed: $orderId')),
-      );
+      messenger.showSnackBar(SnackBar(content: Text('Order placed: $orderId')));
       navigator.popUntil((Route<dynamic> route) => route.isFirst);
     } catch (e) {
       if (!mounted) {
@@ -344,40 +341,31 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
 }
 
 class _CheckoutData {
-  const _CheckoutData({
-    required this.cartItems,
-    required this.items,
-  });
+  const _CheckoutData({required this.cartItems, required this.items});
 
   const _CheckoutData.empty()
-      : cartItems = const <CartItem>[],
-        items = const <_CheckoutItem>[];
+    : cartItems = const <CartItem>[],
+      items = const <_CheckoutItem>[];
 
   final List<CartItem> cartItems;
   final List<_CheckoutItem> items;
 
   double get totalPrice => items.fold<double>(
-        0,
-        (double sum, _CheckoutItem item) =>
-            sum + (item.product.price * item.quantity),
-      );
+    0,
+    (double sum, _CheckoutItem item) =>
+        sum + (item.product.price * item.quantity),
+  );
 }
 
 class _CheckoutItem {
-  const _CheckoutItem({
-    required this.product,
-    required this.quantity,
-  });
+  const _CheckoutItem({required this.product, required this.quantity});
 
   final Product product;
   final int quantity;
 }
 
 class _InventoryPill extends StatelessWidget {
-  const _InventoryPill({
-    required this.label,
-    required this.isPreorder,
-  });
+  const _InventoryPill({required this.label, required this.isPreorder});
 
   final String label;
   final bool isPreorder;
@@ -419,10 +407,7 @@ class _NeutralPill extends StatelessWidget {
       ),
       child: Text(
         label,
-        style: const TextStyle(
-          fontSize: 12,
-          fontWeight: FontWeight.w600,
-        ),
+        style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
       ),
     );
   }

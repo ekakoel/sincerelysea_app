@@ -7,7 +7,6 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:provider/provider.dart';
 import 'package:sincerelysea/l10n/app_localizations.dart';
 import 'package:sincerelysea/services/account_lifecycle_service.dart';
-import 'package:sincerelysea/services/admin_service.dart';
 import 'package:sincerelysea/services/auth_service.dart';
 import 'package:sincerelysea/services/deep_link_service.dart';
 import 'package:sincerelysea/services/discovery_service.dart';
@@ -25,7 +24,6 @@ import 'package:sincerelysea/services/theme_service.dart';
 import 'package:sincerelysea/services/user_profile_service.dart';
 import 'package:sincerelysea/services/wishlist_service.dart';
 import 'package:sincerelysea/services/cart_service.dart';
-import 'package:sincerelysea/services/community_management_service.dart';
 import 'package:sincerelysea/services/order_service.dart';
 import 'screens/splash/splash_redirect.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -66,16 +64,12 @@ class MyApp extends StatelessWidget {
     return MultiProvider(
       providers: [
         Provider<AuthService>(create: (_) => AuthService()),
-        Provider<AdminService>(create: (_) => AdminService()),
         ChangeNotifierProvider<DeepLinkService>(
           create: (_) => DeepLinkService()..start(),
         ),
         Provider<PostService>(create: (_) => PostService()),
         Provider<ProductService>(create: (_) => ProductService()),
         Provider<CartService>(create: (_) => CartService()),
-        Provider<CommunityManagementService>(
-          create: (_) => CommunityManagementService(),
-        ),
         Provider<OrderService>(create: (_) => OrderService()),
         Provider<SalesReportingService>(create: (_) => SalesReportingService()),
         Provider<ShopSettingsService>(create: (_) => ShopSettingsService()),

@@ -13,6 +13,24 @@ setGlobalOptions({ maxInstances: 10, region: 'us-central1' });
 const db = admin.firestore();
 const storage = admin.storage();
 const RECENT_AUTH_MAX_AGE_SECONDS = 5 * 60;
+const ADMIN_SCOPES = ['products', 'orders', 'finance', 'community', 'roles'];
+
+function normalizedAdminScopes(value) {
+  if (!Array.isArray(value)) return [];
+  return [...new Set(value
+    .map((scope) => String(scope).trim().toLowerCase())
+    .filter((scope) => ADMIN_SCOPES.includes(scope)))];
+}
+
+function canManageAdminAccess(token) {
+  if (token?.developer === true) return true;
+  if (token?.admin !== true) return false;
+  const scopes = token.adminScopes;
+  return !Array.isArray(scopes)
+    || scopes.length === 0
+    || scopes.includes('roles')
+    || scopes.includes('all');
+}
 
 function notificationsRef(uid) {
   return db.collection('users').doc(uid).collection('notifications');
@@ -180,6 +198,122 @@ exports.hardDeleteAccount = onCall(async (request) => {
   await admin.auth().deleteUser(uid);
 
   return { ok: true };
+});
+
+exports.setUserAdminAccess = onCall(async (request) => {
+  if (!request.auth) {
+    throw new HttpsError('unauthenticated', 'You must be signed in.');
+  }
+  if (!canManageAdminAccess(request.auth.token)) {
+    throw new HttpsError(
+      'permission-denied',
+      'A trusted roles administrator claim is required.',
+    );
+  }
+
+  const targetUid = String(request.data?.userId || '').trim();
+  const requestedRole = String(request.data?.role || '').trim().toLowerCase();
+  if (!targetUid || !['user', 'admin', 'developer'].includes(requestedRole)) {
+    throw new HttpsError('invalid-argument', 'Valid userId and role are required.');
+  }
+  if (targetUid === request.auth.uid) {
+    throw new HttpsError(
+      'failed-precondition',
+      'Administrators cannot change their own access.',
+    );
+  }
+
+  let targetRecord;
+  try {
+    targetRecord = await admin.auth().getUser(targetUid);
+  } catch (error) {
+    if (error?.code === 'auth/user-not-found') {
+      throw new HttpsError('not-found', 'Target user does not exist.');
+    }
+    throw error;
+  }
+
+  const targetClaims = targetRecord.customClaims || {};
+  const actorIsDeveloper = request.auth.token.developer === true;
+  if (!actorIsDeveloper
+      && (requestedRole === 'developer' || targetClaims.developer === true)) {
+    throw new HttpsError(
+      'permission-denied',
+      'Only a developer claim can assign or modify developer access.',
+    );
+  }
+
+  const requestedScopes = requestedRole === 'developer'
+    ? [...ADMIN_SCOPES]
+    : normalizedAdminScopes(request.data?.adminScopes);
+  const nextClaims = { ...targetClaims };
+  delete nextClaims.admin;
+  delete nextClaims.developer;
+  delete nextClaims.adminScopes;
+  if (requestedRole === 'admin') {
+    nextClaims.admin = true;
+    nextClaims.adminScopes = requestedScopes.length > 0
+      ? requestedScopes
+      : [...ADMIN_SCOPES];
+  } else if (requestedRole === 'developer') {
+    nextClaims.admin = true;
+    nextClaims.developer = true;
+    nextClaims.adminScopes = [...ADMIN_SCOPES];
+  }
+
+  const targetRef = db.collection('users').doc(targetUid);
+  const actorRef = db.collection('users').doc(request.auth.uid);
+  const [targetSnapshot, actorSnapshot] = await Promise.all([
+    targetRef.get(),
+    actorRef.get(),
+  ]);
+  if (!targetSnapshot.exists) {
+    throw new HttpsError('not-found', 'Target user profile does not exist.');
+  }
+
+  const targetData = targetSnapshot.data() || {};
+  const actorData = actorSnapshot.data() || {};
+  const previousRole = targetClaims.developer === true
+    ? 'developer'
+    : targetClaims.admin === true
+      ? 'admin'
+      : 'user';
+  const previousScopes = previousRole === 'user'
+    ? []
+    : normalizedAdminScopes(targetClaims.adminScopes);
+
+  await admin.auth().setCustomUserClaims(targetUid, nextClaims);
+
+  const batch = db.batch();
+  batch.set(targetRef, {
+    role: requestedRole,
+    adminScopes: requestedRole === 'user' ? [] : nextClaims.adminScopes,
+    authorizationSource: 'firebase_auth_custom_claims',
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+  }, { merge: true });
+  batch.set(db.collection('admin_audit_logs').doc(), {
+    action: 'admin_access_updated',
+    source: 'trusted_callable',
+    actorUid: request.auth.uid,
+    actorUsername: actorData.username || '',
+    actorDisplayName: actorData.displayName || '',
+    targetUid,
+    targetUsername: targetData.username || '',
+    targetDisplayName: targetData.displayName || '',
+    previousRole,
+    newRole: requestedRole,
+    previousScopes,
+    newScopes: requestedRole === 'user' ? [] : nextClaims.adminScopes,
+    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+  });
+  await batch.commit();
+
+  return {
+    ok: true,
+    role: requestedRole,
+    adminScopes: requestedRole === 'user' ? [] : nextClaims.adminScopes,
+    tokenRefreshRequired: true,
+  };
 });
 
 exports.onFollowCreated = onDocumentCreated(

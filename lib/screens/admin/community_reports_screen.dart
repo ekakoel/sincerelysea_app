@@ -60,58 +60,68 @@ class _CommunityReportsScreenState extends State<CommunityReportsScreen> {
               Expanded(
                 child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
                   stream: service.reportsStream(status: _selectedStatus),
-                  builder: (
-                    BuildContext context,
-                    AsyncSnapshot<QuerySnapshot<Map<String, dynamic>>> snapshot,
-                  ) {
-                    if (snapshot.connectionState == ConnectionState.waiting) {
-                      return const Center(child: CircularProgressIndicator());
-                    }
-                    if (snapshot.hasError) {
-                      return Center(
-                        child: Text('Failed to load reports: ${snapshot.error}'),
-                      );
-                    }
-                    final List<QueryDocumentSnapshot<Map<String, dynamic>>> docs =
-                        snapshot.data?.docs ??
-                        <QueryDocumentSnapshot<Map<String, dynamic>>>[];
-                    if (docs.isEmpty) {
-                      return const Center(
-                        child: Text('No community reports in this status.'),
-                      );
-                    }
-                    return ListView.separated(
-                      padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
-                      itemCount: docs.length,
-                      separatorBuilder: (_, _) => const SizedBox(height: 12),
-                      itemBuilder: (BuildContext context, int index) {
-                        final Map<String, dynamic> data = docs[index].data();
-                        return _ReportCard(
-                          reportId: docs[index].id,
-                          data: data,
-                          onStatusChanged: (String status) async {
-                            try {
-                              await service.updateReportStatus(
-                                reportId: docs[index].id,
-                                status: status,
-                              );
-                            } catch (e) {
-                              if (!context.mounted) {
-                                return;
-                              }
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(
-                                  content: Text(
-                                    'Failed to update report status: $e',
-                                  ),
-                                ),
-                              );
-                            }
+                  builder:
+                      (
+                        BuildContext context,
+                        AsyncSnapshot<QuerySnapshot<Map<String, dynamic>>>
+                        snapshot,
+                      ) {
+                        if (snapshot.connectionState ==
+                            ConnectionState.waiting) {
+                          return const Center(
+                            child: CircularProgressIndicator(),
+                          );
+                        }
+                        if (snapshot.hasError) {
+                          return Center(
+                            child: Text(
+                              'Failed to load reports: ${snapshot.error}',
+                            ),
+                          );
+                        }
+                        final List<QueryDocumentSnapshot<Map<String, dynamic>>>
+                        docs =
+                            snapshot.data?.docs ??
+                            <QueryDocumentSnapshot<Map<String, dynamic>>>[];
+                        if (docs.isEmpty) {
+                          return const Center(
+                            child: Text('No community reports in this status.'),
+                          );
+                        }
+                        return ListView.separated(
+                          padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+                          itemCount: docs.length,
+                          separatorBuilder: (_, _) =>
+                              const SizedBox(height: 12),
+                          itemBuilder: (BuildContext context, int index) {
+                            final Map<String, dynamic> data = docs[index]
+                                .data();
+                            return _ReportCard(
+                              reportId: docs[index].id,
+                              data: data,
+                              onStatusChanged: (String status) async {
+                                try {
+                                  await service.updateReportStatus(
+                                    reportId: docs[index].id,
+                                    status: status,
+                                  );
+                                } catch (e) {
+                                  if (!context.mounted) {
+                                    return;
+                                  }
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: Text(
+                                        'Failed to update report status: $e',
+                                      ),
+                                    ),
+                                  );
+                                }
+                              },
+                            );
                           },
                         );
                       },
-                    );
-                  },
                 ),
               ),
             ],

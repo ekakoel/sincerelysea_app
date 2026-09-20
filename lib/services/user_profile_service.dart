@@ -144,12 +144,12 @@ class UserProfileService {
         });
 
         if (oldLower.isNotEmpty) {
-          final DocumentReference<Map<String, dynamic>> oldUsernameRef = _firestore
-              .collection('usernames')
-              .doc(oldLower);
-          final DocumentSnapshot<Map<String, dynamic>> oldUsernameSnap = await tx
-              .get(oldUsernameRef);
-          final String oldUid = oldUsernameSnap.data()?['uid']?.toString() ?? '';
+          final DocumentReference<Map<String, dynamic>> oldUsernameRef =
+              _firestore.collection('usernames').doc(oldLower);
+          final DocumentSnapshot<Map<String, dynamic>> oldUsernameSnap =
+              await tx.get(oldUsernameRef);
+          final String oldUid =
+              oldUsernameSnap.data()?['uid']?.toString() ?? '';
           if (oldUsernameSnap.exists && oldUid == user.uid) {
             tx.delete(oldUsernameRef);
           }

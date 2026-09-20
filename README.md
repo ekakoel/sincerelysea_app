@@ -1,5 +1,11 @@
 # SincerelySea App
 
+## Master documentation
+
+Start every change with the [Master Product Blueprint](docs/BLUEPRINT.md) and [Development Roadmap](docs/ROADMAP.md). The repository is authoritative for current implementation; the blueprint defines the target product. Supporting references: [Technical Blueprint](docs/TECHNICAL_BLUEPRINT.md), [User Flows](docs/USER_FLOWS.md), and [Architectural Decisions](docs/DECISIONS.md).
+
+**Current development phase:** Phase 0 - Blueprint and Security Gate. Phase 1 is the next task; trusted commerce remains blocked until the P0 security findings in the technical blueprint are resolved.
+
 SincerelySea adalah aplikasi mobile Flutter yang menggabungkan komunitas sosial dengan `admin-managed marketplace`. Aplikasi ini sekarang berfungsi sebagai ruang komunitas sekaligus `SincerelySea Store`, tempat brand memasarkan produk resminya langsung di dalam aplikasi.
 
 ---
@@ -12,7 +18,7 @@ Mulai 2026-04-03, setiap perubahan kode wajib didokumentasikan di file Markdown.
 - Aturan dokumentasi: [docs/DOCUMENTATION_POLICY.md](/Users/abc/SincerelySea/sincerelysea/docs/DOCUMENTATION_POLICY.md)
 - Domain bisnis: [docs/BUSINESS_DOMAIN.md](/Users/abc/SincerelySea/sincerelysea/docs/BUSINESS_DOMAIN.md)
 - Panduan scope admin: [docs/SCOPE_GUIDE.md](/Users/abc/SincerelySea/sincerelysea/docs/SCOPE_GUIDE.md)
-- Roadmap proyek: [docs/PROJECT_ROADMAP.md](/Users/abc/SincerelySea/sincerelysea/docs/PROJECT_ROADMAP.md)
+- Roadmap proyek: [docs/ROADMAP.md](docs/ROADMAP.md)
 
 ---
 
@@ -77,7 +83,7 @@ Fokus saat ini:
 - tooling komunitas dan access control
 
 Dokumen roadmap lengkap:
-- [docs/PROJECT_ROADMAP.md](/Users/abc/SincerelySea/sincerelysea/docs/PROJECT_ROADMAP.md)
+- [docs/ROADMAP.md](docs/ROADMAP.md)
 
 ---
 

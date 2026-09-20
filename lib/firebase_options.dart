@@ -55,7 +55,8 @@ class DefaultFirebaseOptions {
     messagingSenderId: '436229615260',
     projectId: 'gen-lang-client-0026437130',
     authDomain: 'gen-lang-client-0026437130.firebaseapp.com',
-    databaseURL: 'https://gen-lang-client-0026437130-default-rtdb.asia-southeast1.firebasedatabase.app',
+    databaseURL:
+        'https://gen-lang-client-0026437130-default-rtdb.asia-southeast1.firebasedatabase.app',
     storageBucket: 'gen-lang-client-0026437130.firebasestorage.app',
     measurementId: 'G-4E28MGNKE7',
   );
@@ -65,7 +66,8 @@ class DefaultFirebaseOptions {
     appId: '1:436229615260:android:8339dc00eb965a0d028759',
     messagingSenderId: '436229615260',
     projectId: 'gen-lang-client-0026437130',
-    databaseURL: 'https://gen-lang-client-0026437130-default-rtdb.asia-southeast1.firebasedatabase.app',
+    databaseURL:
+        'https://gen-lang-client-0026437130-default-rtdb.asia-southeast1.firebasedatabase.app',
     storageBucket: 'gen-lang-client-0026437130.firebasestorage.app',
   );
 }

@@ -31,135 +31,109 @@ class _SellerOrdersScreenState extends State<SellerOrdersScreen> {
       appBar: AppBar(title: const Text('Store Orders')),
       body: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
         stream: context.read<OrderService>().sellerOrdersStream(),
-        builder: (
-          BuildContext context,
-          AsyncSnapshot<QuerySnapshot<Map<String, dynamic>>> snapshot,
-        ) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
-          }
-          if (snapshot.hasError) {
-            return Center(
-              child: Text('Failed to load store orders: ${snapshot.error}'),
-            );
-          }
+        builder:
+            (
+              BuildContext context,
+              AsyncSnapshot<QuerySnapshot<Map<String, dynamic>>> snapshot,
+            ) {
+              if (snapshot.connectionState == ConnectionState.waiting) {
+                return const Center(child: CircularProgressIndicator());
+              }
+              if (snapshot.hasError) {
+                return Center(
+                  child: Text('Failed to load store orders: ${snapshot.error}'),
+                );
+              }
 
-          final List<app_order.Order> orders = (snapshot.data?.docs ?? <QueryDocumentSnapshot<Map<String, dynamic>>>[])
-              .map(app_order.Order.fromFirestore)
-              .toList(growable: false);
-          final List<app_order.Order> filteredOrders = orders
-              .where(_matchesStatus)
-              .where(_matchesSearch)
-              .toList(growable: false);
-          final List<app_order.Order> attentionOrders = orders
-              .where(
-                (app_order.Order order) => <String>[
-                  'pending',
-                  'paid',
-                  'processing',
-                ].contains(order.status),
-              )
-              .take(4)
-              .toList(growable: false);
-          if (orders.isEmpty) {
-            return const Center(
-              child: Text('No incoming customer orders for SincerelySea Store yet.'),
-            );
-          }
+              final List<app_order.Order> orders =
+                  (snapshot.data?.docs ??
+                          <QueryDocumentSnapshot<Map<String, dynamic>>>[])
+                      .map(app_order.Order.fromFirestore)
+                      .toList(growable: false);
+              final List<app_order.Order> filteredOrders = orders
+                  .where(_matchesStatus)
+                  .where(_matchesSearch)
+                  .toList(growable: false);
+              final List<app_order.Order> attentionOrders = orders
+                  .where(
+                    (app_order.Order order) => <String>[
+                      'pending',
+                      'paid',
+                      'processing',
+                    ].contains(order.status),
+                  )
+                  .take(4)
+                  .toList(growable: false);
+              if (orders.isEmpty) {
+                return const Center(
+                  child: Text(
+                    'No incoming customer orders for SincerelySea Store yet.',
+                  ),
+                );
+              }
 
-          return Column(
-            children: <Widget>[
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-                child: _SellerSummaryCard(orders: orders),
-              ),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-                child: TextField(
-                  controller: _searchController,
-                  decoration: InputDecoration(
-                    prefixIcon: const Icon(Icons.search),
-                    hintText: 'Search order ID, customer, phone, or product',
-                    suffixIcon: _searchQuery.isEmpty
-                        ? null
-                        : IconButton(
-                            onPressed: () {
-                              _searchController.clear();
-                              setState(() => _searchQuery = '');
-                            },
-                            icon: const Icon(Icons.close),
-                          ),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(14),
+              return Column(
+                children: <Widget>[
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                    child: _SellerSummaryCard(orders: orders),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                    child: TextField(
+                      controller: _searchController,
+                      decoration: InputDecoration(
+                        prefixIcon: const Icon(Icons.search),
+                        hintText:
+                            'Search order ID, customer, phone, or product',
+                        suffixIcon: _searchQuery.isEmpty
+                            ? null
+                            : IconButton(
+                                onPressed: () {
+                                  _searchController.clear();
+                                  setState(() => _searchQuery = '');
+                                },
+                                icon: const Icon(Icons.close),
+                              ),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                      ),
+                      onChanged: (String value) {
+                        setState(
+                          () => _searchQuery = value.trim().toLowerCase(),
+                        );
+                      },
                     ),
                   ),
-                  onChanged: (String value) {
-                    setState(() => _searchQuery = value.trim().toLowerCase());
-                  },
-                ),
-              ),
-              SizedBox(
-                height: 56,
-                child: ListView(
-                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-                  scrollDirection: Axis.horizontal,
-                  children: <String>[
-                    'all',
-                    'cancelled',
-                    'pending',
-                    'paid',
-                    'processing',
-                    'shipped',
-                    'completed',
-                  ].map(_buildStatusChip).toList(growable: false),
-                ),
-              ),
-              if (_searchQuery.isEmpty && attentionOrders.isNotEmpty)
-                SizedBox(
-                  height: 136,
-                  child: ListView.separated(
-                    padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
-                    scrollDirection: Axis.horizontal,
-                    itemCount: attentionOrders.length,
-                    separatorBuilder: (_, _) => const SizedBox(width: 10),
-                    itemBuilder: (BuildContext context, int index) {
-                      final app_order.Order order = attentionOrders[index];
-                      return _AttentionCard(
-                        order: order,
-                        onTap: () {
-                          Navigator.of(context).push(
-                            MaterialPageRoute<void>(
-                              builder: (_) => OrderDetailScreen(
-                                order: order,
-                                isSellerView: true,
-                              ),
-                            ),
-                          );
-                        },
-                      );
-                    },
+                  SizedBox(
+                    height: 56,
+                    child: ListView(
+                      padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                      scrollDirection: Axis.horizontal,
+                      children: <String>[
+                        'all',
+                        'cancelled',
+                        'pending',
+                        'paid',
+                        'processing',
+                        'shipped',
+                        'completed',
+                      ].map(_buildStatusChip).toList(growable: false),
+                    ),
                   ),
-                ),
-              Expanded(
-                child: filteredOrders.isEmpty
-                    ? Center(
-                        child: Text(
-                          _searchQuery.isNotEmpty
-                              ? 'No orders match this search.'
-                              : 'No orders in this status.',
-                        ),
-                      )
-                    : ListView.separated(
-                        padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
-                        itemCount: filteredOrders.length,
-                        separatorBuilder:
-                            (BuildContext context, int index) =>
-                                const SizedBox(height: 12),
+                  if (_searchQuery.isEmpty && attentionOrders.isNotEmpty)
+                    SizedBox(
+                      height: 136,
+                      child: ListView.separated(
+                        padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
+                        scrollDirection: Axis.horizontal,
+                        itemCount: attentionOrders.length,
+                        separatorBuilder: (_, _) => const SizedBox(width: 10),
                         itemBuilder: (BuildContext context, int index) {
-                          final app_order.Order order = filteredOrders[index];
-                          return OrderCard(
+                          final app_order.Order order = attentionOrders[index];
+                          return _AttentionCard(
                             order: order,
-                            isSellerView: true,
                             onTap: () {
                               Navigator.of(context).push(
                                 MaterialPageRoute<void>(
@@ -170,30 +144,69 @@ class _SellerOrdersScreenState extends State<SellerOrdersScreen> {
                                 ),
                               );
                             },
-                            onStatusChanged: (String nextStatus) async {
-                              try {
-                                await context.read<OrderService>().updateOrderStatus(
-                                  orderId: order.id,
-                                  status: nextStatus,
-                                );
-                              } catch (e) {
-                                if (!context.mounted) {
-                                  return;
-                                }
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(
-                                    content: Text('Failed to update order status: $e'),
-                                  ),
-                                );
-                              }
-                            },
                           );
                         },
                       ),
-              ),
-            ],
-          );
-        },
+                    ),
+                  Expanded(
+                    child: filteredOrders.isEmpty
+                        ? Center(
+                            child: Text(
+                              _searchQuery.isNotEmpty
+                                  ? 'No orders match this search.'
+                                  : 'No orders in this status.',
+                            ),
+                          )
+                        : ListView.separated(
+                            padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+                            itemCount: filteredOrders.length,
+                            separatorBuilder:
+                                (BuildContext context, int index) =>
+                                    const SizedBox(height: 12),
+                            itemBuilder: (BuildContext context, int index) {
+                              final app_order.Order order =
+                                  filteredOrders[index];
+                              return OrderCard(
+                                order: order,
+                                isSellerView: true,
+                                onTap: () {
+                                  Navigator.of(context).push(
+                                    MaterialPageRoute<void>(
+                                      builder: (_) => OrderDetailScreen(
+                                        order: order,
+                                        isSellerView: true,
+                                      ),
+                                    ),
+                                  );
+                                },
+                                onStatusChanged: (String nextStatus) async {
+                                  try {
+                                    await context
+                                        .read<OrderService>()
+                                        .updateOrderStatus(
+                                          orderId: order.id,
+                                          status: nextStatus,
+                                        );
+                                  } catch (e) {
+                                    if (!context.mounted) {
+                                      return;
+                                    }
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(
+                                        content: Text(
+                                          'Failed to update order status: $e',
+                                        ),
+                                      ),
+                                    );
+                                  }
+                                },
+                              );
+                            },
+                          ),
+                  ),
+                ],
+              );
+            },
       ),
     );
   }
@@ -253,10 +266,7 @@ class _SellerOrdersScreenState extends State<SellerOrdersScreen> {
 }
 
 class _AttentionCard extends StatelessWidget {
-  const _AttentionCard({
-    required this.order,
-    required this.onTap,
-  });
+  const _AttentionCard({required this.order, required this.onTap});
 
   final app_order.Order order;
   final VoidCallback onTap;
@@ -344,22 +354,13 @@ class _SellerSummaryCard extends StatelessWidget {
       child: Row(
         children: <Widget>[
           Expanded(
-            child: _MetricTile(
-              label: 'Orders',
-              value: '$totalOrders',
-            ),
+            child: _MetricTile(label: 'Orders', value: '$totalOrders'),
           ),
           Expanded(
-            child: _MetricTile(
-              label: 'Pending',
-              value: '$pendingOrders',
-            ),
+            child: _MetricTile(label: 'Pending', value: '$pendingOrders'),
           ),
           Expanded(
-            child: _MetricTile(
-              label: 'Completed',
-              value: '$completedOrders',
-            ),
+            child: _MetricTile(label: 'Completed', value: '$completedOrders'),
           ),
           Expanded(
             child: _MetricTile(
@@ -374,10 +375,7 @@ class _SellerSummaryCard extends StatelessWidget {
 }
 
 class _MetricTile extends StatelessWidget {
-  const _MetricTile({
-    required this.label,
-    required this.value,
-  });
+  const _MetricTile({required this.label, required this.value});
 
   final String label;
   final String value;
@@ -388,19 +386,10 @@ class _MetricTile extends StatelessWidget {
       children: <Widget>[
         Text(
           value,
-          style: const TextStyle(
-            fontSize: 16,
-            fontWeight: FontWeight.w700,
-          ),
+          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
         ),
         const SizedBox(height: 4),
-        Text(
-          label,
-          style: TextStyle(
-            color: AppColors.gray700,
-            fontSize: 12,
-          ),
-        ),
+        Text(label, style: TextStyle(color: AppColors.gray700, fontSize: 12)),
       ],
     );
   }

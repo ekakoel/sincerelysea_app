@@ -128,14 +128,10 @@ class _AppCheckCachedNetworkImageState
       fadeInDuration:
           widget.fadeInDuration ?? const Duration(milliseconds: 220),
       imageBuilder: widget.imageBuilder,
-      progressIndicatorBuilder:
-          widget.placeholder == null
-              ? null
-              : (
-                BuildContext context,
-                String _,
-                DownloadProgress _,
-              ) => widget.placeholder!,
+      progressIndicatorBuilder: widget.placeholder == null
+          ? null
+          : (BuildContext context, String _, DownloadProgress _) =>
+                widget.placeholder!,
       errorWidget: (BuildContext context, String _, Object error) {
         if (!_bypassHeaders && _httpHeaders.isNotEmpty) {
           WidgetsBinding.instance.addPostFrameCallback((_) {

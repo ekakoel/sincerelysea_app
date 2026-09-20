@@ -25,106 +25,126 @@ class SavedProductsScreen extends StatelessWidget {
       appBar: AppBar(title: const Text('Saved Products')),
       body: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
         stream: context.read<WishlistService>().getWishlistStream(uid),
-        builder: (
-          BuildContext context,
-          AsyncSnapshot<QuerySnapshot<Map<String, dynamic>>> snapshot,
-        ) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
-          }
-          if (snapshot.hasError) {
-            return Center(
-              child: Text('Failed to load saved products: ${snapshot.error}'),
-            );
-          }
-
-          final List<QueryDocumentSnapshot<Map<String, dynamic>>> productDocs =
-              (snapshot.data?.docs ??
-                      <QueryDocumentSnapshot<Map<String, dynamic>>>[])
-                  .where(
-                    (QueryDocumentSnapshot<Map<String, dynamic>> doc) =>
-                        doc.data()['type']?.toString() == 'product' &&
-                        doc.data()['productId']?.toString().trim().isNotEmpty ==
-                            true,
-                  )
-                  .toList(growable: false);
-
-          if (productDocs.isEmpty) {
-            return const Center(child: Text('No saved products yet.'));
-          }
-
-          return Column(
-            children: <Widget>[
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
-                child: Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: AppColors.gray100,
-                    borderRadius: BorderRadius.circular(12),
-                  ),
+        builder:
+            (
+              BuildContext context,
+              AsyncSnapshot<QuerySnapshot<Map<String, dynamic>>> snapshot,
+            ) {
+              if (snapshot.connectionState == ConnectionState.waiting) {
+                return const Center(child: CircularProgressIndicator());
+              }
+              if (snapshot.hasError) {
+                return Center(
                   child: Text(
-                    '${productDocs.length} saved product${productDocs.length == 1 ? '' : 's'}',
-                    style: const TextStyle(fontWeight: FontWeight.w700),
+                    'Failed to load saved products: ${snapshot.error}',
                   ),
-                ),
-              ),
-              Expanded(
-                child: GridView.builder(
-                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
-                  itemCount: productDocs.length,
-                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: 2,
-                    crossAxisSpacing: 12,
-                    mainAxisSpacing: 12,
-                    childAspectRatio: 0.72,
-                  ),
-                  itemBuilder: (BuildContext context, int index) {
-                    final Map<String, dynamic> wishlistData =
-                        productDocs[index].data();
-                    final String productId =
-                        wishlistData['productId']?.toString() ?? '';
-                    return FutureBuilder<Product?>(
-                      future: context.read<ProductService>().getProductOnce(productId),
-                      builder: (
-                        BuildContext context,
-                        AsyncSnapshot<Product?> productSnapshot,
-                      ) {
-                        final Product? product = productSnapshot.data;
-                        if (product == null) {
-                          return _UnavailableSavedProductCard(
-                            title: wishlistData['title']?.toString() ?? 'Product',
-                            imageUrl:
-                                wishlistData['productImageUrl']?.toString() ?? '',
-                            price: wishlistData['productPrice'] is num
-                                ? (wishlistData['productPrice'] as num).toDouble()
-                                : 0,
-                            onRemove: () => _removeWishlist(context, productId),
-                          );
-                        }
+                );
+              }
 
-                        return ProductCard(
-                          product: product,
-                          isWishlisted: true,
-                          onWishlistTap: () => _removeWishlist(context, product.id),
-                          onTap: () {
-                            Navigator.of(context).push(
-                              MaterialPageRoute<void>(
-                                builder: (_) =>
-                                    ProductDetailScreen(productId: product.id),
-                              ),
-                            );
-                          },
+              final List<QueryDocumentSnapshot<Map<String, dynamic>>>
+              productDocs =
+                  (snapshot.data?.docs ??
+                          <QueryDocumentSnapshot<Map<String, dynamic>>>[])
+                      .where(
+                        (QueryDocumentSnapshot<Map<String, dynamic>> doc) =>
+                            doc.data()['type']?.toString() == 'product' &&
+                            doc
+                                    .data()['productId']
+                                    ?.toString()
+                                    .trim()
+                                    .isNotEmpty ==
+                                true,
+                      )
+                      .toList(growable: false);
+
+              if (productDocs.isEmpty) {
+                return const Center(child: Text('No saved products yet.'));
+              }
+
+              return Column(
+                children: <Widget>[
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+                    child: Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: AppColors.gray100,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Text(
+                        '${productDocs.length} saved product${productDocs.length == 1 ? '' : 's'}',
+                        style: const TextStyle(fontWeight: FontWeight.w700),
+                      ),
+                    ),
+                  ),
+                  Expanded(
+                    child: GridView.builder(
+                      padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+                      itemCount: productDocs.length,
+                      gridDelegate:
+                          const SliverGridDelegateWithFixedCrossAxisCount(
+                            crossAxisCount: 2,
+                            crossAxisSpacing: 12,
+                            mainAxisSpacing: 12,
+                            childAspectRatio: 0.72,
+                          ),
+                      itemBuilder: (BuildContext context, int index) {
+                        final Map<String, dynamic> wishlistData =
+                            productDocs[index].data();
+                        final String productId =
+                            wishlistData['productId']?.toString() ?? '';
+                        return FutureBuilder<Product?>(
+                          future: context.read<ProductService>().getProductOnce(
+                            productId,
+                          ),
+                          builder:
+                              (
+                                BuildContext context,
+                                AsyncSnapshot<Product?> productSnapshot,
+                              ) {
+                                final Product? product = productSnapshot.data;
+                                if (product == null) {
+                                  return _UnavailableSavedProductCard(
+                                    title:
+                                        wishlistData['title']?.toString() ??
+                                        'Product',
+                                    imageUrl:
+                                        wishlistData['productImageUrl']
+                                            ?.toString() ??
+                                        '',
+                                    price: wishlistData['productPrice'] is num
+                                        ? (wishlistData['productPrice'] as num)
+                                              .toDouble()
+                                        : 0,
+                                    onRemove: () =>
+                                        _removeWishlist(context, productId),
+                                  );
+                                }
+
+                                return ProductCard(
+                                  product: product,
+                                  isWishlisted: true,
+                                  onWishlistTap: () =>
+                                      _removeWishlist(context, product.id),
+                                  onTap: () {
+                                    Navigator.of(context).push(
+                                      MaterialPageRoute<void>(
+                                        builder: (_) => ProductDetailScreen(
+                                          productId: product.id,
+                                        ),
+                                      ),
+                                    );
+                                  },
+                                );
+                              },
                         );
                       },
-                    );
-                  },
-                ),
-              ),
-            ],
-          );
-        },
+                    ),
+                  ),
+                ],
+              );
+            },
       ),
     );
   }
@@ -174,7 +194,9 @@ class _UnavailableSavedProductCard extends StatelessWidget {
         children: <Widget>[
           Expanded(
             child: ClipRRect(
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(14)),
+              borderRadius: const BorderRadius.vertical(
+                top: Radius.circular(14),
+              ),
               child: imageUrl.trim().isEmpty
                   ? Container(
                       color: AppColors.gray200,
@@ -229,10 +251,7 @@ class _UnavailableSavedProductCard extends StatelessWidget {
                 const SizedBox(height: 6),
                 Text(
                   'Product unavailable',
-                  style: TextStyle(
-                    color: AppColors.gray700,
-                    fontSize: 12,
-                  ),
+                  style: TextStyle(color: AppColors.gray700, fontSize: 12),
                 ),
                 const SizedBox(height: 10),
                 SizedBox(

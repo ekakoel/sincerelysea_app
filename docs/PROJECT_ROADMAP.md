@@ -1,5 +1,7 @@
 # SincerelySea Project Roadmap
 
+> **Superseded for active development.** This pre-audit document is retained as historical context. Use [ROADMAP.md](ROADMAP.md), [BLUEPRINT.md](BLUEPRINT.md), and [TECHNICAL_BLUEPRINT.md](TECHNICAL_BLUEPRINT.md) as the current source of truth.
+
 Dokumen ini menjadi peta pengembangan tingkat tinggi agar AI dan developer berikutnya mudah memahami prioritas proyek.
 
 ## Current State

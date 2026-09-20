@@ -190,8 +190,8 @@ class _DiscoveryScreenState extends State<DiscoveryScreen> {
       if (!mounted) {
         return;
       }
-      final List<QueryDocumentSnapshot<Map<String, dynamic>>>
-      filteredHashtags = _rankHashtagPostsByRelevance(page.docs, _activeQuery);
+      final List<QueryDocumentSnapshot<Map<String, dynamic>>> filteredHashtags =
+          _rankHashtagPostsByRelevance(page.docs, _activeQuery);
       setState(() {
         _hashtagResults.addAll(filteredHashtags);
         _lastHashtagDoc = page.docs.isNotEmpty
@@ -260,13 +260,14 @@ class _DiscoveryScreenState extends State<DiscoveryScreen> {
     }).toList();
   }
 
-  List<QueryDocumentSnapshot<Map<String, dynamic>>> _rankHashtagPostsByRelevance(
+  List<QueryDocumentSnapshot<Map<String, dynamic>>>
+  _rankHashtagPostsByRelevance(
     List<QueryDocumentSnapshot<Map<String, dynamic>>> docs,
     String query,
   ) {
-    final List<String> tokens = _queryTokens(query)
-        .map((String token) => token.startsWith('#') ? token : '#$token')
-        .toList();
+    final List<String> tokens = _queryTokens(
+      query,
+    ).map((String token) => token.startsWith('#') ? token : '#$token').toList();
     if (tokens.isEmpty) {
       return docs;
     }
@@ -296,13 +297,19 @@ class _DiscoveryScreenState extends State<DiscoveryScreen> {
         (String token) => hashtags.any(
           (String hashtag) =>
               hashtag.contains(token) ||
-              hashtag.replaceFirst('#', '').contains(token.replaceFirst('#', '')),
+              hashtag
+                  .replaceFirst('#', '')
+                  .contains(token.replaceFirst('#', '')),
         ),
       );
     }).toList();
   }
 
-  int _compareRelevance(String aHaystack, String bHaystack, List<String> tokens) {
+  int _compareRelevance(
+    String aHaystack,
+    String bHaystack,
+    List<String> tokens,
+  ) {
     final _RelevanceScore aScore = _scoreText(aHaystack, tokens);
     final _RelevanceScore bScore = _scoreText(bHaystack, tokens);
 

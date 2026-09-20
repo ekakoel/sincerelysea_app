@@ -36,12 +36,7 @@ class CreateProductInput {
   final List<File> images;
 }
 
-enum ProductSortOption {
-  newest,
-  bestSelling,
-  priceLowToHigh,
-  priceHighToLow,
-}
+enum ProductSortOption { newest, bestSelling, priceLowToHigh, priceHighToLow }
 
 class ProductQueryOptions {
   const ProductQueryOptions({
@@ -99,8 +94,10 @@ class ProductService {
     DocumentSnapshot<Map<String, dynamic>>? startAfter,
     ProductQueryOptions options = const ProductQueryOptions(),
   }) async {
-    Query<Map<String, dynamic>> query = _productsRef
-        .where('ownerId', isEqualTo: storeId);
+    Query<Map<String, dynamic>> query = _productsRef.where(
+      'ownerId',
+      isEqualTo: storeId,
+    );
 
     if (options.requirePurchasable) {
       query = query.where('availableForPurchase', isEqualTo: true);
@@ -152,7 +149,8 @@ class ProductService {
         .where('ownerId', isEqualTo: storeId)
         .get();
     final Set<String> categorySet = <String>{};
-    for (final QueryDocumentSnapshot<Map<String, dynamic>> doc in snapshot.docs) {
+    for (final QueryDocumentSnapshot<Map<String, dynamic>> doc
+        in snapshot.docs) {
       final String category = doc.data()['category']?.toString().trim() ?? '';
       if (category.isNotEmpty) {
         categorySet.add(category);
@@ -274,7 +272,8 @@ class ProductService {
     final DocumentReference<Map<String, dynamic>> productRef = _productsRef.doc(
       productId,
     );
-    final DocumentSnapshot<Map<String, dynamic>> snapshot = await productRef.get();
+    final DocumentSnapshot<Map<String, dynamic>> snapshot = await productRef
+        .get();
     if (!snapshot.exists) {
       throw Exception('Product not found.');
     }
@@ -306,7 +305,10 @@ class ProductService {
         final Reference ref = _storage.ref().child(
           'users/${user.uid}/products/$productId/image_${startIndex + i}.$extension',
         );
-        await ref.putFile(imageFile, SettableMetadata(contentType: contentType));
+        await ref.putFile(
+          imageFile,
+          SettableMetadata(contentType: contentType),
+        );
         uploadedUrls.add(await ref.getDownloadURL());
       }
 
@@ -350,7 +352,8 @@ class ProductService {
       throw Exception('Product requires at least one image.');
     }
 
-    final DocumentReference<Map<String, dynamic>> productRef = _productsRef.doc();
+    final DocumentReference<Map<String, dynamic>> productRef = _productsRef
+        .doc();
     final List<String> downloadUrls = <String>[];
     try {
       for (int i = 0; i < input.images.length; i++) {
@@ -385,7 +388,8 @@ class ProductService {
           'storeName': storeName,
           'managedByAdmins': true,
           'category': input.category.trim(),
-          'inventoryType': input.inventoryType.trim().toLowerCase() == 'preorder'
+          'inventoryType':
+              input.inventoryType.trim().toLowerCase() == 'preorder'
               ? 'preorder'
               : 'ready_stock',
           'preorderDays': input.preorderDays,

@@ -21,13 +21,15 @@ class ShareConfig {
     String campaign = 'post_share',
   }) {
     final Uri base = Uri.parse(buildPostLink(postId));
-    return base.replace(
-      queryParameters: <String, String>{
-        ...base.queryParameters,
-        'utm_source': source,
-        'utm_medium': medium,
-        'utm_campaign': campaign,
-      },
-    ).toString();
+    return base
+        .replace(
+          queryParameters: <String, String>{
+            ...base.queryParameters,
+            'utm_source': source,
+            'utm_medium': medium,
+            'utm_campaign': campaign,
+          },
+        )
+        .toString();
   }
 }

@@ -5,35 +5,71 @@ service cloud.firestore {
       return request.auth != null;
     }
 
-    function currentUserRole() {
-      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role is string
-        ? get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role
-        : '';
-    }
-
     function isOwner(uid) {
       return isSignedIn() && request.auth.uid == uid;
     }
 
     function isAdmin() {
       return isSignedIn()
-        && currentUserRole().matches('^(?i)(admin|developer)$');
+        && (
+          request.auth.token.get('admin', false) == true
+          || request.auth.token.get('developer', false) == true
+        );
     }
 
     function isDeveloper() {
       return isSignedIn()
-        && currentUserRole().matches('^(?i)developer$');
+        && request.auth.token.get('developer', false) == true;
     }
 
     function hasAdminScope(scope) {
       return isAdmin()
         && (
-          currentUserRole().matches('^(?i)developer$')
-          || !(get(/databases/$(database)/documents/users/$(request.auth.uid)).data.adminScopes is list)
-          || get(/databases/$(database)/documents/users/$(request.auth.uid)).data.adminScopes.size() == 0
-          || get(/databases/$(database)/documents/users/$(request.auth.uid)).data.adminScopes.hasAny([scope])
-          || get(/databases/$(database)/documents/users/$(request.auth.uid)).data.adminScopes.hasAny(['all'])
+          isDeveloper()
+          || !('adminScopes' in request.auth.token)
+          || !(request.auth.token.adminScopes is list)
+          || request.auth.token.adminScopes.size() == 0
+          || request.auth.token.adminScopes.hasAny([scope, 'all'])
         );
+    }
+
+    function safeCustomerAuthorityFieldsOnCreate() {
+      return (
+          !('role' in request.resource.data)
+          || request.resource.data.role == 'user'
+        )
+        && (
+          !('adminScopes' in request.resource.data)
+          || (
+            request.resource.data.adminScopes is list
+            && request.resource.data.adminScopes.size() == 0
+          )
+        )
+        && !request.resource.data.keys().hasAny([
+          'isAdmin',
+          'isDeveloper',
+          'permissions',
+          'official',
+          'isOfficial',
+          'endorsement',
+          'accountVerified',
+          'verifiedOwner'
+        ]);
+    }
+
+    function customerAuthorityFieldsUnchanged() {
+      return !request.resource.data.diff(resource.data).affectedKeys().hasAny([
+        'role',
+        'adminScopes',
+        'isAdmin',
+        'isDeveloper',
+        'permissions',
+        'official',
+        'isOfficial',
+        'endorsement',
+        'accountVerified',
+        'verifiedOwner'
+      ]);
     }
 
     function isOfficialStore(v) {
@@ -41,7 +77,7 @@ service cloud.firestore {
     }
 
     function onlyChanges(allowedKeys) {
-      return request.resource.data.diff(resource.data).changedKeys().hasOnly(allowedKeys);
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(allowedKeys);
     }
 
     function isValidImageUrl(v) {
@@ -115,30 +151,6 @@ service cloud.firestore {
         && request.resource.data.get('usernameLower', '') != resource.data.get('usernameLower', '')
         && !(resource.data.get('usernameChangedOnce', false) == true)
         && request.resource.data.get('usernameChangedOnce', false) == true;
-    }
-
-    function validAdminRoleValue() {
-      return request.resource.data.role in ['user', 'admin', 'developer'];
-    }
-
-    function validAdminScopes() {
-      return !('adminScopes' in request.resource.data)
-        || request.resource.data.adminScopes is list;
-    }
-
-    function adminRoleUpdateOnly() {
-      return hasAdminScope('roles')
-        && onlyChanges(['role', 'adminScopes', 'updatedAt'])
-        && request.resource.data.uid == resource.data.uid
-        && request.resource.data.email == resource.data.email
-        && request.resource.data.displayName == resource.data.displayName
-        && request.resource.data.photoUrl == resource.data.photoUrl
-        && request.resource.data.username == resource.data.username
-        && request.resource.data.usernameLower == resource.data.usernameLower
-        && request.resource.data.usernameChangedOnce == resource.data.usernameChangedOnce
-        && request.resource.data.createdAt == resource.data.createdAt
-        && validAdminRoleValue()
-        && validAdminScopes();
     }
 
     function shareCountIncrementedByOne() {
@@ -347,20 +359,9 @@ service cloud.firestore {
       allow update, delete: if false;
     }
 
-    # match /usernames/{usernameLower} {
-    #   allow read: if isSignedIn();
-    #   allow create: if isSignedIn()
-    #     && isValidUsername(usernameLower)
-    #     && request.resource.data.uid == request.auth.uid
-    #     && request.resource.data.username == usernameLower
-    #     && !exists(/databases/$(database)/documents/usernames/$(usernameLower));
-    #   allow delete: if isSignedIn()
-    #     && resource.data.uid == request.auth.uid;
-    #   allow update: if false;
-    # }
     match /usernames/{usernameLower} {
-      # // Username availability must be readable before registration.
-      # // No sensitive user data is stored in this collection.
+      // Username availability must be readable before registration.
+      // No sensitive user data is stored in this collection.
       allow read: if isValidUsername(usernameLower);
 
       // Only authenticated users can reserve a username.
@@ -372,20 +373,23 @@ service cloud.firestore {
           /databases/$(database)/documents/usernames/$(usernameLower)
         );
 
-      # // Username documents cannot be modified after creation.
+      // Username documents cannot be modified after creation.
       allow update: if false;
 
-      # // Only the owner can release their username.
+      // Only the owner can release their username.
       allow delete: if isSignedIn()
         && resource.data.uid == request.auth.uid;
     }
 
     match /users/{uid} {
       allow read: if isSignedIn();
-      allow create, delete: if isOwner(uid);
+      allow create: if isOwner(uid)
+        && request.resource.data.uid == request.auth.uid
+        && safeCustomerAuthorityFieldsOnCreate();
+      allow delete: if isOwner(uid);
       allow update: if isOwner(uid)
-        && (usernameUnchanged() || usernameChangedOneTime())
-        || adminRoleUpdateOnly();
+        && customerAuthorityFieldsUnchanged()
+        && (usernameUnchanged() || usernameChangedOneTime());
 
       // uid is the profile owner, followerUid is the authenticated follower id.
       match /followers/{followerUid} {

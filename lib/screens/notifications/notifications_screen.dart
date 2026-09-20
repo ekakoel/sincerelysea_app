@@ -77,7 +77,11 @@ class NotificationsScreen extends StatelessWidget {
                       backgroundColor: isRead
                           ? semantic.badgeMuted
                           : semantic.badge,
-                      child: Icon(_iconForType(type), size: 18, color: iconColor),
+                      child: Icon(
+                        _iconForType(type),
+                        size: 18,
+                        color: iconColor,
+                      ),
                     ),
                     title: Text(
                       message,

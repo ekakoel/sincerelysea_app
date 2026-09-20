@@ -36,10 +36,7 @@ class TelemetryService {
     );
   }
 
-  Future<void> logSharePost({
-    required String method,
-    String? postId,
-  }) async {
+  Future<void> logSharePost({required String method, String? postId}) async {
     await _analytics.logEvent(
       name: 'share_post',
       parameters: <String, Object>{

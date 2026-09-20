@@ -37,11 +37,14 @@ class CommunityManagementService {
     if (user == null) {
       throw Exception('User not authenticated.');
     }
-    await _firestore.collection('reports').doc(reportId).update(<String, dynamic>{
-      'status': status.trim().toLowerCase(),
-      'handledByUid': user.uid,
-      'resolutionNote': note.trim(),
-      'updatedAt': FieldValue.serverTimestamp(),
-    });
+    await _firestore
+        .collection('reports')
+        .doc(reportId)
+        .update(<String, dynamic>{
+          'status': status.trim().toLowerCase(),
+          'handledByUid': user.uid,
+          'resolutionNote': note.trim(),
+          'updatedAt': FieldValue.serverTimestamp(),
+        });
   }
 }

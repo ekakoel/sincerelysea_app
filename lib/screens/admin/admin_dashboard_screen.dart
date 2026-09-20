@@ -89,10 +89,10 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                       label: 'Privileged',
                       stream: FirebaseFirestore.instance
                           .collection('users')
-                          .where('role', whereIn: const <String>[
-                            'admin',
-                            'developer',
-                          ])
+                          .where(
+                            'role',
+                            whereIn: const <String>['admin', 'developer'],
+                          )
                           .snapshots(),
                     ),
                   ),
@@ -108,45 +108,61 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                 stream: FirebaseFirestore.instance
                     .collection('products')
                     .snapshots(),
-                builder: (
-                  BuildContext context,
-                  AsyncSnapshot<QuerySnapshot<Map<String, dynamic>>> productsSnap,
-                ) {
-                  if (productsSnap.connectionState == ConnectionState.waiting) {
-                    return const Padding(
-                      padding: EdgeInsets.symmetric(vertical: 24),
-                      child: Center(child: CircularProgressIndicator()),
-                    );
-                  }
-                  final List<Product> products =
-                      (productsSnap.data?.docs ?? <QueryDocumentSnapshot<Map<String, dynamic>>>[])
-                          .map(Product.fromFirestore)
-                          .toList(growable: false);
-                  return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-                    stream: FirebaseFirestore.instance
-                        .collection('orders')
-                        .snapshots(),
-                    builder: (
+                builder:
+                    (
                       BuildContext context,
-                      AsyncSnapshot<QuerySnapshot<Map<String, dynamic>>> ordersSnap,
+                      AsyncSnapshot<QuerySnapshot<Map<String, dynamic>>>
+                      productsSnap,
                     ) {
-                      if (ordersSnap.connectionState == ConnectionState.waiting) {
+                      if (productsSnap.connectionState ==
+                          ConnectionState.waiting) {
                         return const Padding(
                           padding: EdgeInsets.symmetric(vertical: 24),
                           child: Center(child: CircularProgressIndicator()),
                         );
                       }
-                      final List<app_order.Order> orders =
-                          (ordersSnap.data?.docs ?? <QueryDocumentSnapshot<Map<String, dynamic>>>[])
-                              .map(app_order.Order.fromFirestore)
+                      final List<Product> products =
+                          (productsSnap.data?.docs ??
+                                  <
+                                    QueryDocumentSnapshot<Map<String, dynamic>>
+                                  >[])
+                              .map(Product.fromFirestore)
                               .toList(growable: false);
-                      return _ProductAnalyticsSection(
-                        products: products,
-                        orders: orders,
+                      return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+                        stream: FirebaseFirestore.instance
+                            .collection('orders')
+                            .snapshots(),
+                        builder:
+                            (
+                              BuildContext context,
+                              AsyncSnapshot<QuerySnapshot<Map<String, dynamic>>>
+                              ordersSnap,
+                            ) {
+                              if (ordersSnap.connectionState ==
+                                  ConnectionState.waiting) {
+                                return const Padding(
+                                  padding: EdgeInsets.symmetric(vertical: 24),
+                                  child: Center(
+                                    child: CircularProgressIndicator(),
+                                  ),
+                                );
+                              }
+                              final List<app_order.Order> orders =
+                                  (ordersSnap.data?.docs ??
+                                          <
+                                            QueryDocumentSnapshot<
+                                              Map<String, dynamic>
+                                            >
+                                          >[])
+                                      .map(app_order.Order.fromFirestore)
+                                      .toList(growable: false);
+                              return _ProductAnalyticsSection(
+                                products: products,
+                                orders: orders,
+                              );
+                            },
                       );
                     },
-                  );
-                },
               ),
               const SizedBox(height: 24),
               const Text(
@@ -178,49 +194,62 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
               const SizedBox(height: 10),
               StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
                 stream: adminService.roleAuditLogsStream(),
-                builder: (
-                  BuildContext context,
-                  AsyncSnapshot<QuerySnapshot<Map<String, dynamic>>> snapshot,
-                ) {
-                  if (snapshot.connectionState == ConnectionState.waiting) {
-                    return const Padding(
-                      padding: EdgeInsets.symmetric(vertical: 24),
-                      child: Center(child: CircularProgressIndicator()),
-                    );
-                  }
+                builder:
+                    (
+                      BuildContext context,
+                      AsyncSnapshot<QuerySnapshot<Map<String, dynamic>>>
+                      snapshot,
+                    ) {
+                      if (snapshot.connectionState == ConnectionState.waiting) {
+                        return const Padding(
+                          padding: EdgeInsets.symmetric(vertical: 24),
+                          child: Center(child: CircularProgressIndicator()),
+                        );
+                      }
 
-                  final List<QueryDocumentSnapshot<Map<String, dynamic>>> docs =
-                      (snapshot.data?.docs ?? <QueryDocumentSnapshot<Map<String, dynamic>>>[])
-                          .where(_matchesAuditFilter)
-                          .toList(growable: false);
-                  if (docs.isEmpty) {
-                    return Container(
-                      padding: const EdgeInsets.all(18),
-                      decoration: BoxDecoration(
-                        color: AppColors.gray100,
-                        borderRadius: BorderRadius.circular(16),
-                        border: Border.all(color: AppColors.gray300),
-                      ),
-                      child: const Text(
-                        'No role changes match the current filter.',
-                      ),
-                    );
-                  }
+                      final List<QueryDocumentSnapshot<Map<String, dynamic>>>
+                      docs =
+                          (snapshot.data?.docs ??
+                                  <
+                                    QueryDocumentSnapshot<Map<String, dynamic>>
+                                  >[])
+                              .where(_matchesAuditFilter)
+                              .toList(growable: false);
+                      if (docs.isEmpty) {
+                        return Container(
+                          padding: const EdgeInsets.all(18),
+                          decoration: BoxDecoration(
+                            color: AppColors.gray100,
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(color: AppColors.gray300),
+                          ),
+                          child: const Text(
+                            'No role changes match the current filter.',
+                          ),
+                        );
+                      }
 
-                  return Column(
-                    children: docs
-                        .map((QueryDocumentSnapshot<Map<String, dynamic>> doc) {
+                      return Column(
+                        children: docs.map((
+                          QueryDocumentSnapshot<Map<String, dynamic>> doc,
+                        ) {
                           final Map<String, dynamic> data = doc.data();
                           final Timestamp? createdAt =
                               data['createdAt'] as Timestamp?;
                           final DateTime? createdDate = createdAt?.toDate();
                           final String actor =
-                              data['actorUsername']?.toString().trim().isNotEmpty ==
+                              data['actorUsername']
+                                      ?.toString()
+                                      .trim()
+                                      .isNotEmpty ==
                                   true
                               ? '@${data['actorUsername']}'
                               : 'Unknown admin';
                           final String target =
-                              data['targetUsername']?.toString().trim().isNotEmpty ==
+                              data['targetUsername']
+                                      ?.toString()
+                                      .trim()
+                                      .isNotEmpty ==
                                   true
                               ? '@${data['targetUsername']}'
                               : 'Unknown user';
@@ -257,10 +286,9 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                               isThreeLine: createdDate != null,
                             ),
                           );
-                        })
-                        .toList(),
-                  );
-                },
+                        }).toList(),
+                      );
+                    },
               ),
             ],
           ),
@@ -293,10 +321,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
 }
 
 class _MetricCard extends StatelessWidget {
-  const _MetricCard({
-    required this.label,
-    required this.stream,
-  });
+  const _MetricCard({required this.label, required this.stream});
 
   final String label;
   final Stream<QuerySnapshot<Map<String, dynamic>>> stream;
@@ -305,40 +330,41 @@ class _MetricCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
       stream: stream,
-      builder: (
-        BuildContext context,
-        AsyncSnapshot<QuerySnapshot<Map<String, dynamic>>> snapshot,
-      ) {
-        final int count = snapshot.data?.docs.length ?? 0;
-        return Container(
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: AppColors.gray100,
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: AppColors.gray300),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: <Widget>[
-              Text(
-                '$count',
-                style: const TextStyle(
-                  fontSize: 28,
-                  fontWeight: FontWeight.w700,
-                ),
+      builder:
+          (
+            BuildContext context,
+            AsyncSnapshot<QuerySnapshot<Map<String, dynamic>>> snapshot,
+          ) {
+            final int count = snapshot.data?.docs.length ?? 0;
+            return Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: AppColors.gray100,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: AppColors.gray300),
               ),
-              const SizedBox(height: 4),
-              Text(
-                label,
-                style: const TextStyle(
-                  color: AppColors.black54,
-                  fontWeight: FontWeight.w600,
-                ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  Text(
+                    '$count',
+                    style: const TextStyle(
+                      fontSize: 28,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    label,
+                    style: const TextStyle(
+                      color: AppColors.black54,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
               ),
-            ],
-          ),
-        );
-      },
+            );
+          },
     );
   }
 }
@@ -391,7 +417,9 @@ class _ProductAnalyticsSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final int preorderCount = products.where((Product p) => p.isPreorder).length;
+    final int preorderCount = products
+        .where((Product p) => p.isPreorder)
+        .length;
     final int readyStockCount = products
         .where((Product p) => p.isReadyStock)
         .length;
@@ -401,7 +429,10 @@ class _ProductAnalyticsSection extends StatelessWidget {
     final int lowStockCount = products
         .where(
           (Product p) =>
-              p.isReadyStock && p.availableForPurchase && p.stock > 0 && p.stock <= 5,
+              p.isReadyStock &&
+              p.availableForPurchase &&
+              p.stock > 0 &&
+              p.stock <= 5,
         )
         .length;
 
@@ -421,20 +452,23 @@ class _ProductAnalyticsSection extends StatelessWidget {
       }
     }
 
-    final List<_RankedProduct> rankedProducts = products
-        .map((Product product) {
-          final _ProductSalesStats stats =
-              salesByProduct[product.id] ?? const _ProductSalesStats();
-          return _RankedProduct(product: product, stats: stats);
-        })
-        .toList(growable: false)
-      ..sort((_RankedProduct a, _RankedProduct b) {
-        final int unitCompare = b.stats.unitsSold.compareTo(a.stats.unitsSold);
-        if (unitCompare != 0) {
-          return unitCompare;
-        }
-        return b.stats.revenue.compareTo(a.stats.revenue);
-      });
+    final List<_RankedProduct> rankedProducts =
+        products
+            .map((Product product) {
+              final _ProductSalesStats stats =
+                  salesByProduct[product.id] ?? const _ProductSalesStats();
+              return _RankedProduct(product: product, stats: stats);
+            })
+            .toList(growable: false)
+          ..sort((_RankedProduct a, _RankedProduct b) {
+            final int unitCompare = b.stats.unitsSold.compareTo(
+              a.stats.unitsSold,
+            );
+            if (unitCompare != 0) {
+              return unitCompare;
+            }
+            return b.stats.revenue.compareTo(a.stats.revenue);
+          });
 
     return Column(
       children: <Widget>[
@@ -480,54 +514,61 @@ class _ProductAnalyticsSection extends StatelessWidget {
               const SizedBox(height: 10),
               if (rankedProducts.isEmpty)
                 const Text('No products found yet.')
-              else ...rankedProducts.take(5).map(
-                (_RankedProduct ranked) => Padding(
-                  padding: const EdgeInsets.only(bottom: 10),
-                  child: Row(
-                    children: <Widget>[
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
+              else
+                ...rankedProducts
+                    .take(5)
+                    .map(
+                      (_RankedProduct ranked) => Padding(
+                        padding: const EdgeInsets.only(bottom: 10),
+                        child: Row(
                           children: <Widget>[
-                            Text(
-                              ranked.product.name,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
-                                fontWeight: FontWeight.w700,
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: <Widget>[
+                                  Text(
+                                    ranked.product.name,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    ranked.product.category.trim().isEmpty
+                                        ? ranked.product.inventoryLabel
+                                        : '${ranked.product.category} • ${ranked.product.inventoryLabel}',
+                                    style: const TextStyle(
+                                      color: AppColors.black54,
+                                    ),
+                                  ),
+                                ],
                               ),
                             ),
-                            const SizedBox(height: 2),
-                            Text(
-                              ranked.product.category.trim().isEmpty
-                                  ? ranked.product.inventoryLabel
-                                  : '${ranked.product.category} • ${ranked.product.inventoryLabel}',
-                              style: const TextStyle(
-                                color: AppColors.black54,
-                              ),
+                            const SizedBox(width: 12),
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.end,
+                              children: <Widget>[
+                                Text(
+                                  '${ranked.stats.unitsSold} sold',
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  '\$${ranked.stats.revenue.toStringAsFixed(2)}',
+                                  style: const TextStyle(
+                                    color: AppColors.black54,
+                                  ),
+                                ),
+                              ],
                             ),
                           ],
                         ),
                       ),
-                      const SizedBox(width: 12),
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.end,
-                        children: <Widget>[
-                          Text(
-                            '${ranked.stats.unitsSold} sold',
-                            style: const TextStyle(fontWeight: FontWeight.w700),
-                          ),
-                          const SizedBox(height: 2),
-                          Text(
-                            '\$${ranked.stats.revenue.toStringAsFixed(2)}',
-                            style: const TextStyle(color: AppColors.black54),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-              ),
+                    ),
             ],
           ),
         ),
@@ -537,10 +578,7 @@ class _ProductAnalyticsSection extends StatelessWidget {
 }
 
 class _StatusCard extends StatelessWidget {
-  const _StatusCard({
-    required this.label,
-    required this.value,
-  });
+  const _StatusCard({required this.label, required this.value});
 
   final String label;
   final int value;
@@ -576,20 +614,14 @@ class _StatusCard extends StatelessWidget {
 }
 
 class _ProductSalesStats {
-  const _ProductSalesStats({
-    this.unitsSold = 0,
-    this.revenue = 0,
-  });
+  const _ProductSalesStats({this.unitsSold = 0, this.revenue = 0});
 
   final int unitsSold;
   final double revenue;
 }
 
 class _RankedProduct {
-  const _RankedProduct({
-    required this.product,
-    required this.stats,
-  });
+  const _RankedProduct({required this.product, required this.stats});
 
   final Product product;
   final _ProductSalesStats stats;

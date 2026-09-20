@@ -19,118 +19,135 @@ class CartScreen extends StatelessWidget {
       appBar: AppBar(title: const Text('Cart')),
       body: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
         stream: cartService.cartStream(),
-        builder: (
-          BuildContext context,
-          AsyncSnapshot<QuerySnapshot<Map<String, dynamic>>> snapshot,
-        ) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
-          }
-          if (snapshot.hasError) {
-            return Center(
-              child: Text('Failed to load cart: ${snapshot.error}'),
-            );
-          }
-
-          final List<CartItem> items = (snapshot.data?.docs ?? <QueryDocumentSnapshot<Map<String, dynamic>>>[])
-              .map(CartItem.fromFirestore)
-              .where((CartItem item) => item.productId.isNotEmpty)
-              .toList(growable: false);
-
-          if (items.isEmpty) {
-            return const Center(child: Text('Your cart is empty.'));
-          }
-
-          return FutureBuilder<List<_CartEntry>>(
-            future: _loadEntries(context, items),
-            builder: (
+        builder:
+            (
               BuildContext context,
-              AsyncSnapshot<List<_CartEntry>> entriesSnapshot,
+              AsyncSnapshot<QuerySnapshot<Map<String, dynamic>>> snapshot,
             ) {
-              if (entriesSnapshot.connectionState == ConnectionState.waiting) {
+              if (snapshot.connectionState == ConnectionState.waiting) {
                 return const Center(child: CircularProgressIndicator());
               }
-              if (entriesSnapshot.hasError) {
+              if (snapshot.hasError) {
                 return Center(
-                  child: Text('Failed to load cart products: ${entriesSnapshot.error}'),
+                  child: Text('Failed to load cart: ${snapshot.error}'),
                 );
               }
-              final List<_CartEntry> entries = entriesSnapshot.data ?? <_CartEntry>[];
-              final double total = entries.fold<double>(
-                0,
-                (double sum, _CartEntry entry) =>
-                    sum + (entry.product.price * entry.cartItem.quantity),
-              );
 
-              return Column(
-                children: <Widget>[
-                  Expanded(
-                    child: ListView.separated(
-                      padding: const EdgeInsets.all(16),
-                      itemCount: entries.length,
-                      separatorBuilder:
-                          (BuildContext context, int index) =>
-                              const SizedBox(height: 12),
-                      itemBuilder: (BuildContext context, int index) {
-                        final _CartEntry entry = entries[index];
-                        return _CartItemTile(entry: entry);
-                      },
-                    ),
-                  ),
-                  SafeArea(
-                    top: false,
-                    child: Container(
-                      padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
-                      decoration: const BoxDecoration(
-                        border: Border(top: BorderSide(color: AppColors.gray300)),
-                      ),
-                      child: Column(
-                        children: <Widget>[
-                          Row(
-                            children: <Widget>[
-                              const Expanded(
-                                child: Text(
-                                  'Total',
-                                  style: TextStyle(
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                              ),
-                              Text(
-                                '\$${total.toStringAsFixed(2)}',
-                                style: const TextStyle(
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.w700,
-                                ),
-                              ),
-                            ],
+              final List<CartItem> items =
+                  (snapshot.data?.docs ??
+                          <QueryDocumentSnapshot<Map<String, dynamic>>>[])
+                      .map(CartItem.fromFirestore)
+                      .where((CartItem item) => item.productId.isNotEmpty)
+                      .toList(growable: false);
+
+              if (items.isEmpty) {
+                return const Center(child: Text('Your cart is empty.'));
+              }
+
+              return FutureBuilder<List<_CartEntry>>(
+                future: _loadEntries(context, items),
+                builder:
+                    (
+                      BuildContext context,
+                      AsyncSnapshot<List<_CartEntry>> entriesSnapshot,
+                    ) {
+                      if (entriesSnapshot.connectionState ==
+                          ConnectionState.waiting) {
+                        return const Center(child: CircularProgressIndicator());
+                      }
+                      if (entriesSnapshot.hasError) {
+                        return Center(
+                          child: Text(
+                            'Failed to load cart products: ${entriesSnapshot.error}',
                           ),
-                          const SizedBox(height: 12),
-                          SizedBox(
-                            width: double.infinity,
-                            child: FilledButton(
-                              onPressed: entries.isEmpty
-                                  ? null
-                                  : () {
-                                      Navigator.of(context).push(
-                                        MaterialPageRoute<void>(
-                                          builder: (_) => const CheckoutScreen.cart(),
+                        );
+                      }
+                      final List<_CartEntry> entries =
+                          entriesSnapshot.data ?? <_CartEntry>[];
+                      final double total = entries.fold<double>(
+                        0,
+                        (double sum, _CartEntry entry) =>
+                            sum +
+                            (entry.product.price * entry.cartItem.quantity),
+                      );
+
+                      return Column(
+                        children: <Widget>[
+                          Expanded(
+                            child: ListView.separated(
+                              padding: const EdgeInsets.all(16),
+                              itemCount: entries.length,
+                              separatorBuilder:
+                                  (BuildContext context, int index) =>
+                                      const SizedBox(height: 12),
+                              itemBuilder: (BuildContext context, int index) {
+                                final _CartEntry entry = entries[index];
+                                return _CartItemTile(entry: entry);
+                              },
+                            ),
+                          ),
+                          SafeArea(
+                            top: false,
+                            child: Container(
+                              padding: const EdgeInsets.fromLTRB(
+                                16,
+                                12,
+                                16,
+                                16,
+                              ),
+                              decoration: const BoxDecoration(
+                                border: Border(
+                                  top: BorderSide(color: AppColors.gray300),
+                                ),
+                              ),
+                              child: Column(
+                                children: <Widget>[
+                                  Row(
+                                    children: <Widget>[
+                                      const Expanded(
+                                        child: Text(
+                                          'Total',
+                                          style: TextStyle(
+                                            fontSize: 16,
+                                            fontWeight: FontWeight.w600,
+                                          ),
                                         ),
-                                      );
-                                    },
-                              child: const Text('Checkout'),
+                                      ),
+                                      Text(
+                                        '\$${total.toStringAsFixed(2)}',
+                                        style: const TextStyle(
+                                          fontSize: 18,
+                                          fontWeight: FontWeight.w700,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 12),
+                                  SizedBox(
+                                    width: double.infinity,
+                                    child: FilledButton(
+                                      onPressed: entries.isEmpty
+                                          ? null
+                                          : () {
+                                              Navigator.of(context).push(
+                                                MaterialPageRoute<void>(
+                                                  builder: (_) =>
+                                                      const CheckoutScreen.cart(),
+                                                ),
+                                              );
+                                            },
+                                      child: const Text('Checkout'),
+                                    ),
+                                  ),
+                                ],
+                              ),
                             ),
                           ),
                         ],
-                      ),
-                    ),
-                  ),
-                ],
+                      );
+                    },
               );
             },
-          );
-        },
       ),
     );
   }
@@ -142,7 +159,9 @@ class CartScreen extends StatelessWidget {
     final ProductService productService = context.read<ProductService>();
     final List<_CartEntry> entries = <_CartEntry>[];
     for (final CartItem item in items) {
-      final Product? product = await productService.getProductOnce(item.productId);
+      final Product? product = await productService.getProductOnce(
+        item.productId,
+      );
       if (product == null) {
         continue;
       }
@@ -159,8 +178,9 @@ class _CartItemTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final String imageUrl =
-        entry.product.images.isNotEmpty ? entry.product.images.first : '';
+    final String imageUrl = entry.product.images.isNotEmpty
+        ? entry.product.images.first
+        : '';
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
@@ -250,7 +270,9 @@ class _CartItemTile extends StatelessWidget {
                     const Spacer(),
                     TextButton(
                       onPressed: () {
-                        context.read<CartService>().removeItem(entry.cartItem.id);
+                        context.read<CartService>().removeItem(
+                          entry.cartItem.id,
+                        );
                       },
                       child: const Text('Remove'),
                     ),
@@ -266,10 +288,7 @@ class _CartItemTile extends StatelessWidget {
 }
 
 class _CartEntry {
-  const _CartEntry({
-    required this.cartItem,
-    required this.product,
-  });
+  const _CartEntry({required this.cartItem, required this.product});
 
   final CartItem cartItem;
   final Product product;

@@ -15,51 +15,53 @@ class OrderHistoryScreen extends StatelessWidget {
       appBar: AppBar(title: const Text('My Orders')),
       body: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
         stream: context.read<OrderService>().myOrdersStream(),
-        builder: (
-          BuildContext context,
-          AsyncSnapshot<QuerySnapshot<Map<String, dynamic>>> snapshot,
-        ) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
-          }
-          if (snapshot.hasError) {
-            return Center(
-              child: Text('Failed to load orders: ${snapshot.error}'),
-            );
-          }
+        builder:
+            (
+              BuildContext context,
+              AsyncSnapshot<QuerySnapshot<Map<String, dynamic>>> snapshot,
+            ) {
+              if (snapshot.connectionState == ConnectionState.waiting) {
+                return const Center(child: CircularProgressIndicator());
+              }
+              if (snapshot.hasError) {
+                return Center(
+                  child: Text('Failed to load orders: ${snapshot.error}'),
+                );
+              }
 
-          final List<app_order.Order> orders = (snapshot.data?.docs ?? <QueryDocumentSnapshot<Map<String, dynamic>>>[])
-              .map(app_order.Order.fromFirestore)
-              .toList(growable: false);
-          if (orders.isEmpty) {
-            return const Center(child: Text('No orders yet.'));
-          }
+              final List<app_order.Order> orders =
+                  (snapshot.data?.docs ??
+                          <QueryDocumentSnapshot<Map<String, dynamic>>>[])
+                      .map(app_order.Order.fromFirestore)
+                      .toList(growable: false);
+              if (orders.isEmpty) {
+                return const Center(child: Text('No orders yet.'));
+              }
 
-          return ListView.separated(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
-            itemCount: orders.length,
-            separatorBuilder:
-                (BuildContext context, int index) =>
+              return ListView.separated(
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+                itemCount: orders.length,
+                separatorBuilder: (BuildContext context, int index) =>
                     const SizedBox(height: 12),
-            itemBuilder: (BuildContext context, int index) {
-              final app_order.Order order = orders[index];
-              return OrderCard(
-                order: order,
-                isSellerView: false,
-                onTap: () {
-                  Navigator.of(context).push(
-                    MaterialPageRoute<void>(
-                      builder: (_) => OrderDetailScreen(
-                        order: order,
-                        isSellerView: false,
-                      ),
-                    ),
+                itemBuilder: (BuildContext context, int index) {
+                  final app_order.Order order = orders[index];
+                  return OrderCard(
+                    order: order,
+                    isSellerView: false,
+                    onTap: () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute<void>(
+                          builder: (_) => OrderDetailScreen(
+                            order: order,
+                            isSellerView: false,
+                          ),
+                        ),
+                      );
+                    },
                   );
                 },
               );
             },
-          );
-        },
       ),
     );
   }

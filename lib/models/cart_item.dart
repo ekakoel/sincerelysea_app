@@ -21,10 +21,7 @@ class CartItem {
   }
 
   Map<String, dynamic> toFirestore() {
-    return <String, dynamic>{
-      'productId': productId,
-      'quantity': quantity,
-    };
+    return <String, dynamic>{'productId': productId, 'quantity': quantity};
   }
 
   static int _toInt(dynamic value) {

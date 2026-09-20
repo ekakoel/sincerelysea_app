@@ -66,98 +66,106 @@ class _ManageProductsScreenState extends State<ManageProductsScreen> {
           ),
           body: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
             stream: productService.myProductsStream(),
-            builder: (
-              BuildContext context,
-              AsyncSnapshot<QuerySnapshot<Map<String, dynamic>>> snapshot,
-            ) {
-              if (snapshot.connectionState == ConnectionState.waiting) {
-                return const Center(child: CircularProgressIndicator());
-              }
-              if (snapshot.hasError) {
-                return Center(
-                  child: Text('Failed to load products: ${snapshot.error}'),
-                );
-              }
+            builder:
+                (
+                  BuildContext context,
+                  AsyncSnapshot<QuerySnapshot<Map<String, dynamic>>> snapshot,
+                ) {
+                  if (snapshot.connectionState == ConnectionState.waiting) {
+                    return const Center(child: CircularProgressIndicator());
+                  }
+                  if (snapshot.hasError) {
+                    return Center(
+                      child: Text('Failed to load products: ${snapshot.error}'),
+                    );
+                  }
 
-              final List<Product> products =
-                  (snapshot.data?.docs ??
-                          <QueryDocumentSnapshot<Map<String, dynamic>>>[])
-                      .map(Product.fromFirestore)
-                      .where(
-                        (Product product) =>
-                            product.ownerId == ProductService.storeId ||
-                            product.managedByAdmins,
-                      )
-                      .toList(growable: false);
-              final List<Product> filtered = products.where(_matchesFilter).toList();
-              final int visibleCount = filtered.length < _visibleCount
-                  ? filtered.length
-                  : _visibleCount;
-              final List<Product> paged = filtered.take(visibleCount).toList();
-              final Set<String> visibleIds = filtered
-                  .map((Product product) => product.id)
-                  .toSet();
-              _selectedProductIds.removeWhere(
-                (String id) => !visibleIds.contains(id),
-              );
+                  final List<Product> products =
+                      (snapshot.data?.docs ??
+                              <QueryDocumentSnapshot<Map<String, dynamic>>>[])
+                          .map(Product.fromFirestore)
+                          .where(
+                            (Product product) =>
+                                product.ownerId == ProductService.storeId ||
+                                product.managedByAdmins,
+                          )
+                          .toList(growable: false);
+                  final List<Product> filtered = products
+                      .where(_matchesFilter)
+                      .toList();
+                  final int visibleCount = filtered.length < _visibleCount
+                      ? filtered.length
+                      : _visibleCount;
+                  final List<Product> paged = filtered
+                      .take(visibleCount)
+                      .toList();
+                  final Set<String> visibleIds = filtered
+                      .map((Product product) => product.id)
+                      .toSet();
+                  _selectedProductIds.removeWhere(
+                    (String id) => !visibleIds.contains(id),
+                  );
 
-              return ListView(
-                padding: const EdgeInsets.fromLTRB(16, 12, 16, 90),
-                children: <Widget>[
-                  _buildToolbar(products.length, filtered.length, paged),
-                  const SizedBox(height: 12),
-                  if (products.isEmpty)
-                    const Padding(
-                      padding: EdgeInsets.only(top: 140),
-                      child: Center(
-                        child: Text(
-                          'No products have been added to SincerelySea Store yet.',
-                        ),
-                      ),
-                    )
-                  else if (filtered.isEmpty)
-                    const Padding(
-                      padding: EdgeInsets.only(top: 140),
-                      child: Center(
-                        child: Text('No products match current filter.'),
-                      ),
-                    )
-                  else
-                    ...paged.map(
-                      (Product product) => Padding(
-                        padding: const EdgeInsets.only(bottom: 12),
-                        child: _ManageProductCard(
-                          product: product,
-                          selected: _selectedProductIds.contains(product.id),
-                          onSelectChanged: (bool value) {
-                            _toggleSelected(product.id, value);
-                          },
-                          onEdit: () => _showEditSheet(product),
-                          onToggleAvailability: () => _toggleAvailability(product),
-                          onDelete: () => _confirmDelete(product),
-                        ),
-                      ),
-                    ),
-                  if (filtered.length > paged.length)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 8),
-                      child: Center(
-                        child: OutlinedButton.icon(
-                          onPressed: () {
-                            setState(() {
-                              _visibleCount += _pageSize;
-                            });
-                          },
-                          icon: const Icon(Icons.expand_more),
-                          label: Text(
-                            'Load More (${filtered.length - paged.length} remaining)',
+                  return ListView(
+                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 90),
+                    children: <Widget>[
+                      _buildToolbar(products.length, filtered.length, paged),
+                      const SizedBox(height: 12),
+                      if (products.isEmpty)
+                        const Padding(
+                          padding: EdgeInsets.only(top: 140),
+                          child: Center(
+                            child: Text(
+                              'No products have been added to SincerelySea Store yet.',
+                            ),
+                          ),
+                        )
+                      else if (filtered.isEmpty)
+                        const Padding(
+                          padding: EdgeInsets.only(top: 140),
+                          child: Center(
+                            child: Text('No products match current filter.'),
+                          ),
+                        )
+                      else
+                        ...paged.map(
+                          (Product product) => Padding(
+                            padding: const EdgeInsets.only(bottom: 12),
+                            child: _ManageProductCard(
+                              product: product,
+                              selected: _selectedProductIds.contains(
+                                product.id,
+                              ),
+                              onSelectChanged: (bool value) {
+                                _toggleSelected(product.id, value);
+                              },
+                              onEdit: () => _showEditSheet(product),
+                              onToggleAvailability: () =>
+                                  _toggleAvailability(product),
+                              onDelete: () => _confirmDelete(product),
+                            ),
                           ),
                         ),
-                      ),
-                    ),
-                ],
-              );
-            },
+                      if (filtered.length > paged.length)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 8),
+                          child: Center(
+                            child: OutlinedButton.icon(
+                              onPressed: () {
+                                setState(() {
+                                  _visibleCount += _pageSize;
+                                });
+                              },
+                              icon: const Icon(Icons.expand_more),
+                              label: Text(
+                                'Load More (${filtered.length - paged.length} remaining)',
+                              ),
+                            ),
+                          ),
+                        ),
+                    ],
+                  );
+                },
           ),
         );
       },
@@ -194,22 +202,22 @@ class _ManageProductsScreenState extends State<ManageProductsScreen> {
         const SizedBox(height: 10),
         Wrap(
           spacing: 8,
-          children: <String>['all', 'available', 'paused'].map((String value) {
-            return ChoiceChip(
-              selected: _statusFilter == value,
-              label: Text(
-                switch (value) {
-                  'available' => 'Available',
-                  'paused' => 'Paused',
-                  _ => 'All',
-                },
-              ),
-              onSelected: (_) => setState(() {
-                _statusFilter = value;
-                _visibleCount = _pageSize;
-              }),
-            );
-          }).toList(growable: false),
+          children: <String>['all', 'available', 'paused']
+              .map((String value) {
+                return ChoiceChip(
+                  selected: _statusFilter == value,
+                  label: Text(switch (value) {
+                    'available' => 'Available',
+                    'paused' => 'Paused',
+                    _ => 'All',
+                  }),
+                  onSelected: (_) => setState(() {
+                    _statusFilter = value;
+                    _visibleCount = _pageSize;
+                  }),
+                );
+              })
+              .toList(growable: false),
         ),
         const SizedBox(height: 8),
         Text(
@@ -223,11 +231,15 @@ class _ManageProductsScreenState extends State<ManageProductsScreen> {
             runSpacing: 8,
             children: <Widget>[
               FilledButton.tonal(
-                onPressed: _bulkRunning ? null : () => _bulkSetAvailability(false),
+                onPressed: _bulkRunning
+                    ? null
+                    : () => _bulkSetAvailability(false),
                 child: Text('Pause (${_selectedProductIds.length})'),
               ),
               FilledButton.tonal(
-                onPressed: _bulkRunning ? null : () => _bulkSetAvailability(true),
+                onPressed: _bulkRunning
+                    ? null
+                    : () => _bulkSetAvailability(true),
                 child: const Text('Resume'),
               ),
               FilledButton.tonal(
@@ -360,11 +372,15 @@ class _ManageProductsScreenState extends State<ManageProductsScreen> {
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: <Widget>[
-              Text('Set new price for ${selectedProducts.length} selected products.'),
+              Text(
+                'Set new price for ${selectedProducts.length} selected products.',
+              ),
               const SizedBox(height: 12),
               TextField(
                 controller: priceController,
-                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                keyboardType: const TextInputType.numberWithOptions(
+                  decimal: true,
+                ),
                 decoration: const InputDecoration(labelText: 'New price'),
               ),
             ],
@@ -422,7 +438,9 @@ class _ManageProductsScreenState extends State<ManageProductsScreen> {
         return;
       }
       messenger.showSnackBar(
-        SnackBar(content: Text('Bulk price update failed after $success items: $e')),
+        SnackBar(
+          content: Text('Bulk price update failed after $success items: $e'),
+        ),
       );
     } finally {
       if (mounted) {
@@ -472,7 +490,9 @@ class _ManageProductsScreenState extends State<ManageProductsScreen> {
         return;
       }
       _clearSelection();
-      messenger.showSnackBar(SnackBar(content: Text('$success products deleted.')));
+      messenger.showSnackBar(
+        SnackBar(content: Text('$success products deleted.')),
+      );
     } catch (e) {
       if (!mounted) {
         return;
@@ -570,13 +590,17 @@ class _ManageProductsScreenState extends State<ManageProductsScreen> {
         return;
       }
       _clearSelection();
-      messenger.showSnackBar(SnackBar(content: Text('Updated stock for $success products.')));
+      messenger.showSnackBar(
+        SnackBar(content: Text('Updated stock for $success products.')),
+      );
     } catch (e) {
       if (!mounted) {
         return;
       }
       messenger.showSnackBar(
-        SnackBar(content: Text('Bulk stock update failed after $success items: $e')),
+        SnackBar(
+          content: Text('Bulk stock update failed after $success items: $e'),
+        ),
       );
     } finally {
       if (mounted) {
@@ -605,8 +629,10 @@ class _ManageProductsScreenState extends State<ManageProductsScreen> {
     final TextEditingController priceController = TextEditingController();
     final TextEditingController descriptionController = TextEditingController();
     final TextEditingController stockController = TextEditingController();
-    final TextEditingController preorderDaysController = TextEditingController();
-    final TextEditingController preorderNoteController = TextEditingController();
+    final TextEditingController preorderDaysController =
+        TextEditingController();
+    final TextEditingController preorderNoteController =
+        TextEditingController();
     final List<File> images = <File>[];
     String inventoryType = 'ready_stock';
     bool available = true;
@@ -634,20 +660,28 @@ class _ManageProductsScreenState extends State<ManageProductsScreen> {
             Future<void> save() async {
               final String name = nameController.text.trim();
               final String category = categoryController.text.trim();
-              final double? price = double.tryParse(priceController.text.trim());
+              final double? price = double.tryParse(
+                priceController.text.trim(),
+              );
               final String description = descriptionController.text.trim();
               final int stock = int.tryParse(stockController.text.trim()) ?? 0;
               final int preorderDays =
                   int.tryParse(preorderDaysController.text.trim()) ?? 0;
               if (name.isEmpty || category.isEmpty || description.isEmpty) {
                 ScaffoldMessenger.of(bottomSheetContext).showSnackBar(
-                  const SnackBar(content: Text('Name, category, and description are required.')),
+                  const SnackBar(
+                    content: Text(
+                      'Name, category, and description are required.',
+                    ),
+                  ),
                 );
                 return;
               }
               if (price == null || price < 0) {
                 ScaffoldMessenger.of(bottomSheetContext).showSnackBar(
-                  const SnackBar(content: Text('Price must be a valid number.')),
+                  const SnackBar(
+                    content: Text('Price must be a valid number.'),
+                  ),
                 );
                 return;
               }
@@ -659,13 +693,17 @@ class _ManageProductsScreenState extends State<ManageProductsScreen> {
               }
               if (inventoryType == 'preorder' && preorderDays <= 0) {
                 ScaffoldMessenger.of(bottomSheetContext).showSnackBar(
-                  const SnackBar(content: Text('Preorder days must be greater than 0.')),
+                  const SnackBar(
+                    content: Text('Preorder days must be greater than 0.'),
+                  ),
                 );
                 return;
               }
               if (images.isEmpty) {
                 ScaffoldMessenger.of(bottomSheetContext).showSnackBar(
-                  const SnackBar(content: Text('Please select at least one image.')),
+                  const SnackBar(
+                    content: Text('Please select at least one image.'),
+                  ),
                 );
                 return;
               }
@@ -676,7 +714,9 @@ class _ManageProductsScreenState extends State<ManageProductsScreen> {
                   CreateProductInput(
                     category: category,
                     inventoryType: inventoryType,
-                    preorderDays: inventoryType == 'preorder' ? preorderDays : 0,
+                    preorderDays: inventoryType == 'preorder'
+                        ? preorderDays
+                        : 0,
                     preorderNote: inventoryType == 'preorder'
                         ? preorderNoteController.text.trim()
                         : '',
@@ -693,7 +733,9 @@ class _ManageProductsScreenState extends State<ManageProductsScreen> {
                 }
                 Navigator.of(bottomSheetContext).pop();
                 ScaffoldMessenger.of(bottomSheetContext).showSnackBar(
-                  const SnackBar(content: Text('Product created successfully.')),
+                  const SnackBar(
+                    content: Text('Product created successfully.'),
+                  ),
                 );
               } catch (e) {
                 if (!bottomSheetContext.mounted) {
@@ -771,23 +813,32 @@ class _ManageProductsScreenState extends State<ManageProductsScreen> {
       builder: (BuildContext bottomSheetContext) {
         return StatefulBuilder(
           builder: (BuildContext context, StateSetter setModalState) {
-            final ProductService productService = bottomSheetContext.read<ProductService>();
+            final ProductService productService = bottomSheetContext
+                .read<ProductService>();
             Future<void> save() async {
               final int stock = int.tryParse(stockController.text.trim()) ?? 0;
               final int preorderDays =
                   int.tryParse(preorderDaysController.text.trim()) ?? 0;
-              final double? price = double.tryParse(priceController.text.trim());
+              final double? price = double.tryParse(
+                priceController.text.trim(),
+              );
               if (nameController.text.trim().isEmpty ||
                   categoryController.text.trim().isEmpty ||
                   descriptionController.text.trim().isEmpty) {
                 ScaffoldMessenger.of(bottomSheetContext).showSnackBar(
-                  const SnackBar(content: Text('Name, category, and description are required.')),
+                  const SnackBar(
+                    content: Text(
+                      'Name, category, and description are required.',
+                    ),
+                  ),
                 );
                 return;
               }
               if (price == null || price < 0) {
                 ScaffoldMessenger.of(bottomSheetContext).showSnackBar(
-                  const SnackBar(content: Text('Price must be a valid number.')),
+                  const SnackBar(
+                    content: Text('Price must be a valid number.'),
+                  ),
                 );
                 return;
               }
@@ -799,7 +850,9 @@ class _ManageProductsScreenState extends State<ManageProductsScreen> {
               }
               if (inventoryType == 'preorder' && preorderDays <= 0) {
                 ScaffoldMessenger.of(bottomSheetContext).showSnackBar(
-                  const SnackBar(content: Text('Preorder days must be greater than 0.')),
+                  const SnackBar(
+                    content: Text('Preorder days must be greater than 0.'),
+                  ),
                 );
                 return;
               }
@@ -994,7 +1047,9 @@ class _ManageProductCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final String imageUrl = product.images.isNotEmpty ? product.images.first : '';
+    final String imageUrl = product.images.isNotEmpty
+        ? product.images.first
+        : '';
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
@@ -1057,11 +1112,17 @@ class _ManageProductCard extends StatelessWidget {
                       children: <Widget>[
                         _Tag(
                           label: product.inventoryLabel,
-                          color: product.isPreorder ? Colors.orange : Colors.green,
+                          color: product.isPreorder
+                              ? Colors.orange
+                              : Colors.green,
                         ),
                         _Tag(
-                          label: product.availableForPurchase ? 'Available' : 'Paused',
-                          color: product.availableForPurchase ? Colors.blue : Colors.grey,
+                          label: product.availableForPurchase
+                              ? 'Available'
+                              : 'Paused',
+                          color: product.availableForPurchase
+                              ? Colors.blue
+                              : Colors.grey,
                         ),
                         _Tag(
                           label: product.isPreorder
@@ -1095,7 +1156,9 @@ class _ManageProductCard extends StatelessWidget {
                         ? Icons.pause_circle_outline
                         : Icons.play_circle_outline,
                   ),
-                  label: Text(product.availableForPurchase ? 'Pause' : 'Resume'),
+                  label: Text(
+                    product.availableForPurchase ? 'Pause' : 'Resume',
+                  ),
                 ),
               ),
               const SizedBox(width: 8),
@@ -1186,7 +1249,9 @@ class _ManageFormSheet extends StatelessWidget {
             const SizedBox(height: 12),
             TextField(
               controller: priceController,
-              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              keyboardType: const TextInputType.numberWithOptions(
+                decimal: true,
+              ),
               decoration: const InputDecoration(labelText: 'Price'),
             ),
             const SizedBox(height: 12),
@@ -1201,7 +1266,10 @@ class _ManageFormSheet extends StatelessWidget {
               initialValue: inventoryType,
               decoration: const InputDecoration(labelText: 'Inventory Type'),
               items: const <DropdownMenuItem<String>>[
-                DropdownMenuItem(value: 'ready_stock', child: Text('Ready Stock')),
+                DropdownMenuItem(
+                  value: 'ready_stock',
+                  child: Text('Ready Stock'),
+                ),
                 DropdownMenuItem(value: 'preorder', child: Text('Preorder')),
               ],
               onChanged: (String? value) {
@@ -1264,10 +1332,14 @@ class _ManageFormSheet extends StatelessWidget {
                               child: AppCheckCachedNetworkImage(
                                 imageUrl: imageUrl,
                                 fit: BoxFit.cover,
-                                placeholder: Container(color: AppColors.gray200),
+                                placeholder: Container(
+                                  color: AppColors.gray200,
+                                ),
                                 error: Container(
                                   color: AppColors.gray200,
-                                  child: const Icon(Icons.broken_image_outlined),
+                                  child: const Icon(
+                                    Icons.broken_image_outlined,
+                                  ),
                                 ),
                               ),
                             ),
@@ -1326,7 +1398,11 @@ class _ManageFormSheet extends StatelessWidget {
                         height: 18,
                         child: CircularProgressIndicator(strokeWidth: 2),
                       )
-                    : Text(title.startsWith('Add') ? 'Create Product' : 'Save Changes'),
+                    : Text(
+                        title.startsWith('Add')
+                            ? 'Create Product'
+                            : 'Save Changes',
+                      ),
               ),
             ),
           ],
@@ -1337,10 +1413,7 @@ class _ManageFormSheet extends StatelessWidget {
 }
 
 class _Tag extends StatelessWidget {
-  const _Tag({
-    required this.label,
-    required this.color,
-  });
+  const _Tag({required this.label, required this.color});
 
   final String label;
   final Color color;

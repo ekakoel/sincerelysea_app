@@ -26,10 +26,9 @@ class AuthService {
     }
 
     await _googleSignIn.initialize(
-      serverClientId:
-          defaultTargetPlatform == TargetPlatform.android
-              ? _androidServerClientId
-              : null,
+      serverClientId: defaultTargetPlatform == TargetPlatform.android
+          ? _androidServerClientId
+          : null,
     );
 
     _googleInitialized = true;
@@ -39,12 +38,8 @@ class AuthService {
   // EMAIL LOGIN
   // ============================================================
 
-  Future<UserCredential> signInWithEmail(
-    String email,
-    String password,
-  ) async {
-    final UserCredential credential =
-        await _auth.signInWithEmailAndPassword(
+  Future<UserCredential> signInWithEmail(String email, String password) async {
+    final UserCredential credential = await _auth.signInWithEmailAndPassword(
       email: email.trim(),
       password: password,
     );
@@ -71,18 +66,19 @@ class AuthService {
 
     try {
       final String normalizedEmail = email.trim();
-      final String normalizedUsername =
-          username == null ? '' : normalizeUsername(username);
+      final String normalizedUsername = username == null
+          ? ''
+          : normalizeUsername(username);
 
       // ----------------------------------------------------------
       // 1. Create Firebase Authentication account
       // ----------------------------------------------------------
 
-      final UserCredential credential =
-          await _auth.createUserWithEmailAndPassword(
-        email: normalizedEmail,
-        password: password,
-      );
+      final UserCredential credential = await _auth
+          .createUserWithEmailAndPassword(
+            email: normalizedEmail,
+            password: password,
+          );
 
       final User? user = credential.user;
       createdUser = user;
@@ -102,15 +98,11 @@ class AuthService {
         if (!isUsernameFormatValid(normalizedUsername)) {
           throw FirebaseAuthException(
             code: 'invalid-username',
-            message:
-                'Username harus terdiri dari 3-20 karakter: a-z, 0-9, _.',
+            message: 'Username harus terdiri dari 3-20 karakter: a-z, 0-9, _.',
           );
         }
 
-        await _reserveCustomUsername(
-          user,
-          normalizedUsername,
-        );
+        await _reserveCustomUsername(user, normalizedUsername);
       }
 
       // ----------------------------------------------------------
@@ -119,9 +111,7 @@ class AuthService {
 
       await _upsertUserProfile(
         user,
-        username: normalizedUsername.isEmpty
-            ? null
-            : normalizedUsername,
+        username: normalizedUsername.isEmpty ? null : normalizedUsername,
       );
 
       // ----------------------------------------------------------
@@ -136,9 +126,7 @@ class AuthService {
       // 5. Telemetry
       // ----------------------------------------------------------
 
-      await TelemetryService.instance.logRegisterSuccess(
-        method: 'email',
-      );
+      await TelemetryService.instance.logRegisterSuccess(method: 'email');
 
       return user;
     } catch (e, stackTrace) {
@@ -165,14 +153,11 @@ class AuthService {
     try {
       await _ensureGoogleInitialized();
 
-      final GoogleSignInAccount googleUser =
-          await _googleSignIn.authenticate();
+      final GoogleSignInAccount googleUser = await _googleSignIn.authenticate();
 
-      final GoogleSignInAuthentication googleAuth =
-          googleUser.authentication;
+      final GoogleSignInAuthentication googleAuth = googleUser.authentication;
 
-      if (googleAuth.idToken == null ||
-          googleAuth.idToken!.isEmpty) {
+      if (googleAuth.idToken == null || googleAuth.idToken!.isEmpty) {
         throw FirebaseAuthException(
           code: 'google-id-token-missing',
           message:
@@ -181,13 +166,11 @@ class AuthService {
         );
       }
 
-      final AuthCredential credential =
-          GoogleAuthProvider.credential(
+      final AuthCredential credential = GoogleAuthProvider.credential(
         idToken: googleAuth.idToken,
       );
 
-      final UserCredential userCredential =
-          await _auth.signInWithCredential(
+      final UserCredential userCredential = await _auth.signInWithCredential(
         credential,
       );
 
@@ -204,10 +187,8 @@ class AuthService {
         return null;
       }
 
-      if (e.code ==
-              GoogleSignInExceptionCode.clientConfigurationError ||
-          e.code ==
-              GoogleSignInExceptionCode.providerConfigurationError) {
+      if (e.code == GoogleSignInExceptionCode.clientConfigurationError ||
+          e.code == GoogleSignInExceptionCode.providerConfigurationError) {
         throw FirebaseAuthException(
           code: 'google-signin-config-error',
           message:
@@ -228,8 +209,7 @@ class AuthService {
 
       throw FirebaseAuthException(
         code: 'google-signin-failed',
-        message:
-            e.description ?? 'Google Sign-In gagal.',
+        message: e.description ?? 'Google Sign-In gagal.',
       );
     } catch (e, stackTrace) {
       debugPrint('GOOGLE SIGN-IN ERROR: $e');
@@ -261,12 +241,8 @@ class AuthService {
   // PASSWORD RESET
   // ============================================================
 
-  Future<void> sendPasswordResetEmail(
-    String email,
-  ) async {
-    await _auth.sendPasswordResetEmail(
-      email: email.trim(),
-    );
+  Future<void> sendPasswordResetEmail(String email) async {
+    await _auth.sendPasswordResetEmail(email: email.trim());
   }
 
   // ============================================================
@@ -274,24 +250,18 @@ class AuthService {
   // ============================================================
 
   bool usesPasswordProvider(User user) {
-    return user.providerData.any(
-      (info) => info.providerId == 'password',
-    );
+    return user.providerData.any((info) => info.providerId == 'password');
   }
 
   bool usesGoogleProvider(User user) {
-    return user.providerData.any(
-      (info) => info.providerId == 'google.com',
-    );
+    return user.providerData.any((info) => info.providerId == 'google.com');
   }
 
   // ============================================================
   // REAUTHENTICATION
   // ============================================================
 
-  Future<void> reauthenticateForSensitiveAction({
-    String? password,
-  }) async {
+  Future<void> reauthenticateForSensitiveAction({String? password}) async {
     final User? user = _auth.currentUser;
 
     if (user == null) {
@@ -306,28 +276,21 @@ class AuthService {
       final String email = user.email ?? '';
 
       if (email.isEmpty) {
-        throw Exception(
-          'Email tidak ditemukan untuk reauthentication.',
-        );
+        throw Exception('Email tidak ditemukan untuk reauthentication.');
       }
 
       final String pass = password?.trim() ?? '';
 
       if (pass.isEmpty) {
-        throw Exception(
-          'Password diperlukan.',
-        );
+        throw Exception('Password diperlukan.');
       }
 
-      final AuthCredential credential =
-          EmailAuthProvider.credential(
+      final AuthCredential credential = EmailAuthProvider.credential(
         email: email,
         password: pass,
       );
 
-      await user.reauthenticateWithCredential(
-        credential,
-      );
+      await user.reauthenticateWithCredential(credential);
 
       return;
     }
@@ -339,34 +302,24 @@ class AuthService {
     if (usesGoogleProvider(user)) {
       await _ensureGoogleInitialized();
 
-      final GoogleSignInAccount googleUser =
-          await _googleSignIn.authenticate();
+      final GoogleSignInAccount googleUser = await _googleSignIn.authenticate();
 
-      final GoogleSignInAuthentication googleAuth =
-          googleUser.authentication;
+      final GoogleSignInAuthentication googleAuth = googleUser.authentication;
 
-      if (googleAuth.idToken == null ||
-          googleAuth.idToken!.isEmpty) {
-        throw Exception(
-          'Google ID token tidak tersedia.',
-        );
+      if (googleAuth.idToken == null || googleAuth.idToken!.isEmpty) {
+        throw Exception('Google ID token tidak tersedia.');
       }
 
-      final AuthCredential credential =
-          GoogleAuthProvider.credential(
+      final AuthCredential credential = GoogleAuthProvider.credential(
         idToken: googleAuth.idToken,
       );
 
-      await user.reauthenticateWithCredential(
-        credential,
-      );
+      await user.reauthenticateWithCredential(credential);
 
       return;
     }
 
-    throw Exception(
-      'Unsupported provider for reauthentication.',
-    );
+    throw Exception('Unsupported provider for reauthentication.');
   }
 
   // ============================================================
@@ -385,9 +338,7 @@ class AuthService {
     final User? user = _auth.currentUser;
 
     if (user == null) {
-      throw Exception(
-        'User not authenticated',
-      );
+      throw Exception('User not authenticated');
     }
 
     await user.sendEmailVerification();
@@ -410,9 +361,7 @@ class AuthService {
   // ============================================================
 
   bool isUsernameFormatValid(String username) {
-    return RegExp(
-      r'^[a-z0-9_]{3,20}$',
-    ).hasMatch(username);
+    return RegExp(r'^[a-z0-9_]{3,20}$').hasMatch(username);
   }
 
   String normalizeUsername(String raw) {
@@ -423,10 +372,7 @@ class AuthService {
   // USERNAME AVAILABILITY
   // ============================================================
 
-  Future<bool> isUsernameAvailable(
-    String raw, {
-    String? excludeUid,
-  }) async {
+  Future<bool> isUsernameAvailable(String raw, {String? excludeUid}) async {
     final String normalized = normalizeUsername(raw);
 
     if (!isUsernameFormatValid(normalized)) {
@@ -434,18 +380,16 @@ class AuthService {
     }
 
     try {
-      final DocumentSnapshot<Map<String, dynamic>> doc =
-          await _firestore
-              .collection('usernames')
-              .doc(normalized)
-              .get();
+      final DocumentSnapshot<Map<String, dynamic>> doc = await _firestore
+          .collection('usernames')
+          .doc(normalized)
+          .get();
 
       if (!doc.exists) {
         return true;
       }
 
-      if (excludeUid != null &&
-          doc.data()?['uid']?.toString() == excludeUid) {
+      if (excludeUid != null && doc.data()?['uid']?.toString() == excludeUid) {
         return true;
       }
 
@@ -464,9 +408,7 @@ class AuthService {
             'Firestore error: ${e.code}',
       );
     } catch (e, stackTrace) {
-      debugPrint(
-        'USERNAME AVAILABILITY ERROR: $e',
-      );
+      debugPrint('USERNAME AVAILABILITY ERROR: $e');
       debugPrintStack(stackTrace: stackTrace);
 
       rethrow;
@@ -477,12 +419,10 @@ class AuthService {
   // USER PROFILE
   // ============================================================
 
-  Future<void> _upsertUserProfile(
-    User user, {
-    String? username,
-  }) async {
-    final DocumentReference<Map<String, dynamic>> userRef =
-        _firestore.collection('users').doc(user.uid);
+  Future<void> _upsertUserProfile(User user, {String? username}) async {
+    final DocumentReference<Map<String, dynamic>> userRef = _firestore
+        .collection('users')
+        .doc(user.uid);
 
     DocumentSnapshot<Map<String, dynamic>> snapshot;
 
@@ -493,9 +433,7 @@ class AuthService {
     try {
       snapshot = await userRef.get();
     } on FirebaseException catch (e, stackTrace) {
-      debugPrint(
-        'PROFILE READ ERROR: ${e.code} - ${e.message}',
-      );
+      debugPrint('PROFILE READ ERROR: ${e.code} - ${e.message}');
       debugPrintStack(stackTrace: stackTrace);
 
       throw FirebaseAuthException(
@@ -533,27 +471,19 @@ class AuthService {
         // ------------------------------------------------------
 
         final String base = _slugifyUsername(
-          user.displayName ??
-              user.email?.split('@').first ??
-              'user',
+          user.displayName ?? user.email?.split('@').first ?? 'user',
         );
 
-        resolvedUsername = await _findAvailableUsername(
-          base,
-        );
+        resolvedUsername = await _findAvailableUsername(base);
 
         // ------------------------------------------------------
         // Reserve automatically generated username
         // ------------------------------------------------------
 
-        final String usernameLower =
-            resolvedUsername.toLowerCase();
+        final String usernameLower = resolvedUsername.toLowerCase();
 
         try {
-          await _firestore
-              .collection('usernames')
-              .doc(usernameLower)
-              .set({
+          await _firestore.collection('usernames').doc(usernameLower).set({
             'uid': user.uid,
             'username': resolvedUsername,
             'createdAt': FieldValue.serverTimestamp(),
@@ -578,20 +508,15 @@ class AuthService {
       // Create user profile
       // --------------------------------------------------------
 
-      final String usernameLower =
-          resolvedUsername.toLowerCase();
+      final String usernameLower = resolvedUsername.toLowerCase();
 
       try {
         await userRef.set({
           'uid': user.uid,
           'email': user.email,
           'displayName':
-              user.displayName ??
-              user.email?.split('@').first ??
-              'Anonymous',
+              user.displayName ?? user.email?.split('@').first ?? 'Anonymous',
           'photoUrl': user.photoURL ?? '',
-          'role': 'user',
-          'adminScopes': <String>[],
           'username': resolvedUsername,
           'usernameLower': usernameLower,
           'usernameChangedOnce': false,
@@ -625,13 +550,8 @@ class AuthService {
       await userRef.set({
         'email': user.email,
         'displayName':
-            user.displayName ??
-            user.email?.split('@').first ??
-            'Anonymous',
-        'photoUrl':
-            user.photoURL ??
-            existing['photoUrl'] ??
-            '',
+            user.displayName ?? user.email?.split('@').first ?? 'Anonymous',
+        'photoUrl': user.photoURL ?? existing['photoUrl'] ?? '',
         'updatedAt': FieldValue.serverTimestamp(),
       }, SetOptions(merge: true));
     } on FirebaseException catch (e, stackTrace) {
@@ -655,79 +575,60 @@ class AuthService {
   // USERNAME RESERVATION
   // ============================================================
 
-  Future<void> _reserveCustomUsername(
-    User user,
-    String username,
-  ) async {
-    final String normalized =
-        normalizeUsername(username);
+  Future<void> _reserveCustomUsername(User user, String username) async {
+    final String normalized = normalizeUsername(username);
 
     if (!isUsernameFormatValid(normalized)) {
       throw FirebaseAuthException(
         code: 'invalid-username',
-        message:
-            'Username tidak valid.',
+        message: 'Username tidak valid.',
       );
     }
 
-    final DocumentReference<Map<String, dynamic>> usernameRef =
-        _firestore
-            .collection('usernames')
-            .doc(normalized);
+    final DocumentReference<Map<String, dynamic>> usernameRef = _firestore
+        .collection('usernames')
+        .doc(normalized);
 
     try {
-      await _firestore.runTransaction(
-        (Transaction tx) async {
-          final DocumentSnapshot<Map<String, dynamic>> existing =
-              await tx.get(usernameRef);
+      await _firestore.runTransaction((Transaction tx) async {
+        final DocumentSnapshot<Map<String, dynamic>> existing = await tx.get(
+          usernameRef,
+        );
 
-          // ----------------------------------------------------
-          // Username already exists
-          // ----------------------------------------------------
+        // ----------------------------------------------------
+        // Username already exists
+        // ----------------------------------------------------
 
-          if (existing.exists) {
-            throw FirebaseAuthException(
-              code: 'username-already-in-use',
-              message:
-                  'Username is already in use.',
-            );
-          }
-
-          // ----------------------------------------------------
-          // Reserve username
-          // ----------------------------------------------------
-
-          tx.set(
-            usernameRef,
-            {
-              'uid': user.uid,
-              'username': normalized,
-              'createdAt':
-                  FieldValue.serverTimestamp(),
-            },
+        if (existing.exists) {
+          throw FirebaseAuthException(
+            code: 'username-already-in-use',
+            message: 'Username is already in use.',
           );
+        }
 
-          // ----------------------------------------------------
-          // Also create the minimum user profile data.
-          // _upsertUserProfile() will complete it afterwards.
-          // ----------------------------------------------------
+        // ----------------------------------------------------
+        // Reserve username
+        // ----------------------------------------------------
 
-          tx.set(
-            _firestore
-                .collection('users')
-                .doc(user.uid),
-            {
-              'uid': user.uid,
-              'username': normalized,
-              'usernameLower': normalized,
-              'usernameChangedOnce': false,
-              'updatedAt':
-                  FieldValue.serverTimestamp(),
-            },
-            SetOptions(merge: true),
-          );
-        },
-      );
+        tx.set(usernameRef, {
+          'uid': user.uid,
+          'username': normalized,
+          'createdAt': FieldValue.serverTimestamp(),
+        });
+
+        // ----------------------------------------------------
+        // Also create the minimum user profile data.
+        // _upsertUserProfile() will complete it afterwards.
+        // ----------------------------------------------------
+
+        tx.set(_firestore.collection('users').doc(user.uid), {
+          'uid': user.uid,
+          'username': normalized,
+          'usernameLower': normalized,
+          'usernameChangedOnce': false,
+          'updatedAt': FieldValue.serverTimestamp(),
+        }, SetOptions(merge: true));
+      });
     } on FirebaseAuthException {
       rethrow;
     } on FirebaseException catch (e, stackTrace) {
@@ -753,20 +654,11 @@ class AuthService {
   String _slugifyUsername(String raw) {
     String value = raw.trim().toLowerCase();
 
-    value = value.replaceAll(
-      RegExp(r'[^a-z0-9_]'),
-      '_',
-    );
+    value = value.replaceAll(RegExp(r'[^a-z0-9_]'), '_');
 
-    value = value.replaceAll(
-      RegExp(r'_+'),
-      '_',
-    );
+    value = value.replaceAll(RegExp(r'_+'), '_');
 
-    value = value.replaceAll(
-      RegExp(r'^_+|_+$'),
-      '',
-    );
+    value = value.replaceAll(RegExp(r'^_+|_+$'), '');
 
     if (value.length < 3) {
       value = '${value}user';
@@ -779,37 +671,29 @@ class AuthService {
     return value;
   }
 
-  Future<String> _findAvailableUsername(
-    String base,
-  ) async {
-    String candidate =
-        _slugifyUsername(base);
+  Future<String> _findAvailableUsername(String base) async {
+    String candidate = _slugifyUsername(base);
 
     for (int i = 0; i < 30; i++) {
-      final String name =
-          i == 0 ? candidate : '$candidate$i';
+      final String name = i == 0 ? candidate : '$candidate$i';
 
       if (!isUsernameFormatValid(name)) {
         continue;
       }
 
-      final DocumentSnapshot<Map<String, dynamic>> doc =
-          await _firestore
-              .collection('usernames')
-              .doc(name)
-              .get();
+      final DocumentSnapshot<Map<String, dynamic>> doc = await _firestore
+          .collection('usernames')
+          .doc(name)
+          .get();
 
       if (!doc.exists) {
         return name;
       }
     }
 
-    final int millis =
-        DateTime.now().millisecondsSinceEpoch %
-            100000;
+    final int millis = DateTime.now().millisecondsSinceEpoch % 100000;
 
-    String seed =
-        '${candidate}_$millis';
+    String seed = '${candidate}_$millis';
 
     if (seed.length > 20) {
       seed = seed.substring(0, 20);
@@ -826,42 +710,30 @@ class AuthService {
   // ROLLBACK FAILED REGISTRATION
   // ============================================================
 
-  Future<void> _rollbackFailedSignUp(
-    User user,
-  ) async {
-    debugPrint(
-      'Rolling back failed sign-up for UID: ${user.uid}',
-    );
+  Future<void> _rollbackFailedSignUp(User user) async {
+    debugPrint('Rolling back failed sign-up for UID: ${user.uid}');
 
     // ----------------------------------------------------------
     // Remove username documents owned by this UID
     // ----------------------------------------------------------
 
     try {
-      final QuerySnapshot<Map<String, dynamic>> usernameDocs =
-          await _firestore
-              .collection('usernames')
-              .where(
-                'uid',
-                isEqualTo: user.uid,
-              )
-              .limit(10)
-              .get();
+      final QuerySnapshot<Map<String, dynamic>> usernameDocs = await _firestore
+          .collection('usernames')
+          .where('uid', isEqualTo: user.uid)
+          .limit(10)
+          .get();
 
       for (final QueryDocumentSnapshot<Map<String, dynamic>> doc
           in usernameDocs.docs) {
         try {
           await doc.reference.delete();
         } catch (e) {
-          debugPrint(
-            'Rollback username delete failed: $e',
-          );
+          debugPrint('Rollback username delete failed: $e');
         }
       }
     } catch (e) {
-      debugPrint(
-        'Rollback username query failed: $e',
-      );
+      debugPrint('Rollback username query failed: $e');
     }
 
     // ----------------------------------------------------------
@@ -869,14 +741,9 @@ class AuthService {
     // ----------------------------------------------------------
 
     try {
-      await _firestore
-          .collection('users')
-          .doc(user.uid)
-          .delete();
+      await _firestore.collection('users').doc(user.uid).delete();
     } catch (e) {
-      debugPrint(
-        'Rollback profile delete failed: $e',
-      );
+      debugPrint('Rollback profile delete failed: $e');
     }
 
     // ----------------------------------------------------------
@@ -886,9 +753,7 @@ class AuthService {
     try {
       await user.delete();
     } catch (e) {
-      debugPrint(
-        'Rollback Firebase Auth delete failed: $e',
-      );
+      debugPrint('Rollback Firebase Auth delete failed: $e');
     }
   }
 }

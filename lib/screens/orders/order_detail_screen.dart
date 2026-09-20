@@ -101,7 +101,10 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
                     child: Text('Processing'),
                   ),
                   DropdownMenuItem(value: 'shipped', child: Text('Shipped')),
-                  DropdownMenuItem(value: 'completed', child: Text('Completed')),
+                  DropdownMenuItem(
+                    value: 'completed',
+                    child: Text('Completed'),
+                  ),
                 ],
                 onChanged: _updatingStatus
                     ? null
@@ -130,7 +133,8 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
                   const SizedBox(width: 12),
                   Expanded(
                     child: FilledButton(
-                      onPressed: _submittingBuyerAction || order.status != 'pending'
+                      onPressed:
+                          _submittingBuyerAction || order.status != 'pending'
                           ? null
                           : () => _cancelOrder(context, order),
                       style: FilledButton.styleFrom(
@@ -225,9 +229,9 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
       if (!context.mounted) {
         return;
       }
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to cancel order: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Failed to cancel order: $e')));
     } finally {
       if (mounted) {
         setState(() {
@@ -250,7 +254,9 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
         return;
       }
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Order status updated to ${_toTitleCase(value)}')),
+        SnackBar(
+          content: Text('Order status updated to ${_toTitleCase(value)}'),
+        ),
       );
       Navigator.of(context).pop();
     } catch (e) {
@@ -285,10 +291,7 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
 }
 
 class _Section extends StatelessWidget {
-  const _Section({
-    required this.title,
-    required this.child,
-  });
+  const _Section({required this.title, required this.child});
 
   final String title;
   final Widget child;
@@ -336,10 +339,7 @@ class _MetaRow extends StatelessWidget {
         children: <Widget>[
           SizedBox(
             width: 90,
-            child: Text(
-              label,
-              style: TextStyle(color: AppColors.gray700),
-            ),
+            child: Text(label, style: TextStyle(color: AppColors.gray700)),
           ),
           Expanded(
             child: Text(
@@ -371,7 +371,8 @@ class _OrderItemTile extends StatelessWidget {
             : () {
                 Navigator.of(context).push(
                   MaterialPageRoute<void>(
-                    builder: (_) => ProductDetailScreen(productId: item.productId),
+                    builder: (_) =>
+                        ProductDetailScreen(productId: item.productId),
                   ),
                 );
               },

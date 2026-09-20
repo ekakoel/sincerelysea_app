@@ -62,74 +62,89 @@ class SalesReportsScreen extends StatelessWidget {
               const SizedBox(height: 10),
               StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
                 stream: reportingService.recentSalesReportsStream(),
-                builder: (
-                  BuildContext context,
-                  AsyncSnapshot<QuerySnapshot<Map<String, dynamic>>> snapshot,
-                ) {
-                  if (snapshot.connectionState == ConnectionState.waiting) {
-                    return const Padding(
-                      padding: EdgeInsets.symmetric(vertical: 24),
-                      child: Center(child: CircularProgressIndicator()),
-                    );
-                  }
-                  final List<SalesReport> reports =
-                      (snapshot.data?.docs ??
-                              <QueryDocumentSnapshot<Map<String, dynamic>>>[])
-                          .map(SalesReport.fromFirestore)
-                          .toList(growable: false);
-                  if (reports.isEmpty) {
-                    return const Text('No sales report snapshots yet.');
-                  }
-                  return Column(
-                    children: reports
-                        .map(
-                          (SalesReport report) => Card(
-                            margin: const EdgeInsets.only(bottom: 10),
-                            child: Padding(
-                              padding: const EdgeInsets.all(16),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: <Widget>[
-                                  Text(
-                                    report.reportDateKey,
-                                    style: const TextStyle(
-                                      fontSize: 16,
-                                      fontWeight: FontWeight.w700,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 10),
-                                  Wrap(
-                                    spacing: 16,
-                                    runSpacing: 10,
+                builder:
+                    (
+                      BuildContext context,
+                      AsyncSnapshot<QuerySnapshot<Map<String, dynamic>>>
+                      snapshot,
+                    ) {
+                      if (snapshot.connectionState == ConnectionState.waiting) {
+                        return const Padding(
+                          padding: EdgeInsets.symmetric(vertical: 24),
+                          child: Center(child: CircularProgressIndicator()),
+                        );
+                      }
+                      final List<SalesReport> reports =
+                          (snapshot.data?.docs ??
+                                  <
+                                    QueryDocumentSnapshot<Map<String, dynamic>>
+                                  >[])
+                              .map(SalesReport.fromFirestore)
+                              .toList(growable: false);
+                      if (reports.isEmpty) {
+                        return const Text('No sales report snapshots yet.');
+                      }
+                      return Column(
+                        children: reports
+                            .map(
+                              (SalesReport report) => Card(
+                                margin: const EdgeInsets.only(bottom: 10),
+                                child: Padding(
+                                  padding: const EdgeInsets.all(16),
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
                                     children: <Widget>[
-                                      _Metric(label: 'Orders', value: '${report.orderCount}'),
-                                      _Metric(label: 'Paid', value: '${report.paidOrderCount}'),
-                                      _Metric(
-                                        label: 'Completed',
-                                        value: '${report.completedOrderCount}',
+                                      Text(
+                                        report.reportDateKey,
+                                        style: const TextStyle(
+                                          fontSize: 16,
+                                          fontWeight: FontWeight.w700,
+                                        ),
                                       ),
-                                      _Metric(
-                                        label: 'Cancelled',
-                                        value: '${report.cancelledOrderCount}',
-                                      ),
-                                      _Metric(
-                                        label: 'Gross',
-                                        value: '\$${report.grossSales.toStringAsFixed(2)}',
-                                      ),
-                                      _Metric(
-                                        label: 'Net',
-                                        value: '\$${report.netSales.toStringAsFixed(2)}',
+                                      const SizedBox(height: 10),
+                                      Wrap(
+                                        spacing: 16,
+                                        runSpacing: 10,
+                                        children: <Widget>[
+                                          _Metric(
+                                            label: 'Orders',
+                                            value: '${report.orderCount}',
+                                          ),
+                                          _Metric(
+                                            label: 'Paid',
+                                            value: '${report.paidOrderCount}',
+                                          ),
+                                          _Metric(
+                                            label: 'Completed',
+                                            value:
+                                                '${report.completedOrderCount}',
+                                          ),
+                                          _Metric(
+                                            label: 'Cancelled',
+                                            value:
+                                                '${report.cancelledOrderCount}',
+                                          ),
+                                          _Metric(
+                                            label: 'Gross',
+                                            value:
+                                                '\$${report.grossSales.toStringAsFixed(2)}',
+                                          ),
+                                          _Metric(
+                                            label: 'Net',
+                                            value:
+                                                '\$${report.netSales.toStringAsFixed(2)}',
+                                          ),
+                                        ],
                                       ),
                                     ],
                                   ),
-                                ],
+                                ),
                               ),
-                            ),
-                          ),
-                        )
-                        .toList(growable: false),
-                  );
-                },
+                            )
+                            .toList(growable: false),
+                      );
+                    },
               ),
               const SizedBox(height: 20),
               const Text(
@@ -139,85 +154,98 @@ class SalesReportsScreen extends StatelessWidget {
               const SizedBox(height: 10),
               StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
                 stream: reportingService.recentJournalEntriesStream(),
-                builder: (
-                  BuildContext context,
-                  AsyncSnapshot<QuerySnapshot<Map<String, dynamic>>> snapshot,
-                ) {
-                  if (snapshot.connectionState == ConnectionState.waiting) {
-                    return const Padding(
-                      padding: EdgeInsets.symmetric(vertical: 24),
-                      child: Center(child: CircularProgressIndicator()),
-                    );
-                  }
-                  final List<JournalEntry> entries =
-                      (snapshot.data?.docs ??
-                              <QueryDocumentSnapshot<Map<String, dynamic>>>[])
-                          .map(JournalEntry.fromFirestore)
-                          .toList(growable: false);
-                  if (entries.isEmpty) {
-                    return const Text('No journal entries recorded yet.');
-                  }
-                  return Column(
-                    children: entries
-                        .map(
-                          (JournalEntry entry) => Card(
-                            margin: const EdgeInsets.only(bottom: 10),
-                            child: Padding(
-                              padding: const EdgeInsets.all(16),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: <Widget>[
-                                  Text(
-                                    entry.entryType.replaceAll('_', ' ').toUpperCase(),
-                                    style: const TextStyle(
-                                      fontWeight: FontWeight.w700,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 4),
-                                  Text(entry.memo),
-                                  const SizedBox(height: 6),
-                                  Text(
-                                    'Order: ${entry.orderId}',
-                                    style: const TextStyle(color: AppColors.black54),
-                                  ),
-                                  if (entry.createdAt != null) ...<Widget>[
-                                    const SizedBox(height: 4),
-                                    Text(
-                                      _formatDate(entry.createdAt!.toDate()),
-                                      style: const TextStyle(
-                                        color: AppColors.black54,
+                builder:
+                    (
+                      BuildContext context,
+                      AsyncSnapshot<QuerySnapshot<Map<String, dynamic>>>
+                      snapshot,
+                    ) {
+                      if (snapshot.connectionState == ConnectionState.waiting) {
+                        return const Padding(
+                          padding: EdgeInsets.symmetric(vertical: 24),
+                          child: Center(child: CircularProgressIndicator()),
+                        );
+                      }
+                      final List<JournalEntry> entries =
+                          (snapshot.data?.docs ??
+                                  <
+                                    QueryDocumentSnapshot<Map<String, dynamic>>
+                                  >[])
+                              .map(JournalEntry.fromFirestore)
+                              .toList(growable: false);
+                      if (entries.isEmpty) {
+                        return const Text('No journal entries recorded yet.');
+                      }
+                      return Column(
+                        children: entries
+                            .map(
+                              (JournalEntry entry) => Card(
+                                margin: const EdgeInsets.only(bottom: 10),
+                                child: Padding(
+                                  padding: const EdgeInsets.all(16),
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: <Widget>[
+                                      Text(
+                                        entry.entryType
+                                            .replaceAll('_', ' ')
+                                            .toUpperCase(),
+                                        style: const TextStyle(
+                                          fontWeight: FontWeight.w700,
+                                        ),
                                       ),
-                                    ),
-                                  ],
-                                  const SizedBox(height: 10),
-                                  ...entry.lines.map(
-                                    (JournalLine line) => Padding(
-                                      padding: const EdgeInsets.only(bottom: 6),
-                                      child: Row(
-                                        children: <Widget>[
-                                          Expanded(
-                                            child: Text(
-                                              '${line.accountCode} • ${line.accountName}',
-                                            ),
-                                          ),
-                                          Text(
-                                            'Dr ${line.debit.toStringAsFixed(2)} / Cr ${line.credit.toStringAsFixed(2)}',
-                                            style: const TextStyle(
-                                              fontWeight: FontWeight.w600,
-                                            ),
-                                          ),
-                                        ],
+                                      const SizedBox(height: 4),
+                                      Text(entry.memo),
+                                      const SizedBox(height: 6),
+                                      Text(
+                                        'Order: ${entry.orderId}',
+                                        style: const TextStyle(
+                                          color: AppColors.black54,
+                                        ),
                                       ),
-                                    ),
+                                      if (entry.createdAt != null) ...<Widget>[
+                                        const SizedBox(height: 4),
+                                        Text(
+                                          _formatDate(
+                                            entry.createdAt!.toDate(),
+                                          ),
+                                          style: const TextStyle(
+                                            color: AppColors.black54,
+                                          ),
+                                        ),
+                                      ],
+                                      const SizedBox(height: 10),
+                                      ...entry.lines.map(
+                                        (JournalLine line) => Padding(
+                                          padding: const EdgeInsets.only(
+                                            bottom: 6,
+                                          ),
+                                          child: Row(
+                                            children: <Widget>[
+                                              Expanded(
+                                                child: Text(
+                                                  '${line.accountCode} • ${line.accountName}',
+                                                ),
+                                              ),
+                                              Text(
+                                                'Dr ${line.debit.toStringAsFixed(2)} / Cr ${line.credit.toStringAsFixed(2)}',
+                                                style: const TextStyle(
+                                                  fontWeight: FontWeight.w600,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      ),
+                                    ],
                                   ),
-                                ],
+                                ),
                               ),
-                            ),
-                          ),
-                        )
-                        .toList(growable: false),
-                  );
-                },
+                            )
+                            .toList(growable: false),
+                      );
+                    },
               ),
             ],
           ),

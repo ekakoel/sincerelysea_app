@@ -76,7 +76,8 @@ class OrderService {
     final DocumentReference<Map<String, dynamic>> orderRef = _ordersRef.doc(
       orderId,
     );
-    final DocumentSnapshot<Map<String, dynamic>> snapshot = await orderRef.get();
+    final DocumentSnapshot<Map<String, dynamic>> snapshot = await orderRef
+        .get();
     if (!snapshot.exists) {
       throw Exception('Order not found.');
     }
@@ -100,10 +101,7 @@ class OrderService {
         );
       }
       if (order.status != 'completed' && normalizedStatus == 'completed') {
-        _salesReportingService.recordOrderCompleted(
-          tx: tx,
-          occurredAt: now,
-        );
+        _salesReportingService.recordOrderCompleted(tx: tx, occurredAt: now);
       }
     });
   }
@@ -126,7 +124,9 @@ class OrderService {
         throw Exception('Order not found.');
       }
 
-      final app_order.Order order = app_order.Order.fromFirestore(orderSnapshot);
+      final app_order.Order order = app_order.Order.fromFirestore(
+        orderSnapshot,
+      );
       if (order.userId != user.uid) {
         throw Exception('Only the buyer can cancel this order.');
       }
@@ -143,8 +143,8 @@ class OrderService {
         final DocumentReference<Map<String, dynamic>> productRef = _firestore
             .collection('products')
             .doc(item.productId);
-        final DocumentSnapshot<Map<String, dynamic>> productSnapshot =
-            await tx.get(productRef);
+        final DocumentSnapshot<Map<String, dynamic>> productSnapshot = await tx
+            .get(productRef);
         if (!productSnapshot.exists) {
           continue;
         }
@@ -203,9 +203,8 @@ class OrderService {
         final DocumentReference<Map<String, dynamic>> productRef = _firestore
             .collection('products')
             .doc(product.id);
-        final DocumentSnapshot<Map<String, dynamic>> freshProduct = await tx.get(
-          productRef,
-        );
+        final DocumentSnapshot<Map<String, dynamic>> freshProduct = await tx
+            .get(productRef);
         final String inventoryType =
             freshProduct.data()?['inventoryType']?.toString() == 'preorder'
             ? 'preorder'
@@ -220,7 +219,8 @@ class OrderService {
         if (!availableForPurchase) {
           throw Exception('${product.name} is currently unavailable.');
         }
-        if (inventoryType == 'ready_stock' && currentStock < cartItem.quantity) {
+        if (inventoryType == 'ready_stock' &&
+            currentStock < cartItem.quantity) {
           throw Exception('Not enough stock for ${product.name}.');
         }
         if (inventoryType == 'ready_stock') {
@@ -233,7 +233,9 @@ class OrderService {
           productId: product.id,
           sellerId: product.userId,
           productName: product.name,
-          productImageUrl: product.images.isNotEmpty ? product.images.first : '',
+          productImageUrl: product.images.isNotEmpty
+              ? product.images.first
+              : '',
           inventoryType: product.inventoryType,
           preorderDays: product.preorderDays,
           quantity: cartItem.quantity,
@@ -247,7 +249,9 @@ class OrderService {
         'userId': user.uid,
         'storeId': SalesReportingService.storeId,
         'storeName': SalesReportingService.storeName,
-        'items': orderItems.map((app_order.OrderItem item) => item.toMap()).toList(),
+        'items': orderItems
+            .map((app_order.OrderItem item) => item.toMap())
+            .toList(),
         'totalPrice': totalPrice,
         'status': 'pending',
         'createdAt': FieldValue.serverTimestamp(),

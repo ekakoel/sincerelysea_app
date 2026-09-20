@@ -45,9 +45,7 @@ class Product {
   bool get canPurchase => availableForPurchase && (isPreorder || stock > 0);
   String get inventoryLabel => isPreorder ? 'Preorder' : 'Ready Stock';
 
-  factory Product.fromFirestore(
-    DocumentSnapshot<Map<String, dynamic>> doc,
-  ) {
+  factory Product.fromFirestore(DocumentSnapshot<Map<String, dynamic>> doc) {
     final Map<String, dynamic> data = doc.data() ?? <String, dynamic>{};
     return Product(
       id: doc.id,

@@ -268,10 +268,10 @@ class _ProfileHeader extends StatelessWidget {
     final String username =
         profileData['username']?.toString() ??
         _emailPrefix(user.email).toLowerCase();
-    final bool isAdmin =
-        <String>{'admin', 'developer'}.contains(
-          profileData['role']?.toString().trim().toLowerCase(),
-        );
+    final bool isAdmin = <String>{
+      'admin',
+      'developer',
+    }.contains(profileData['role']?.toString().trim().toLowerCase());
     final String? avatarUrl =
         profileData['photoUrl']?.toString().isNotEmpty == true
         ? profileData['photoUrl']?.toString()
@@ -574,7 +574,6 @@ class _CollectionsTab extends StatelessWidget {
 
             return GridView.builder(
               padding: const EdgeInsets.fromLTRB(12, 14, 12, 20),
-              cacheExtent: 900,
               itemCount: docs.length,
               gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                 crossAxisCount: 2,
@@ -760,7 +759,6 @@ class _UserPostGrid extends StatelessWidget {
 
             return GridView.builder(
               padding: const EdgeInsets.fromLTRB(12, 14, 12, 20),
-              cacheExtent: 900,
               itemCount: docs.length,
               gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                 crossAxisCount: 2,
@@ -1736,10 +1734,14 @@ class _WishlistCard extends StatelessWidget {
                             : AppCheckCachedNetworkImage(
                                 imageUrl: productImageUrl,
                                 fit: BoxFit.cover,
-                                placeholder: Container(color: AppColors.gray200),
+                                placeholder: Container(
+                                  color: AppColors.gray200,
+                                ),
                                 error: Container(
                                   color: AppColors.gray200,
-                                  child: const Icon(Icons.broken_image_outlined),
+                                  child: const Icon(
+                                    Icons.broken_image_outlined,
+                                  ),
                                 ),
                               ),
                       ),
@@ -1870,20 +1872,12 @@ class _WishlistCard extends StatelessWidget {
       },
       itemBuilder: (BuildContext context) => <PopupMenuEntry<String>>[
         if (!isProductWishlist)
-          const PopupMenuItem<String>(
-            value: 'edit',
-            child: Text('Edit'),
-          ),
+          const PopupMenuItem<String>(value: 'edit', child: Text('Edit')),
         PopupMenuItem<String>(
           value: 'toggle',
-          child: Text(
-            isFulfilled ? 'Move to active' : 'Mark as fulfilled',
-          ),
+          child: Text(isFulfilled ? 'Move to active' : 'Mark as fulfilled'),
         ),
-        const PopupMenuItem<String>(
-          value: 'delete',
-          child: Text('Delete'),
-        ),
+        const PopupMenuItem<String>(value: 'delete', child: Text('Delete')),
       ],
     );
   }

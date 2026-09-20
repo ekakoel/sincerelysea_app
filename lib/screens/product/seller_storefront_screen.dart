@@ -23,10 +23,7 @@ class SellerStorefrontScreen extends StatelessWidget {
       appBar: AppBar(title: Text(sellerName)),
       body: FutureBuilder<List<Product>>(
         future: context.read<ProductService>().getStoreProducts(sellerUserId),
-        builder: (
-          BuildContext context,
-          AsyncSnapshot<List<Product>> snapshot,
-        ) {
+        builder: (BuildContext context, AsyncSnapshot<List<Product>> snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator());
           }
@@ -55,7 +52,9 @@ class SellerStorefrontScreen extends StatelessWidget {
                         ),
                         const SizedBox(height: 24),
                         const Center(
-                          child: Text('No products are available in this store yet.'),
+                          child: Text(
+                            'No products are available in this store yet.',
+                          ),
                         ),
                       ],
                     );
@@ -142,9 +141,9 @@ class SellerStorefrontScreen extends StatelessWidget {
       if (!context.mounted) {
         return;
       }
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to update wishlist: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Failed to update wishlist: $e')));
     }
   }
 }
@@ -168,9 +167,9 @@ class _SellerHeader extends StatelessWidget {
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(18),
-        color: Theme.of(context).colorScheme.surfaceContainerHighest.withValues(
-          alpha: 0.35,
-        ),
+        color: Theme.of(
+          context,
+        ).colorScheme.surfaceContainerHighest.withValues(alpha: 0.35),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -191,7 +190,9 @@ class _SellerHeader extends StatelessWidget {
           ),
           const SizedBox(height: 4),
           Text(
-            username.trim().isEmpty ? 'Official SincerelySea Store' : '@$username',
+            username.trim().isEmpty
+                ? 'Official SincerelySea Store'
+                : '@$username',
             style: TextStyle(color: Theme.of(context).hintColor),
           ),
           const SizedBox(height: 10),

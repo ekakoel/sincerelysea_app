@@ -129,83 +129,87 @@ class SharedPostDetailScreen extends StatelessWidget {
                   const SizedBox(height: 12),
                   if (isProductPost)
                     FutureBuilder<Product?>(
-                      future: context
-                          .read<ProductService>()
-                          .getProductOnce(productId),
-                      builder: (
-                        BuildContext context,
-                        AsyncSnapshot<Product?> productSnapshot,
-                      ) {
-                        final Product? product = productSnapshot.data;
-                        if (product == null) {
-                          return SizedBox(
-                            width: double.infinity,
-                            child: OutlinedButton(
-                              onPressed: () {
-                                Navigator.of(context).push(
-                                  MaterialPageRoute<void>(
-                                    builder: (_) => ProductDetailScreen(
-                                      productId: productId,
-                                    ),
-                                  ),
-                                );
-                              },
-                              child: const Text('View Product'),
-                            ),
-                          );
-                        }
-                        return StreamBuilder<bool>(
-                          stream: context
-                              .read<WishlistService>()
-                              .isProductWishlistedStream(product.id),
-                          builder: (
+                      future: context.read<ProductService>().getProductOnce(
+                        productId,
+                      ),
+                      builder:
+                          (
                             BuildContext context,
-                            AsyncSnapshot<bool> wishlistSnapshot,
+                            AsyncSnapshot<Product?> productSnapshot,
                           ) {
-                            final bool isWishlisted =
-                                wishlistSnapshot.data ?? false;
-                            return Column(
-                              children: <Widget>[
-                                ProductCard(
-                                  product: product,
-                                  compact: true,
-                                  isWishlisted: isWishlisted,
-                                  onWishlistTap: () => _toggleWishlist(
-                                    context,
-                                    product,
-                                    isWishlisted,
-                                  ),
-                                  onTap: () {
+                            final Product? product = productSnapshot.data;
+                            if (product == null) {
+                              return SizedBox(
+                                width: double.infinity,
+                                child: OutlinedButton(
+                                  onPressed: () {
                                     Navigator.of(context).push(
                                       MaterialPageRoute<void>(
                                         builder: (_) => ProductDetailScreen(
-                                          productId: product.id,
+                                          productId: productId,
                                         ),
                                       ),
                                     );
                                   },
+                                  child: const Text('View Product'),
                                 ),
-                                const SizedBox(height: 8),
-                                SizedBox(
-                                  width: double.infinity,
-                                  child: OutlinedButton(
-                                    onPressed: () {
-                                      Navigator.of(context).push(
-                                        MaterialPageRoute<void>(
-                                          builder: (_) => ProductDetailScreen(
-                                            productId: product.id,
+                              );
+                            }
+                            return StreamBuilder<bool>(
+                              stream: context
+                                  .read<WishlistService>()
+                                  .isProductWishlistedStream(product.id),
+                              builder:
+                                  (
+                                    BuildContext context,
+                                    AsyncSnapshot<bool> wishlistSnapshot,
+                                  ) {
+                                    final bool isWishlisted =
+                                        wishlistSnapshot.data ?? false;
+                                    return Column(
+                                      children: <Widget>[
+                                        ProductCard(
+                                          product: product,
+                                          compact: true,
+                                          isWishlisted: isWishlisted,
+                                          onWishlistTap: () => _toggleWishlist(
+                                            context,
+                                            product,
+                                            isWishlisted,
+                                          ),
+                                          onTap: () {
+                                            Navigator.of(context).push(
+                                              MaterialPageRoute<void>(
+                                                builder: (_) =>
+                                                    ProductDetailScreen(
+                                                      productId: product.id,
+                                                    ),
+                                              ),
+                                            );
+                                          },
+                                        ),
+                                        const SizedBox(height: 8),
+                                        SizedBox(
+                                          width: double.infinity,
+                                          child: OutlinedButton(
+                                            onPressed: () {
+                                              Navigator.of(context).push(
+                                                MaterialPageRoute<void>(
+                                                  builder: (_) =>
+                                                      ProductDetailScreen(
+                                                        productId: product.id,
+                                                      ),
+                                                ),
+                                              );
+                                            },
+                                            child: const Text('View Product'),
                                           ),
                                         ),
-                                      );
-                                    },
-                                    child: const Text('View Product'),
-                                  ),
-                                ),
-                              ],
+                                      ],
+                                    );
+                                  },
                             );
                           },
-                        );
-                      },
                     ),
                   if (isProductPost) const SizedBox(height: 12),
                   Row(
@@ -245,9 +249,9 @@ class SharedPostDetailScreen extends StatelessWidget {
       if (!context.mounted) {
         return;
       }
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to update wishlist: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Failed to update wishlist: $e')));
     }
   }
 }

@@ -306,13 +306,14 @@ Future<void> showCreatePostDialog(
 }) async {
   const int maxCaptionLength = 220;
   final ProductService productService = rootContext.read<ProductService>();
-  final String barrierLabel =
-      MaterialLocalizations.of(rootContext).modalBarrierDismissLabel;
+  final String barrierLabel = MaterialLocalizations.of(
+    rootContext,
+  ).modalBarrierDismissLabel;
   bool canCreateProduct = false;
   try {
-    canCreateProduct = await productService
-        .isCurrentUserAdmin()
-        .timeout(const Duration(seconds: 3));
+    canCreateProduct = await productService.isCurrentUserAdmin().timeout(
+      const Duration(seconds: 3),
+    );
   } catch (_) {
     canCreateProduct = false;
     if (rootContext.mounted) {
@@ -909,13 +910,17 @@ Future<void> showCreatePostDialog(
                                     decoration: BoxDecoration(
                                       color: AppColors.gray100,
                                       borderRadius: BorderRadius.circular(12),
-                                      border: Border.all(color: AppColors.gray300),
+                                      border: Border.all(
+                                        color: AppColors.gray300,
+                                      ),
                                     ),
                                     child: const Row(
                                       crossAxisAlignment:
                                           CrossAxisAlignment.start,
                                       children: <Widget>[
-                                        Icon(Icons.admin_panel_settings_outlined),
+                                        Icon(
+                                          Icons.admin_panel_settings_outlined,
+                                        ),
                                         SizedBox(width: 10),
                                         Expanded(
                                           child: Text(
@@ -931,8 +936,9 @@ Future<void> showCreatePostDialog(
                                     controller: productNameController,
                                     decoration: const InputDecoration(
                                       labelText: 'Product name',
-                                      prefixIcon:
-                                          Icon(Icons.inventory_2_outlined),
+                                      prefixIcon: Icon(
+                                        Icons.inventory_2_outlined,
+                                      ),
                                     ),
                                   ),
                                   const SizedBox(height: 8),
@@ -982,7 +988,9 @@ Future<void> showCreatePostDialog(
                                     initialValue: selectedInventoryType,
                                     decoration: const InputDecoration(
                                       labelText: 'Inventory type',
-                                      prefixIcon: Icon(Icons.inventory_outlined),
+                                      prefixIcon: Icon(
+                                        Icons.inventory_outlined,
+                                      ),
                                     ),
                                     items: const <DropdownMenuItem<String>>[
                                       DropdownMenuItem(
@@ -998,7 +1006,9 @@ Future<void> showCreatePostDialog(
                                       if (value == null) {
                                         return;
                                       }
-                                      setState(() => selectedInventoryType = value);
+                                      setState(
+                                        () => selectedInventoryType = value,
+                                      );
                                     },
                                   ),
                                   const SizedBox(height: 8),
@@ -1013,39 +1023,48 @@ Future<void> showCreatePostDialog(
                                               ),
                                           decoration: const InputDecoration(
                                             labelText: 'Price',
-                                            prefixIcon:
-                                                Icon(Icons.attach_money),
+                                            prefixIcon: Icon(
+                                              Icons.attach_money,
+                                            ),
                                           ),
                                         ),
                                       ),
                                       const SizedBox(width: 8),
                                       Expanded(
-                                        child: selectedInventoryType == 'preorder'
+                                        child:
+                                            selectedInventoryType == 'preorder'
                                             ? TextField(
                                                 controller:
                                                     productPreorderDaysController,
                                                 keyboardType:
                                                     TextInputType.number,
-                                                decoration: const InputDecoration(
-                                                  labelText: 'Preorder days',
-                                                  prefixIcon: Icon(
-                                                    Icons.schedule_outlined,
-                                                  ),
-                                                ),
+                                                decoration:
+                                                    const InputDecoration(
+                                                      labelText:
+                                                          'Preorder days',
+                                                      prefixIcon: Icon(
+                                                        Icons.schedule_outlined,
+                                                      ),
+                                                    ),
                                               )
                                             : TextField(
-                                                controller: productStockController,
+                                                controller:
+                                                    productStockController,
                                                 keyboardType:
                                                     TextInputType.number,
-                                                decoration: const InputDecoration(
-                                                  labelText: 'Stock',
-                                                  prefixIcon: Icon(Icons.numbers),
-                                                ),
+                                                decoration:
+                                                    const InputDecoration(
+                                                      labelText: 'Stock',
+                                                      prefixIcon: Icon(
+                                                        Icons.numbers,
+                                                      ),
+                                                    ),
                                               ),
                                       ),
                                     ],
                                   ),
-                                  if (selectedInventoryType == 'preorder') ...<Widget>[
+                                  if (selectedInventoryType ==
+                                      'preorder') ...<Widget>[
                                     const SizedBox(height: 8),
                                     TextField(
                                       controller: productPreorderNoteController,
@@ -1068,16 +1087,17 @@ Future<void> showCreatePostDialog(
                                     decoration: const InputDecoration(
                                       labelText: 'Product description',
                                       alignLabelWithHint: true,
-                                      prefixIcon:
-                                          Icon(Icons.description_outlined),
+                                      prefixIcon: Icon(
+                                        Icons.description_outlined,
+                                      ),
                                     ),
                                   ),
                                   const SizedBox(height: 8),
                                   OutlinedButton.icon(
                                     onPressed: () async {
                                       final ImagePicker picker = ImagePicker();
-                                      final List<XFile> files =
-                                          await picker.pickMultiImage();
+                                      final List<XFile> files = await picker
+                                          .pickMultiImage();
                                       if (!context.mounted || files.isEmpty) {
                                         return;
                                       }
@@ -1110,10 +1130,8 @@ Future<void> showCreatePostDialog(
                                         scrollDirection: Axis.horizontal,
                                         itemCount: productGalleryImages.length,
                                         separatorBuilder:
-                                            (
-                                              BuildContext context,
-                                              int index,
-                                            ) => const SizedBox(width: 8),
+                                            (BuildContext context, int index) =>
+                                                const SizedBox(width: 8),
                                         itemBuilder:
                                             (BuildContext context, int index) {
                                               return ClipRRect(
@@ -1190,16 +1208,13 @@ Future<void> showCreatePostDialog(
                                               productPriceController.text
                                                   .trim(),
                                             );
-                                        final int? productStock =
-                                            int.tryParse(
-                                              productStockController.text
-                                                  .trim(),
-                                            );
-                                        final int? preorderDays =
-                                            int.tryParse(
-                                              productPreorderDaysController.text
-                                                  .trim(),
-                                            );
+                                        final int? productStock = int.tryParse(
+                                          productStockController.text.trim(),
+                                        );
+                                        final int? preorderDays = int.tryParse(
+                                          productPreorderDaysController.text
+                                              .trim(),
+                                        );
                                         final String productDescription =
                                             productDescriptionController.text
                                                 .trim();
@@ -1255,7 +1270,8 @@ Future<void> showCreatePostDialog(
                                           selectedImage!,
                                           ...productGalleryImages.where(
                                             (File file) =>
-                                                file.path != selectedImage!.path,
+                                                file.path !=
+                                                selectedImage!.path,
                                           ),
                                         ];
                                         productData = ProductCreationData(
@@ -1815,7 +1831,6 @@ class HomeScreenState extends State<HomeScreen> {
         key: const ValueKey<String>('grid'),
         controller: _scrollController,
         physics: const AlwaysScrollableScrollPhysics(),
-        cacheExtent: 1200,
         padding: const EdgeInsets.fromLTRB(12, 12, 12, 16),
         itemCount: _posts.length + (_isFetchingMore ? 1 : 0),
         gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
@@ -1843,7 +1858,6 @@ class HomeScreenState extends State<HomeScreen> {
       key: const ValueKey<String>('list'),
       controller: _scrollController,
       physics: const AlwaysScrollableScrollPhysics(),
-      cacheExtent: 1200,
       itemCount: _posts.length + (_isFetchingMore ? 1 : 0),
       itemBuilder: (BuildContext context, int index) {
         if (index == _posts.length) {
@@ -3078,71 +3092,77 @@ class _PostCardState extends State<PostCard>
                     Padding(
                       padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
                       child: FutureBuilder<Product?>(
-                        future: context
-                            .read<ProductService>()
-                            .getProductOnce(productId),
-                        builder: (
-                          BuildContext context,
-                          AsyncSnapshot<Product?> productSnapshot,
-                        ) {
-                          final Product? product = productSnapshot.data;
-                          return Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: <Widget>[
-                              if (product != null)
-                                StreamBuilder<bool>(
-                                  stream: context
-                                      .read<WishlistService>()
-                                      .isProductWishlistedStream(product.id),
-                                  builder: (
-                                    BuildContext context,
-                                    AsyncSnapshot<bool> wishlistSnapshot,
-                                  ) {
-                                    final bool isWishlisted =
-                                        wishlistSnapshot.data ?? false;
-                                    return ProductCard(
-                                      product: product,
-                                      compact: true,
-                                      isWishlisted: isWishlisted,
-                                      onWishlistTap: () =>
-                                          _toggleProductWishlist(
-                                            context,
-                                            product,
-                                            isWishlisted,
+                        future: context.read<ProductService>().getProductOnce(
+                          productId,
+                        ),
+                        builder:
+                            (
+                              BuildContext context,
+                              AsyncSnapshot<Product?> productSnapshot,
+                            ) {
+                              final Product? product = productSnapshot.data;
+                              return Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: <Widget>[
+                                  if (product != null)
+                                    StreamBuilder<bool>(
+                                      stream: context
+                                          .read<WishlistService>()
+                                          .isProductWishlistedStream(
+                                            product.id,
                                           ),
-                                      onTap: () {
+                                      builder:
+                                          (
+                                            BuildContext context,
+                                            AsyncSnapshot<bool>
+                                            wishlistSnapshot,
+                                          ) {
+                                            final bool isWishlisted =
+                                                wishlistSnapshot.data ?? false;
+                                            return ProductCard(
+                                              product: product,
+                                              compact: true,
+                                              isWishlisted: isWishlisted,
+                                              onWishlistTap: () =>
+                                                  _toggleProductWishlist(
+                                                    context,
+                                                    product,
+                                                    isWishlisted,
+                                                  ),
+                                              onTap: () {
+                                                Navigator.of(context).push(
+                                                  MaterialPageRoute<void>(
+                                                    builder: (_) =>
+                                                        ProductDetailScreen(
+                                                          productId: product.id,
+                                                        ),
+                                                  ),
+                                                );
+                                              },
+                                            );
+                                          },
+                                    )
+                                  else
+                                    const SizedBox.shrink(),
+                                  const SizedBox(height: 8),
+                                  SizedBox(
+                                    width: double.infinity,
+                                    child: OutlinedButton(
+                                      onPressed: () {
                                         Navigator.of(context).push(
                                           MaterialPageRoute<void>(
                                             builder: (_) => ProductDetailScreen(
-                                              productId: product.id,
+                                              productId: productId,
                                             ),
                                           ),
                                         );
                                       },
-                                    );
-                                  },
-                                )
-                              else
-                                const SizedBox.shrink(),
-                              const SizedBox(height: 8),
-                              SizedBox(
-                                width: double.infinity,
-                                child: OutlinedButton(
-                                  onPressed: () {
-                                    Navigator.of(context).push(
-                                      MaterialPageRoute<void>(
-                                        builder: (_) => ProductDetailScreen(
-                                          productId: productId,
-                                        ),
-                                      ),
-                                    );
-                                  },
-                                  child: const Text('View Product'),
-                                ),
-                              ),
-                            ],
-                          );
-                        },
+                                      child: const Text('View Product'),
+                                    ),
+                                  ),
+                                ],
+                              );
+                            },
                       ),
                     ),
                   Padding(
@@ -4082,7 +4102,8 @@ class _PostDetailActionSheet extends StatelessWidget {
                 final int commentCount = postData['commentCount'] as int? ?? 0;
                 final int shareCount = postData['shareCount'] as int? ?? 0;
                 final String postType = postData['type']?.toString() ?? 'post';
-                final String productId = postData['productId']?.toString() ?? '';
+                final String productId =
+                    postData['productId']?.toString() ?? '';
                 final bool isProductPost =
                     postType == 'product' && productId.isNotEmpty;
                 final int totalEngagement =
@@ -4272,7 +4293,10 @@ class _PostDetailActionSheet extends StatelessWidget {
                           ),
                           if (isProductPost)
                             ActionChip(
-                              avatar: const Icon(Icons.storefront_outlined, size: 18),
+                              avatar: const Icon(
+                                Icons.storefront_outlined,
+                                size: 18,
+                              ),
                               label: const Text('View Product'),
                               onPressed: () {
                                 Navigator.of(context).push(
@@ -4297,49 +4321,53 @@ class _PostDetailActionSheet extends StatelessWidget {
                       if (isProductPost) ...<Widget>[
                         const SizedBox(height: 12),
                         FutureBuilder<Product?>(
-                          future: context
-                              .read<ProductService>()
-                              .getProductOnce(productId),
-                          builder: (
-                            BuildContext context,
-                            AsyncSnapshot<Product?> productSnapshot,
-                          ) {
-                            final Product? product = productSnapshot.data;
-                            if (product == null) {
-                              return const SizedBox.shrink();
-                            }
-                            return StreamBuilder<bool>(
-                              stream: context
-                                  .read<WishlistService>()
-                                  .isProductWishlistedStream(product.id),
-                              builder: (
+                          future: context.read<ProductService>().getProductOnce(
+                            productId,
+                          ),
+                          builder:
+                              (
                                 BuildContext context,
-                                AsyncSnapshot<bool> wishlistSnapshot,
+                                AsyncSnapshot<Product?> productSnapshot,
                               ) {
-                                final bool isWishlisted =
-                                    wishlistSnapshot.data ?? false;
-                                return ProductCard(
-                                  product: product,
-                                  compact: true,
-                                  isWishlisted: isWishlisted,
-                                  onWishlistTap: () => _toggleProductWishlist(
-                                    context,
-                                    product,
-                                    isWishlisted,
-                                  ),
-                                  onTap: () {
-                                    Navigator.of(context).push(
-                                      MaterialPageRoute<void>(
-                                        builder: (_) => ProductDetailScreen(
-                                          productId: product.id,
-                                        ),
-                                      ),
-                                    );
-                                  },
+                                final Product? product = productSnapshot.data;
+                                if (product == null) {
+                                  return const SizedBox.shrink();
+                                }
+                                return StreamBuilder<bool>(
+                                  stream: context
+                                      .read<WishlistService>()
+                                      .isProductWishlistedStream(product.id),
+                                  builder:
+                                      (
+                                        BuildContext context,
+                                        AsyncSnapshot<bool> wishlistSnapshot,
+                                      ) {
+                                        final bool isWishlisted =
+                                            wishlistSnapshot.data ?? false;
+                                        return ProductCard(
+                                          product: product,
+                                          compact: true,
+                                          isWishlisted: isWishlisted,
+                                          onWishlistTap: () =>
+                                              _toggleProductWishlist(
+                                                context,
+                                                product,
+                                                isWishlisted,
+                                              ),
+                                          onTap: () {
+                                            Navigator.of(context).push(
+                                              MaterialPageRoute<void>(
+                                                builder: (_) =>
+                                                    ProductDetailScreen(
+                                                      productId: product.id,
+                                                    ),
+                                              ),
+                                            );
+                                          },
+                                        );
+                                      },
                                 );
                               },
-                            );
-                          },
                         ),
                       ],
                       const SizedBox(height: 8),
@@ -4732,20 +4760,17 @@ class _SmoothPostImageState extends State<_SmoothPostImage> {
                 memCacheWidth: 1080,
                 fadeInDuration: const Duration(milliseconds: 220),
                 progressIndicatorBuilder:
-                    (
-                      BuildContext context,
-                      String _,
-                      DownloadProgress _,
-                    ) => Container(
-                      color: AppColors.gray200,
-                      child: const Center(
-                        child: SizedBox(
-                          width: 20,
-                          height: 20,
-                          child: CircularProgressIndicator(strokeWidth: 2),
+                    (BuildContext context, String _, DownloadProgress _) =>
+                        Container(
+                          color: AppColors.gray200,
+                          child: const Center(
+                            child: SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            ),
+                          ),
                         ),
-                      ),
-                    ),
                 errorWidget: (BuildContext context, String _, Object error) =>
                     Container(
                       color: AppColors.gray200,
@@ -4853,11 +4878,8 @@ class _AppCheckCachedNetworkImageState
       fadeInDuration: const Duration(milliseconds: 220),
       httpHeaders: _httpHeaders,
       progressIndicatorBuilder:
-          (
-            BuildContext context,
-            String _,
-            DownloadProgress _,
-          ) => widget.placeholder,
+          (BuildContext context, String _, DownloadProgress _) =>
+              widget.placeholder,
       errorWidget: (BuildContext context, String _, Object error) =>
           widget.error,
     );
@@ -4885,8 +4907,8 @@ Future<void> _toggleProductWishlist(
     if (!context.mounted) {
       return;
     }
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Failed to update wishlist: $e')),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text('Failed to update wishlist: $e')));
   }
 }

@@ -2,16 +2,24 @@
   "name": "sincerelysea-functions",
   "private": true,
   "engines": {
-    "node": "20"
+    "node": "22"
   },
   "main": "src/index.js",
   "scripts": {
     "serve": "firebase emulators:start --only functions",
     "deploy": "firebase deploy --only functions",
-    "lint": "echo 'No lint configured'"
+    "lint": "node --check src/index.js && node --check scripts/set-admin-claims.js && node --check scripts/inventory-legacy-admins.js && node --check scripts/verify-sec01-production.js",
+    "test": "node --test test/firestore.rules.test.js",
+    "inventory:legacy-admins": "node scripts/inventory-legacy-admins.js",
+    "claims:set": "node scripts/set-admin-claims.js",
+    "verify:sec01-production": "node scripts/verify-sec01-production.js"
   },
   "dependencies": {
     "firebase-admin": "^12.7.0",
     "firebase-functions": "^5.1.1"
+  },
+  "devDependencies": {
+    "@firebase/rules-unit-testing": "^4.0.1",
+    "firebase": "^11.0.0"
   }
 }

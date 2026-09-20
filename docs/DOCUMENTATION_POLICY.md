@@ -4,15 +4,17 @@ Dokumen ini menjadi aturan kerja untuk perubahan kode di proyek `SincerelySea`.
 
 ## Aturan Wajib
 
-1. Setiap perubahan kode harus disertai pembaruan dokumentasi `.md`.
-2. Perubahan yang wajib didokumentasikan:
+1. Every future developer/Codex task must read `docs/BLUEPRINT.md` and `docs/ROADMAP.md`, identify the phase and exact scope, inspect implementation, run relevant tests, and record validated roadmap status.
+2. Setiap perubahan kode harus disertai pembaruan dokumentasi `.md`.
+3. Perubahan yang wajib didokumentasikan:
    - penambahan file atau fitur
    - perubahan perilaku existing
    - penghapusan fitur, file, atau alur
    - perubahan aturan Firebase, struktur data, atau storage path
-3. Dokumentasi minimum yang wajib diperbarui:
+4. Dokumentasi minimum yang wajib diperbarui:
    - [docs/CHANGELOG.md](/Users/abc/SincerelySea/sincerelysea/docs/CHANGELOG.md)
-4. Jika perubahan cukup besar atau mengubah flow produk, tambahkan juga penjelasan ringkas di `README.md` atau dokumen khusus di folder `docs/`.
+5. If a dependency is broken, use `[!]` in `docs/ROADMAP.md` and explain it. Never mark `[x]` from generated code alone.
+6. Jika perubahan cukup besar atau mengubah flow produk, tambahkan juga penjelasan ringkas di `README.md` atau dokumen khusus di folder `docs/`.
 
 ## Format Changelog
 

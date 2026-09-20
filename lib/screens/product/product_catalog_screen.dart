@@ -86,7 +86,8 @@ class _ProductCatalogScreenState extends State<ProductCatalogScreen> {
     }
 
     try {
-      final List<String> categories = await context.read<ProductService>()
+      final List<String> categories = await context
+          .read<ProductService>()
           .getProductCategories();
       if (mounted) {
         setState(() {
@@ -175,9 +176,7 @@ class _ProductCatalogScreenState extends State<ProductCatalogScreen> {
                 tooltip: 'Cart',
                 onPressed: () {
                   Navigator.of(context).push(
-                    MaterialPageRoute<void>(
-                      builder: (_) => const CartScreen(),
-                    ),
+                    MaterialPageRoute<void>(builder: (_) => const CartScreen()),
                   );
                 },
                 icon: Badge(
@@ -202,27 +201,31 @@ class _ProductCatalogScreenState extends State<ProductCatalogScreen> {
       stream: context.read<WishlistService>().productWishlistIdsStream(),
       builder: (BuildContext context, AsyncSnapshot<Set<String>> snapshot) {
         final Set<String> wishlistIds = snapshot.data ?? <String>{};
-        final List<Product> visibleProducts = _products.where((Product product) {
-          if (_wishlistOnly && !wishlistIds.contains(product.id)) {
-            return false;
-          }
-          if (_selectedInventoryFilter == 'ready_stock' && !product.isReadyStock) {
-            return false;
-          }
-          if (_selectedInventoryFilter == 'preorder' && !product.isPreorder) {
-            return false;
-          }
-          if (_selectedCategory != 'All' &&
-              product.category.trim() != _selectedCategory) {
-            return false;
-          }
-          if (_searchQuery.isEmpty) {
-            return true;
-          }
-          final String haystack =
-              '${product.name} ${product.description}'.toLowerCase();
-          return haystack.contains(_searchQuery);
-        }).toList(growable: false);
+        final List<Product> visibleProducts = _products
+            .where((Product product) {
+              if (_wishlistOnly && !wishlistIds.contains(product.id)) {
+                return false;
+              }
+              if (_selectedInventoryFilter == 'ready_stock' &&
+                  !product.isReadyStock) {
+                return false;
+              }
+              if (_selectedInventoryFilter == 'preorder' &&
+                  !product.isPreorder) {
+                return false;
+              }
+              if (_selectedCategory != 'All' &&
+                  product.category.trim() != _selectedCategory) {
+                return false;
+              }
+              if (_searchQuery.isEmpty) {
+                return true;
+              }
+              final String haystack = '${product.name} ${product.description}'
+                  .toLowerCase();
+              return haystack.contains(_searchQuery);
+            })
+            .toList(growable: false);
 
         if (_isLoading) {
           return ListView(
@@ -343,7 +346,8 @@ class _ProductCatalogScreenState extends State<ProductCatalogScreen> {
                     onTap: () {
                       Navigator.of(context).push(
                         MaterialPageRoute<void>(
-                          builder: (_) => ProductDetailScreen(productId: product.id),
+                          builder: (_) =>
+                              ProductDetailScreen(productId: product.id),
                         ),
                       );
                     },
@@ -416,16 +420,18 @@ class _ProductCatalogScreenState extends State<ProductCatalogScreen> {
           scrollDirection: Axis.horizontal,
           child: Wrap(
             spacing: 8,
-            children: _categories.map((String category) {
-              return ChoiceChip(
-                label: Text(category),
-                selected: _selectedCategory == category,
-                onSelected: (_) {
-                  setState(() => _selectedCategory = category);
-                  _fetchInitialProducts();
-                },
-              );
-            }).toList(growable: false),
+            children: _categories
+                .map((String category) {
+                  return ChoiceChip(
+                    label: Text(category),
+                    selected: _selectedCategory == category,
+                    onSelected: (_) {
+                      setState(() => _selectedCategory = category);
+                      _fetchInitialProducts();
+                    },
+                  );
+                })
+                .toList(growable: false),
           ),
         ),
       ],
@@ -535,21 +541,20 @@ class _ProductCatalogScreenState extends State<ProductCatalogScreen> {
                   const SizedBox(height: 12),
                   Wrap(
                     spacing: 8,
-                    children: <String>['all', 'ready_stock', 'preorder'].map((
-                      String value,
-                    ) {
-                      return ChoiceChip(
-                        selected: inventory == value,
-                        label: Text(
-                          switch (value) {
-                            'ready_stock' => 'Ready Stock',
-                            'preorder' => 'Preorder',
-                            _ => 'All Types',
-                          },
-                        ),
-                        onSelected: (_) => setModalState(() => inventory = value),
-                      );
-                    }).toList(growable: false),
+                    children: <String>['all', 'ready_stock', 'preorder']
+                        .map((String value) {
+                          return ChoiceChip(
+                            selected: inventory == value,
+                            label: Text(switch (value) {
+                              'ready_stock' => 'Ready Stock',
+                              'preorder' => 'Preorder',
+                              _ => 'All Types',
+                            }),
+                            onSelected: (_) =>
+                                setModalState(() => inventory = value),
+                          );
+                        })
+                        .toList(growable: false),
                   ),
                   const SizedBox(height: 12),
                   Row(
@@ -558,7 +563,9 @@ class _ProductCatalogScreenState extends State<ProductCatalogScreen> {
                         child: TextField(
                           controller: minController,
                           keyboardType: TextInputType.number,
-                          decoration: const InputDecoration(labelText: 'Min Price'),
+                          decoration: const InputDecoration(
+                            labelText: 'Min Price',
+                          ),
                         ),
                       ),
                       const SizedBox(width: 8),
@@ -566,7 +573,9 @@ class _ProductCatalogScreenState extends State<ProductCatalogScreen> {
                         child: TextField(
                           controller: maxController,
                           keyboardType: TextInputType.number,
-                          decoration: const InputDecoration(labelText: 'Max Price'),
+                          decoration: const InputDecoration(
+                            labelText: 'Max Price',
+                          ),
                         ),
                       ),
                     ],
@@ -594,10 +603,12 @@ class _ProductCatalogScreenState extends State<ProductCatalogScreen> {
                           onPressed: () {
                             setState(() {
                               _selectedInventoryFilter = inventory;
-                              _minPrice =
-                                  double.tryParse(minController.text.trim());
-                              _maxPrice =
-                                  double.tryParse(maxController.text.trim());
+                              _minPrice = double.tryParse(
+                                minController.text.trim(),
+                              );
+                              _maxPrice = double.tryParse(
+                                maxController.text.trim(),
+                              );
                             });
                             Navigator.of(bottomSheetContext).pop();
                             _fetchInitialProducts();
@@ -633,9 +644,7 @@ class _ProductCatalogScreenState extends State<ProductCatalogScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            isWishlisted
-                ? 'Removed from wishlist'
-                : 'Added to wishlist',
+            isWishlisted ? 'Removed from wishlist' : 'Added to wishlist',
           ),
         ),
       );
@@ -643,9 +652,9 @@ class _ProductCatalogScreenState extends State<ProductCatalogScreen> {
       if (!mounted) {
         return;
       }
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to update wishlist: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Failed to update wishlist: $e')));
     }
   }
 }

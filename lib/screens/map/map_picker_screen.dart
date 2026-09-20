@@ -55,10 +55,7 @@ class _MapPickerScreenState extends State<MapPickerScreen> {
       );
       if (_mapController == null) {
         setState(() {
-          _initialCameraPosition = CameraPosition(
-            target: target,
-            zoom: 14,
-          );
+          _initialCameraPosition = CameraPosition(target: target, zoom: 14);
         });
       }
     } catch (_) {

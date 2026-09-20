@@ -251,9 +251,7 @@ class _RegisterPageState extends State<RegisterPage> {
 
     if (_usernameChecking) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please wait for username check'),
-        ),
+        const SnackBar(content: Text('Please wait for username check')),
       );
       return;
     }
@@ -268,19 +266,14 @@ class _RegisterPageState extends State<RegisterPage> {
         'REGISTER: Checking username: ${_usernameController.text.trim()}',
       );
 
-      final bool usernameAvailable =
-          await _ensureUsernameAvailableForSubmit();
+      final bool usernameAvailable = await _ensureUsernameAvailableForSubmit();
 
-      debugPrint(
-        'REGISTER: Username available = $usernameAvailable',
-      );
+      debugPrint('REGISTER: Username available = $usernameAvailable');
 
       if (!usernameAvailable) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Please use another username'),
-            ),
+            const SnackBar(content: Text('Please use another username')),
           );
         }
         return;
@@ -295,9 +288,7 @@ class _RegisterPageState extends State<RegisterPage> {
         username: _usernameController.text.trim(),
       );
 
-      debugPrint(
-        'REGISTER: signUpWithEmail returned user = ${user?.uid}',
-      );
+      debugPrint('REGISTER: signUpWithEmail returned user = ${user?.uid}');
 
       if (user == null) {
         throw FirebaseAuthException(
@@ -334,12 +325,8 @@ class _RegisterPageState extends State<RegisterPage> {
 
       _goToLogin();
     } on FirebaseAuthException catch (e, stackTrace) {
-      debugPrint(
-        'REGISTER FirebaseAuthException: ${e.code}',
-      );
-      debugPrint(
-        'REGISTER FirebaseAuthException message: ${e.message}',
-      );
+      debugPrint('REGISTER FirebaseAuthException: ${e.code}');
+      debugPrint('REGISTER FirebaseAuthException message: ${e.message}');
       debugPrintStack(stackTrace: stackTrace);
 
       String message = AuthExceptionHandler.handleException(e);
@@ -349,20 +336,18 @@ class _RegisterPageState extends State<RegisterPage> {
       }
 
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(message)),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(message)));
       }
     } catch (e, stackTrace) {
       debugPrint('REGISTER ERROR: $e');
       debugPrintStack(stackTrace: stackTrace);
 
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Registration failed: $e'),
-          ),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Registration failed: $e')));
       }
     } finally {
       if (mounted) {
@@ -612,7 +597,9 @@ class _RegisterPageState extends State<RegisterPage> {
                         onChanged: _loading
                             ? null
                             : (bool? value) {
-                                setState(() => _acceptedPolicies = value ?? false);
+                                setState(
+                                  () => _acceptedPolicies = value ?? false,
+                                );
                               },
                       ),
                       Expanded(
@@ -658,9 +645,7 @@ class _RegisterPageState extends State<RegisterPage> {
                     height: 50,
                     child: ElevatedButton(
                       onPressed:
-                          (_loading ||
-                              _usernameChecking ||
-                              !_acceptedPolicies)
+                          (_loading || _usernameChecking || !_acceptedPolicies)
                           ? null
                           : _register,
                       style: ElevatedButton.styleFrom(

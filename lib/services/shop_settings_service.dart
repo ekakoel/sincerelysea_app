@@ -36,14 +36,10 @@ class ShopSettingsService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
   Stream<ShopSettings> settingsStream() {
-    return _firestore
-        .collection('app_config')
-        .doc('shop')
-        .snapshots()
-        .map((DocumentSnapshot<Map<String, dynamic>> snapshot) {
-          return ShopSettings.fromMap(
-            snapshot.data() ?? const <String, dynamic>{},
-          );
-        });
+    return _firestore.collection('app_config').doc('shop').snapshots().map((
+      DocumentSnapshot<Map<String, dynamic>> snapshot,
+    ) {
+      return ShopSettings.fromMap(snapshot.data() ?? const <String, dynamic>{});
+    });
   }
 }

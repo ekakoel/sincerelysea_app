@@ -25,18 +25,18 @@ class ModerationService {
     ).doc(postId).snapshots().map((doc) => doc.exists);
   }
 
-  Stream<List<QueryDocumentSnapshot<Map<String, dynamic>>>> hiddenPostsStream() {
+  Stream<List<QueryDocumentSnapshot<Map<String, dynamic>>>>
+  hiddenPostsStream() {
     final User? user = _currentUser;
     if (user == null) {
       return Stream<List<QueryDocumentSnapshot<Map<String, dynamic>>>>.value(
         <QueryDocumentSnapshot<Map<String, dynamic>>>[],
       );
     }
-    return _hiddenPostsRef(
-      user.uid,
-    ).orderBy('createdAt', descending: true).snapshots().map(
-      (QuerySnapshot<Map<String, dynamic>> snapshot) => snapshot.docs,
-    );
+    return _hiddenPostsRef(user.uid)
+        .orderBy('createdAt', descending: true)
+        .snapshots()
+        .map((QuerySnapshot<Map<String, dynamic>> snapshot) => snapshot.docs);
   }
 
   Future<bool> isPostHidden(String postId) async {
