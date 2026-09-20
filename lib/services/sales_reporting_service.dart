@@ -14,26 +14,6 @@ class SalesReportingService {
   CollectionReference<Map<String, dynamic>> get _salesReportsRef =>
       _firestore.collection('sales_reports');
 
-  Stream<QuerySnapshot<Map<String, dynamic>>> recentJournalEntriesStream({
-    int limit = 30,
-  }) {
-    return _journalEntriesRef
-        .where('storeId', isEqualTo: storeId)
-        .orderBy('createdAt', descending: true)
-        .limit(limit)
-        .snapshots();
-  }
-
-  Stream<QuerySnapshot<Map<String, dynamic>>> recentSalesReportsStream({
-    int limit = 30,
-  }) {
-    return _salesReportsRef
-        .where('storeId', isEqualTo: storeId)
-        .orderBy('reportDateKey', descending: true)
-        .limit(limit)
-        .snapshots();
-  }
-
   DocumentReference<Map<String, dynamic>> createJournalEntryRef() {
     return _journalEntriesRef.doc();
   }
@@ -98,50 +78,6 @@ class SalesReportingService {
     }, SetOptions(merge: true));
   }
 
-  void recordOrderPaid({
-    required Transaction tx,
-    required String orderId,
-    required double totalPrice,
-    required DateTime occurredAt,
-  }) {
-    final DocumentReference<Map<String, dynamic>> journalRef =
-        createJournalEntryRef();
-    final DocumentReference<Map<String, dynamic>> reportRef =
-        salesReportRefForDate(occurredAt);
-
-    tx.set(journalRef, <String, dynamic>{
-      'storeId': storeId,
-      'storeName': storeName,
-      'orderId': orderId,
-      'entryType': 'order_paid',
-      'memo': 'Payment received for SincerelySea Store order.',
-      'lines': <Map<String, dynamic>>[
-        _line(
-          accountCode: '1000',
-          accountName: 'Cash',
-          debit: totalPrice,
-          credit: 0,
-        ),
-        _line(
-          accountCode: '1100',
-          accountName: 'Accounts Receivable',
-          debit: 0,
-          credit: totalPrice,
-        ),
-      ],
-      'createdAt': FieldValue.serverTimestamp(),
-    });
-
-    tx.set(reportRef, <String, dynamic>{
-      'storeId': storeId,
-      'storeName': storeName,
-      'reportDateKey': reportKeyForDate(occurredAt),
-      'paidOrderCount': FieldValue.increment(1),
-      'createdAt': FieldValue.serverTimestamp(),
-      'updatedAt': FieldValue.serverTimestamp(),
-    }, SetOptions(merge: true));
-  }
-
   void recordOrderCancelled({
     required Transaction tx,
     required String orderId,
@@ -183,22 +119,6 @@ class SalesReportingService {
       'cancelledOrderCount': FieldValue.increment(1),
       'cancelledSales': FieldValue.increment(totalPrice),
       'netSales': FieldValue.increment(-totalPrice),
-      'createdAt': FieldValue.serverTimestamp(),
-      'updatedAt': FieldValue.serverTimestamp(),
-    }, SetOptions(merge: true));
-  }
-
-  void recordOrderCompleted({
-    required Transaction tx,
-    required DateTime occurredAt,
-  }) {
-    final DocumentReference<Map<String, dynamic>> reportRef =
-        salesReportRefForDate(occurredAt);
-    tx.set(reportRef, <String, dynamic>{
-      'storeId': storeId,
-      'storeName': storeName,
-      'reportDateKey': reportKeyForDate(occurredAt),
-      'completedOrderCount': FieldValue.increment(1),
       'createdAt': FieldValue.serverTimestamp(),
       'updatedAt': FieldValue.serverTimestamp(),
     }, SetOptions(merge: true));

@@ -47,7 +47,7 @@ class SellerStorefrontScreen extends StatelessWidget {
                         _SellerHeader(
                           sellerName: sellerName,
                           username: '',
-                          isAdmin: isOfficialStore,
+                          isOfficial: isOfficialStore,
                           productCount: products.length,
                         ),
                         const SizedBox(height: 24),
@@ -67,7 +67,7 @@ class SellerStorefrontScreen extends StatelessWidget {
                           child: _SellerHeader(
                             sellerName: sellerName,
                             username: '',
-                            isAdmin: isOfficialStore,
+                            isOfficial: isOfficialStore,
                             productCount: products.length,
                           ),
                         ),
@@ -152,13 +152,13 @@ class _SellerHeader extends StatelessWidget {
   const _SellerHeader({
     required this.sellerName,
     required this.username,
-    required this.isAdmin,
+    required this.isOfficial,
     required this.productCount,
   });
 
   final String sellerName;
   final String username;
-  final bool isAdmin;
+  final bool isOfficial;
   final int productCount;
 
   @override
@@ -185,7 +185,7 @@ class _SellerHeader extends StatelessWidget {
                   ),
                 ),
               ),
-              if (isAdmin) const _StoreRoleBadge(label: 'ADMIN'),
+              if (isOfficial) const _StoreRoleBadge(label: 'OFFICIAL'),
             ],
           ),
           const SizedBox(height: 4),

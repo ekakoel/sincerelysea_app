@@ -7,14 +7,10 @@ class OrderCard extends StatelessWidget {
   const OrderCard({
     super.key,
     required this.order,
-    required this.isSellerView,
-    this.onStatusChanged,
     this.onTap,
   });
 
   final app_order.Order order;
-  final bool isSellerView;
-  final ValueChanged<String>? onStatusChanged;
   final VoidCallback? onTap;
 
   @override
@@ -147,35 +143,6 @@ class OrderCard extends StatelessWidget {
                       ),
                     ),
                   ),
-                  if (isSellerView && onStatusChanged != null)
-                    DropdownButton<String>(
-                      value: order.status,
-                      items: const <DropdownMenuItem<String>>[
-                        DropdownMenuItem(
-                          value: 'pending',
-                          child: Text('Pending'),
-                        ),
-                        DropdownMenuItem(value: 'paid', child: Text('Paid')),
-                        DropdownMenuItem(
-                          value: 'processing',
-                          child: Text('Processing'),
-                        ),
-                        DropdownMenuItem(
-                          value: 'shipped',
-                          child: Text('Shipped'),
-                        ),
-                        DropdownMenuItem(
-                          value: 'completed',
-                          child: Text('Completed'),
-                        ),
-                      ],
-                      onChanged: (String? value) {
-                        if (value == null) {
-                          return;
-                        }
-                        onStatusChanged!(value);
-                      },
-                    ),
                 ],
               ),
             ],

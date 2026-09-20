@@ -11,18 +11,15 @@ class OrderDetailScreen extends StatefulWidget {
   const OrderDetailScreen({
     super.key,
     required this.order,
-    required this.isSellerView,
   });
 
   final app_order.Order order;
-  final bool isSellerView;
 
   @override
   State<OrderDetailScreen> createState() => _OrderDetailScreenState();
 }
 
 class _OrderDetailScreenState extends State<OrderDetailScreen> {
-  bool _updatingStatus = false;
   bool _submittingBuyerAction = false;
 
   @override
@@ -86,68 +83,36 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
                   .toList(growable: false),
             ),
           ),
-          if (widget.isSellerView) ...<Widget>[
-            const SizedBox(height: 14),
-            _Section(
-              title: 'Store Actions',
-              child: DropdownButtonFormField<String>(
-                initialValue: order.status,
-                decoration: const InputDecoration(labelText: 'Update Status'),
-                items: const <DropdownMenuItem<String>>[
-                  DropdownMenuItem(value: 'pending', child: Text('Pending')),
-                  DropdownMenuItem(value: 'paid', child: Text('Paid')),
-                  DropdownMenuItem(
-                    value: 'processing',
-                    child: Text('Processing'),
+          const SizedBox(height: 14),
+          _Section(
+            title: 'Buyer Actions',
+            child: Row(
+              children: <Widget>[
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: _submittingBuyerAction
+                        ? null
+                        : () => _buyAgain(context, order),
+                    child: const Text('Buy Again'),
                   ),
-                  DropdownMenuItem(value: 'shipped', child: Text('Shipped')),
-                  DropdownMenuItem(
-                    value: 'completed',
-                    child: Text('Completed'),
-                  ),
-                ],
-                onChanged: _updatingStatus
-                    ? null
-                    : (String? value) {
-                        if (value == null || value == order.status) {
-                          return;
-                        }
-                        _updateStatus(context, value);
-                      },
-              ),
-            ),
-          ] else ...<Widget>[
-            const SizedBox(height: 14),
-            _Section(
-              title: 'Buyer Actions',
-              child: Row(
-                children: <Widget>[
-                  Expanded(
-                    child: OutlinedButton(
-                      onPressed: _submittingBuyerAction
-                          ? null
-                          : () => _buyAgain(context, order),
-                      child: const Text('Buy Again'),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: FilledButton(
+                    onPressed:
+                        _submittingBuyerAction || order.status != 'pending'
+                        ? null
+                        : () => _cancelOrder(context, order),
+                    style: FilledButton.styleFrom(
+                      backgroundColor: Colors.red,
+                      foregroundColor: Colors.white,
                     ),
+                    child: const Text('Cancel Order'),
                   ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: FilledButton(
-                      onPressed:
-                          _submittingBuyerAction || order.status != 'pending'
-                          ? null
-                          : () => _cancelOrder(context, order),
-                      style: FilledButton.styleFrom(
-                        backgroundColor: Colors.red,
-                        foregroundColor: Colors.white,
-                      ),
-                      child: const Text('Cancel Order'),
-                    ),
-                  ),
-                ],
-              ),
+                ),
+              ],
             ),
-          ],
+          ),
         ],
       ),
     );
@@ -236,40 +201,6 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
       if (mounted) {
         setState(() {
           _submittingBuyerAction = false;
-        });
-      }
-    }
-  }
-
-  Future<void> _updateStatus(BuildContext context, String value) async {
-    setState(() {
-      _updatingStatus = true;
-    });
-    try {
-      await context.read<OrderService>().updateOrderStatus(
-        orderId: widget.order.id,
-        status: value,
-      );
-      if (!context.mounted) {
-        return;
-      }
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Order status updated to ${_toTitleCase(value)}'),
-        ),
-      );
-      Navigator.of(context).pop();
-    } catch (e) {
-      if (!context.mounted) {
-        return;
-      }
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to update order status: $e')),
-      );
-    } finally {
-      if (mounted) {
-        setState(() {
-          _updatingStatus = false;
         });
       }
     }

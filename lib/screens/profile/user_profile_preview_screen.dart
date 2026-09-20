@@ -46,10 +46,6 @@ class UserProfilePreviewScreen extends StatelessWidget {
             final String bio = data['bio']?.toString() ?? '';
             final String? photoUrl = data['photoUrl']?.toString();
             final bool isPrivate = data['isPrivate'] == true;
-            final bool isAdmin = <String>{
-              'admin',
-              'developer',
-            }.contains(data['role']?.toString().trim().toLowerCase());
 
             return Scaffold(
               appBar: AppBar(
@@ -153,10 +149,6 @@ class UserProfilePreviewScreen extends StatelessWidget {
                                     ),
                                   ),
                                 ),
-                                if (isAdmin) ...<Widget>[
-                                  const SizedBox(width: 8),
-                                  const _ProfileRoleBadge(label: 'ADMIN'),
-                                ],
                               ],
                             ),
                             const SizedBox(height: 2),
@@ -223,32 +215,6 @@ class UserProfilePreviewScreen extends StatelessWidget {
               ),
             );
           },
-    );
-  }
-}
-
-class _ProfileRoleBadge extends StatelessWidget {
-  const _ProfileRoleBadge({required this.label});
-
-  final String label;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-      decoration: BoxDecoration(
-        color: AppColors.black,
-        borderRadius: BorderRadius.circular(999),
-      ),
-      child: Text(
-        label,
-        style: const TextStyle(
-          color: AppColors.white,
-          fontSize: 11,
-          fontWeight: FontWeight.w700,
-          letterSpacing: 0.6,
-        ),
-      ),
     );
   }
 }

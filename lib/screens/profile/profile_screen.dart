@@ -268,10 +268,6 @@ class _ProfileHeader extends StatelessWidget {
     final String username =
         profileData['username']?.toString() ??
         _emailPrefix(user.email).toLowerCase();
-    final bool isAdmin = <String>{
-      'admin',
-      'developer',
-    }.contains(profileData['role']?.toString().trim().toLowerCase());
     final String? avatarUrl =
         profileData['photoUrl']?.toString().isNotEmpty == true
         ? profileData['photoUrl']?.toString()
@@ -338,10 +334,6 @@ class _ProfileHeader extends StatelessWidget {
                 ),
               ),
             ),
-            if (isAdmin) ...<Widget>[
-              const SizedBox(width: 8),
-              const _ProfileRoleBadge(label: 'ADMIN'),
-            ],
           ],
         ),
         const SizedBox(height: 4),
@@ -364,32 +356,6 @@ class _ProfileHeader extends StatelessWidget {
         const SizedBox(height: 14),
         _ProfileStatsRow(userId: userId),
       ],
-    );
-  }
-}
-
-class _ProfileRoleBadge extends StatelessWidget {
-  const _ProfileRoleBadge({required this.label});
-
-  final String label;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-      decoration: BoxDecoration(
-        color: AppColors.black,
-        borderRadius: BorderRadius.circular(999),
-      ),
-      child: Text(
-        label,
-        style: const TextStyle(
-          color: AppColors.white,
-          fontSize: 11,
-          fontWeight: FontWeight.w700,
-          letterSpacing: 0.6,
-        ),
-      ),
     );
   }
 }

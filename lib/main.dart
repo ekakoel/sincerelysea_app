@@ -18,7 +18,6 @@ import 'package:sincerelysea/services/post_service.dart';
 import 'package:sincerelysea/services/product_service.dart';
 import 'package:sincerelysea/services/support_service.dart';
 import 'package:sincerelysea/services/app_check_header_service.dart';
-import 'package:sincerelysea/services/sales_reporting_service.dart';
 import 'package:sincerelysea/services/shop_settings_service.dart';
 import 'package:sincerelysea/services/theme_service.dart';
 import 'package:sincerelysea/services/user_profile_service.dart';
@@ -71,7 +70,6 @@ class MyApp extends StatelessWidget {
         Provider<ProductService>(create: (_) => ProductService()),
         Provider<CartService>(create: (_) => CartService()),
         Provider<OrderService>(create: (_) => OrderService()),
-        Provider<SalesReportingService>(create: (_) => SalesReportingService()),
         Provider<ShopSettingsService>(create: (_) => ShopSettingsService()),
         Provider<SupportService>(create: (_) => SupportService()),
         Provider<FollowService>(create: (_) => FollowService()),

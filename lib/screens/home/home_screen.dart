@@ -31,7 +31,6 @@ import 'package:sincerelysea/services/moderation_service.dart';
 import 'package:sincerelysea/services/notification_center_service.dart';
 import 'package:sincerelysea/services/post_service.dart';
 import 'package:sincerelysea/services/app_check_header_service.dart';
-import 'package:sincerelysea/services/product_service.dart';
 import 'package:sincerelysea/services/wishlist_service.dart';
 import 'package:sincerelysea/utils/post_location_label.dart';
 import 'package:sincerelysea/widgets/product_card.dart';
@@ -60,30 +59,6 @@ Future<Position> _getCurrentPosition() async {
   );
 }
 
-class ProductCreationData {
-  const ProductCreationData({
-    required this.category,
-    required this.inventoryType,
-    required this.preorderDays,
-    required this.preorderNote,
-    required this.name,
-    required this.price,
-    required this.stock,
-    required this.description,
-    required this.images,
-  });
-
-  final String category;
-  final String inventoryType;
-  final int preorderDays;
-  final String preorderNote;
-  final String name;
-  final double price;
-  final int stock;
-  final String description;
-  final List<File> images;
-}
-
 class CreatePostRequest {
   const CreatePostRequest({
     required this.caption,
@@ -91,7 +66,6 @@ class CreatePostRequest {
     required this.location,
     required this.geoPoint,
     required this.hashtags,
-    this.productData,
   });
 
   final String caption;
@@ -99,9 +73,6 @@ class CreatePostRequest {
   final String location;
   final GeoPoint? geoPoint;
   final List<String> hashtags;
-  final ProductCreationData? productData;
-
-  bool get isProductPost => productData != null;
 }
 
 const int maxPostHashtagCount = 8;
@@ -305,30 +276,9 @@ Future<void> showCreatePostDialog(
   required Future<void> Function(CreatePostRequest request) onSubmit,
 }) async {
   const int maxCaptionLength = 220;
-  final ProductService productService = rootContext.read<ProductService>();
   final String barrierLabel = MaterialLocalizations.of(
     rootContext,
   ).modalBarrierDismissLabel;
-  bool canCreateProduct = false;
-  try {
-    canCreateProduct = await productService.isCurrentUserAdmin().timeout(
-      const Duration(seconds: 3),
-    );
-  } catch (_) {
-    canCreateProduct = false;
-    if (rootContext.mounted) {
-      ScaffoldMessenger.of(rootContext).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Post composer opened with basic mode. Product mode is temporarily unavailable.',
-          ),
-        ),
-      );
-    }
-  }
-  if (!rootContext.mounted) {
-    return;
-  }
 
   await showGeneralDialog<void>(
     context: rootContext,
@@ -347,22 +297,7 @@ Future<void> showCreatePostDialog(
               TextEditingController();
           final TextEditingController hashtagController =
               TextEditingController();
-          final TextEditingController productNameController =
-              TextEditingController();
-          String selectedProductCategory = 'Lifestyle';
-          String selectedInventoryType = 'ready_stock';
-          final TextEditingController productPriceController =
-              TextEditingController();
-          final TextEditingController productStockController =
-              TextEditingController();
-          final TextEditingController productPreorderDaysController =
-              TextEditingController();
-          final TextEditingController productPreorderNoteController =
-              TextEditingController();
-          final TextEditingController productDescriptionController =
-              TextEditingController();
           File? selectedImage;
-          final List<File> productGalleryImages = <File>[];
           ui.Size? selectedImageSize;
           ui.Size? previewBaseSize;
           double previewFrameSize = 220;
@@ -373,7 +308,6 @@ Future<void> showCreatePostDialog(
           GeoPoint? selectedGeoPoint;
           bool isUploading = false;
           bool isFetchingLocation = false;
-          bool isProductEnabled = false;
           bool isFormattingHashtags = false;
           String lastAcceptedHashtagInput = '';
           bool hasShownHashtagLimitWarning = false;
@@ -878,276 +812,6 @@ Future<void> showCreatePostDialog(
                                   ),
                                 ),
                                 const SizedBox(height: 8),
-                                if (canCreateProduct)
-                                  SwitchListTile(
-                                    value: isProductEnabled,
-                                    contentPadding: EdgeInsets.zero,
-                                    title: const Text('Sell Product'),
-                                    subtitle: const Text(
-                                      'Turn this post into a product listing.',
-                                    ),
-                                    onChanged: (bool value) {
-                                      setState(() {
-                                        isProductEnabled = value;
-                                        if (!value) {
-                                          selectedProductCategory = 'Lifestyle';
-                                          selectedInventoryType = 'ready_stock';
-                                          productNameController.clear();
-                                          productPriceController.clear();
-                                          productStockController.clear();
-                                          productPreorderDaysController.clear();
-                                          productPreorderNoteController.clear();
-                                          productDescriptionController.clear();
-                                          productGalleryImages.clear();
-                                        }
-                                      });
-                                    },
-                                  )
-                                else
-                                  Container(
-                                    width: double.infinity,
-                                    padding: const EdgeInsets.all(12),
-                                    decoration: BoxDecoration(
-                                      color: AppColors.gray100,
-                                      borderRadius: BorderRadius.circular(12),
-                                      border: Border.all(
-                                        color: AppColors.gray300,
-                                      ),
-                                    ),
-                                    child: const Row(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: <Widget>[
-                                        Icon(
-                                          Icons.admin_panel_settings_outlined,
-                                        ),
-                                        SizedBox(width: 10),
-                                        Expanded(
-                                          child: Text(
-                                            'Product publishing is available for admin accounts only.',
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                if (isProductEnabled) ...<Widget>[
-                                  const SizedBox(height: 8),
-                                  TextField(
-                                    controller: productNameController,
-                                    decoration: const InputDecoration(
-                                      labelText: 'Product name',
-                                      prefixIcon: Icon(
-                                        Icons.inventory_2_outlined,
-                                      ),
-                                    ),
-                                  ),
-                                  const SizedBox(height: 8),
-                                  DropdownButtonFormField<String>(
-                                    initialValue: selectedProductCategory,
-                                    decoration: const InputDecoration(
-                                      labelText: 'Category',
-                                      prefixIcon: Icon(Icons.category_outlined),
-                                    ),
-                                    items: const <DropdownMenuItem<String>>[
-                                      DropdownMenuItem(
-                                        value: 'Lifestyle',
-                                        child: Text('Lifestyle'),
-                                      ),
-                                      DropdownMenuItem(
-                                        value: 'Fashion',
-                                        child: Text('Fashion'),
-                                      ),
-                                      DropdownMenuItem(
-                                        value: 'Beauty',
-                                        child: Text('Beauty'),
-                                      ),
-                                      DropdownMenuItem(
-                                        value: 'Home',
-                                        child: Text('Home'),
-                                      ),
-                                      DropdownMenuItem(
-                                        value: 'Art',
-                                        child: Text('Art'),
-                                      ),
-                                      DropdownMenuItem(
-                                        value: 'Accessories',
-                                        child: Text('Accessories'),
-                                      ),
-                                    ],
-                                    onChanged: (String? value) {
-                                      if (value == null) {
-                                        return;
-                                      }
-                                      setState(
-                                        () => selectedProductCategory = value,
-                                      );
-                                    },
-                                  ),
-                                  const SizedBox(height: 8),
-                                  DropdownButtonFormField<String>(
-                                    initialValue: selectedInventoryType,
-                                    decoration: const InputDecoration(
-                                      labelText: 'Inventory type',
-                                      prefixIcon: Icon(
-                                        Icons.inventory_outlined,
-                                      ),
-                                    ),
-                                    items: const <DropdownMenuItem<String>>[
-                                      DropdownMenuItem(
-                                        value: 'ready_stock',
-                                        child: Text('Ready Stock'),
-                                      ),
-                                      DropdownMenuItem(
-                                        value: 'preorder',
-                                        child: Text('Preorder'),
-                                      ),
-                                    ],
-                                    onChanged: (String? value) {
-                                      if (value == null) {
-                                        return;
-                                      }
-                                      setState(
-                                        () => selectedInventoryType = value,
-                                      );
-                                    },
-                                  ),
-                                  const SizedBox(height: 8),
-                                  Row(
-                                    children: <Widget>[
-                                      Expanded(
-                                        child: TextField(
-                                          controller: productPriceController,
-                                          keyboardType:
-                                              const TextInputType.numberWithOptions(
-                                                decimal: true,
-                                              ),
-                                          decoration: const InputDecoration(
-                                            labelText: 'Price',
-                                            prefixIcon: Icon(
-                                              Icons.attach_money,
-                                            ),
-                                          ),
-                                        ),
-                                      ),
-                                      const SizedBox(width: 8),
-                                      Expanded(
-                                        child:
-                                            selectedInventoryType == 'preorder'
-                                            ? TextField(
-                                                controller:
-                                                    productPreorderDaysController,
-                                                keyboardType:
-                                                    TextInputType.number,
-                                                decoration:
-                                                    const InputDecoration(
-                                                      labelText:
-                                                          'Preorder days',
-                                                      prefixIcon: Icon(
-                                                        Icons.schedule_outlined,
-                                                      ),
-                                                    ),
-                                              )
-                                            : TextField(
-                                                controller:
-                                                    productStockController,
-                                                keyboardType:
-                                                    TextInputType.number,
-                                                decoration:
-                                                    const InputDecoration(
-                                                      labelText: 'Stock',
-                                                      prefixIcon: Icon(
-                                                        Icons.numbers,
-                                                      ),
-                                                    ),
-                                              ),
-                                      ),
-                                    ],
-                                  ),
-                                  if (selectedInventoryType ==
-                                      'preorder') ...<Widget>[
-                                    const SizedBox(height: 8),
-                                    TextField(
-                                      controller: productPreorderNoteController,
-                                      minLines: 2,
-                                      maxLines: 4,
-                                      maxLength: 220,
-                                      decoration: const InputDecoration(
-                                        labelText: 'Preorder note',
-                                        alignLabelWithHint: true,
-                                        prefixIcon: Icon(Icons.info_outline),
-                                      ),
-                                    ),
-                                  ],
-                                  const SizedBox(height: 8),
-                                  TextField(
-                                    controller: productDescriptionController,
-                                    minLines: 3,
-                                    maxLines: 5,
-                                    maxLength: 500,
-                                    decoration: const InputDecoration(
-                                      labelText: 'Product description',
-                                      alignLabelWithHint: true,
-                                      prefixIcon: Icon(
-                                        Icons.description_outlined,
-                                      ),
-                                    ),
-                                  ),
-                                  const SizedBox(height: 8),
-                                  OutlinedButton.icon(
-                                    onPressed: () async {
-                                      final ImagePicker picker = ImagePicker();
-                                      final List<XFile> files = await picker
-                                          .pickMultiImage();
-                                      if (!context.mounted || files.isEmpty) {
-                                        return;
-                                      }
-                                      setState(() {
-                                        productGalleryImages
-                                          ..clear()
-                                          ..addAll(
-                                            files
-                                                .map(
-                                                  (XFile file) =>
-                                                      File(file.path),
-                                                )
-                                                .toList(growable: false),
-                                          );
-                                      });
-                                    },
-                                    icon: const Icon(
-                                      Icons.photo_library_outlined,
-                                    ),
-                                    label: Text(
-                                      productGalleryImages.isEmpty
-                                          ? 'Select product gallery images'
-                                          : 'Selected ${productGalleryImages.length} gallery images',
-                                    ),
-                                  ),
-                                  if (productGalleryImages.isNotEmpty)
-                                    SizedBox(
-                                      height: 72,
-                                      child: ListView.separated(
-                                        scrollDirection: Axis.horizontal,
-                                        itemCount: productGalleryImages.length,
-                                        separatorBuilder:
-                                            (BuildContext context, int index) =>
-                                                const SizedBox(width: 8),
-                                        itemBuilder:
-                                            (BuildContext context, int index) {
-                                              return ClipRRect(
-                                                borderRadius:
-                                                    BorderRadius.circular(10),
-                                                child: Image.file(
-                                                  productGalleryImages[index],
-                                                  width: 72,
-                                                  height: 72,
-                                                  fit: BoxFit.cover,
-                                                ),
-                                              );
-                                            },
-                                      ),
-                                    ),
-                                ],
                               ],
                             ),
                           ),
@@ -1199,95 +863,6 @@ Future<void> showCreatePostDialog(
                                         );
                                         return;
                                       }
-                                      ProductCreationData? productData;
-                                      if (isProductEnabled) {
-                                        final String productName =
-                                            productNameController.text.trim();
-                                        final double? productPrice =
-                                            double.tryParse(
-                                              productPriceController.text
-                                                  .trim(),
-                                            );
-                                        final int? productStock = int.tryParse(
-                                          productStockController.text.trim(),
-                                        );
-                                        final int? preorderDays = int.tryParse(
-                                          productPreorderDaysController.text
-                                              .trim(),
-                                        );
-                                        final String productDescription =
-                                            productDescriptionController.text
-                                                .trim();
-                                        final String preorderNote =
-                                            productPreorderNoteController.text
-                                                .trim();
-                                        final bool isPreorder =
-                                            selectedInventoryType == 'preorder';
-                                        if (productName.isEmpty ||
-                                            productPrice == null ||
-                                            productPrice <= 0 ||
-                                            productDescription.isEmpty) {
-                                          ScaffoldMessenger.of(
-                                            rootContext,
-                                          ).showSnackBar(
-                                            const SnackBar(
-                                              content: Text(
-                                                'Please complete valid product details.',
-                                              ),
-                                            ),
-                                          );
-                                          return;
-                                        }
-                                        if (!isPreorder &&
-                                            (productStock == null ||
-                                                productStock < 0)) {
-                                          ScaffoldMessenger.of(
-                                            rootContext,
-                                          ).showSnackBar(
-                                            const SnackBar(
-                                              content: Text(
-                                                'Please enter a valid stock amount.',
-                                              ),
-                                            ),
-                                          );
-                                          return;
-                                        }
-                                        if (isPreorder &&
-                                            (preorderDays == null ||
-                                                preorderDays <= 0)) {
-                                          ScaffoldMessenger.of(
-                                            rootContext,
-                                          ).showSnackBar(
-                                            const SnackBar(
-                                              content: Text(
-                                                'Please enter valid preorder days.',
-                                              ),
-                                            ),
-                                          );
-                                          return;
-                                        }
-                                        final List<File> gallery = <File>[
-                                          selectedImage!,
-                                          ...productGalleryImages.where(
-                                            (File file) =>
-                                                file.path !=
-                                                selectedImage!.path,
-                                          ),
-                                        ];
-                                        productData = ProductCreationData(
-                                          category: selectedProductCategory,
-                                          inventoryType: selectedInventoryType,
-                                          preorderDays: preorderDays ?? 0,
-                                          preorderNote: preorderNote,
-                                          name: productName,
-                                          price: productPrice,
-                                          stock: isPreorder
-                                              ? 0
-                                              : (productStock ?? 0),
-                                          description: productDescription,
-                                          images: gallery,
-                                        );
-                                      }
                                       final List<String> hashtags =
                                           _parseHashtagsInput(
                                             hashtagController.text,
@@ -1315,7 +890,6 @@ Future<void> showCreatePostDialog(
                                                 .trim(),
                                             geoPoint: selectedGeoPoint,
                                             hashtags: hashtags,
-                                            productData: productData,
                                           );
 
                                       if (selectedImage != null &&
@@ -1358,7 +932,6 @@ Future<void> showCreatePostDialog(
                                             location: request.location,
                                             geoPoint: request.geoPoint,
                                             hashtags: request.hashtags,
-                                            productData: request.productData,
                                           );
 
                                       if (context.mounted) {
@@ -1374,11 +947,7 @@ Future<void> showCreatePostDialog(
                                         strokeWidth: 2,
                                       ),
                                     )
-                                  : Text(
-                                      isProductEnabled
-                                          ? 'Create Product Post'
-                                          : 'Post',
-                                    ),
+                                  : const Text('Post'),
                             ),
                           ],
                         ),
@@ -1599,7 +1168,6 @@ class HomeScreenState extends State<HomeScreen> {
     CreatePostRequest request,
     PostService postService,
   ) async {
-    final ProductService productService = context.read<ProductService>();
     bool isSuccess = false;
     final Stopwatch debugWatch = Stopwatch()..start();
     String currentStage = 'start';
@@ -1670,30 +1238,6 @@ class HomeScreenState extends State<HomeScreen> {
         currentStage = 'upload:skipped';
         logStage('No image selected, skipping upload');
       }
-      String? productId;
-      if (request.productData != null) {
-        currentStage = 'product:create:start';
-        logStage('Creating product document and uploading gallery...');
-        final Product product = await productService
-            .createProduct(
-              CreateProductInput(
-                category: request.productData!.category,
-                inventoryType: request.productData!.inventoryType,
-                preorderDays: request.productData!.preorderDays,
-                preorderNote: request.productData!.preorderNote,
-                availableForPurchase: true,
-                name: request.productData!.name,
-                price: request.productData!.price,
-                description: request.productData!.description,
-                stock: request.productData!.stock,
-                images: request.productData!.images,
-              ),
-            )
-            .timeout(const Duration(seconds: 60));
-        productId = product.id;
-        currentStage = 'product:create:done';
-        logStage('Product create success');
-      }
       currentStage = 'firestore:write:start';
       logStage('Writing post document to Firestore...');
       await postService
@@ -1703,8 +1247,7 @@ class HomeScreenState extends State<HomeScreen> {
             location: request.location,
             geo: request.geoPoint,
             hashtags: request.hashtags,
-            type: request.isProductPost ? 'product' : 'post',
-            productId: productId,
+            type: 'post',
           )
           .timeout(const Duration(seconds: 30));
       currentStage = 'firestore:write:done';

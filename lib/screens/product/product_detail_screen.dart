@@ -166,58 +166,35 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                     style: const TextStyle(fontSize: 15, height: 1.45),
                   ),
                   const SizedBox(height: 16),
-                  FutureBuilder<DocumentSnapshot<Map<String, dynamic>>>(
-                    future: FirebaseFirestore.instance
-                        .collection('users')
-                        .doc(product.userId)
-                        .get(),
-                    builder:
-                        (
-                          BuildContext context,
-                          AsyncSnapshot<DocumentSnapshot<Map<String, dynamic>>>
-                          seller,
-                        ) {
-                          final Map<String, dynamic> data =
-                              seller.data?.data() ?? <String, dynamic>{};
-                          final bool isAdmin =
-                              product.managedByAdmins ||
-                              <String>{'admin', 'developer'}.contains(
-                                data['role']?.toString().trim().toLowerCase(),
-                              );
-                          final String sellerName = product.storeName;
-                          return ListTile(
-                            contentPadding: EdgeInsets.zero,
-                            leading: const CircleAvatar(
-                              child: Icon(Icons.storefront_outlined),
-                            ),
-                            title: Row(
-                              children: <Widget>[
-                                const Text('Store'),
-                                if (isAdmin) ...<Widget>[
-                                  const SizedBox(width: 8),
-                                  const _RoleBadge(label: 'ADMIN'),
-                                ],
-                              ],
-                            ),
-                            subtitle: Text(
-                              '$sellerName\nTap to view the official store',
-                            ),
-                            isThreeLine: true,
-                            trailing: const Icon(Icons.chevron_right),
-                            onTap: product.ownerId.trim().isEmpty
-                                ? null
-                                : () {
-                                    Navigator.of(context).push(
-                                      MaterialPageRoute<void>(
-                                        builder: (_) => SellerStorefrontScreen(
-                                          sellerUserId: product.ownerId,
-                                          sellerName: sellerName,
-                                        ),
-                                      ),
-                                    );
-                                  },
-                          );
-                        },
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: const CircleAvatar(
+                      child: Icon(Icons.storefront_outlined),
+                    ),
+                    title: const Row(
+                      children: <Widget>[
+                        Text('Store'),
+                        SizedBox(width: 8),
+                        _RoleBadge(label: 'OFFICIAL'),
+                      ],
+                    ),
+                    subtitle: Text(
+                      '${product.storeName}\nTap to view the official store',
+                    ),
+                    isThreeLine: true,
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: product.ownerId.trim().isEmpty
+                        ? null
+                        : () {
+                            Navigator.of(context).push(
+                              MaterialPageRoute<void>(
+                                builder: (_) => SellerStorefrontScreen(
+                                  sellerUserId: product.ownerId,
+                                  sellerName: product.storeName,
+                                ),
+                              ),
+                            );
+                          },
                   ),
                   const SizedBox(height: 8),
                   Text(

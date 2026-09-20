@@ -47,14 +47,10 @@ class OrderHistoryScreen extends StatelessWidget {
                   final app_order.Order order = orders[index];
                   return OrderCard(
                     order: order,
-                    isSellerView: false,
                     onTap: () {
                       Navigator.of(context).push(
                         MaterialPageRoute<void>(
-                          builder: (_) => OrderDetailScreen(
-                            order: order,
-                            isSellerView: false,
-                          ),
+                          builder: (_) => OrderDetailScreen(order: order),
                         ),
                       );
                     },

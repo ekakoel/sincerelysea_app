@@ -3,7 +3,6 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:sincerelysea/models/cart_item.dart';
 import 'package:sincerelysea/models/order.dart' as app_order;
 import 'package:sincerelysea/models/product.dart';
-import 'package:sincerelysea/services/admin_service.dart';
 import 'package:sincerelysea/services/sales_reporting_service.dart';
 
 class CheckoutInfo {
@@ -22,22 +21,9 @@ class OrderService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final SalesReportingService _salesReportingService = SalesReportingService();
-  final AdminService _adminService = AdminService();
-  static const Set<String> _allowedStatuses = <String>{
-    'pending',
-    'cancelled',
-    'paid',
-    'processing',
-    'shipped',
-    'completed',
-  };
 
   CollectionReference<Map<String, dynamic>> get _ordersRef =>
       _firestore.collection('orders');
-
-  Future<bool> _isCurrentUserAdmin() async {
-    return _adminService.hasCurrentUserScope('orders');
-  }
 
   Stream<QuerySnapshot<Map<String, dynamic>>> myOrdersStream() {
     final User? user = _auth.currentUser;
@@ -48,62 +34,6 @@ class OrderService {
         .where('userId', isEqualTo: user.uid)
         .orderBy('createdAt', descending: true)
         .snapshots();
-  }
-
-  Stream<QuerySnapshot<Map<String, dynamic>>> sellerOrdersStream() {
-    if (_auth.currentUser == null) {
-      return const Stream<QuerySnapshot<Map<String, dynamic>>>.empty();
-    }
-    return _ordersRef
-        .where('storeId', isEqualTo: SalesReportingService.storeId)
-        .orderBy('createdAt', descending: true)
-        .snapshots();
-  }
-
-  Future<void> updateOrderStatus({
-    required String orderId,
-    required String status,
-  }) async {
-    final User? user = _auth.currentUser;
-    if (user == null) {
-      throw Exception('User not authenticated');
-    }
-    final String normalizedStatus = status.trim().toLowerCase();
-    if (!_allowedStatuses.contains(normalizedStatus)) {
-      throw Exception('Invalid order status.');
-    }
-
-    final DocumentReference<Map<String, dynamic>> orderRef = _ordersRef.doc(
-      orderId,
-    );
-    final DocumentSnapshot<Map<String, dynamic>> snapshot = await orderRef
-        .get();
-    if (!snapshot.exists) {
-      throw Exception('Order not found.');
-    }
-
-    if (!await _isCurrentUserAdmin()) {
-      throw Exception('Only store admins can update this order.');
-    }
-    final app_order.Order order = app_order.Order.fromFirestore(snapshot);
-    await _firestore.runTransaction((Transaction tx) async {
-      tx.update(orderRef, <String, dynamic>{
-        'status': normalizedStatus,
-        'updatedAt': FieldValue.serverTimestamp(),
-      });
-      final DateTime now = DateTime.now();
-      if (order.status != 'paid' && normalizedStatus == 'paid') {
-        _salesReportingService.recordOrderPaid(
-          tx: tx,
-          orderId: order.id,
-          totalPrice: order.totalPrice,
-          occurredAt: now,
-        );
-      }
-      if (order.status != 'completed' && normalizedStatus == 'completed') {
-        _salesReportingService.recordOrderCompleted(tx: tx, occurredAt: now);
-      }
-    });
   }
 
   Future<void> cancelOrder(String orderId) async {
