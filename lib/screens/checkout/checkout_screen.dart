@@ -32,6 +32,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   final TextEditingController _phoneController = TextEditingController();
   final TextEditingController _addressController = TextEditingController();
   bool _placingOrder = false;
+  String? _checkoutRequestId;
 
   @override
   void initState() {
@@ -302,18 +303,15 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     final NavigatorState navigator = Navigator.of(context);
     setState(() => _placingOrder = true);
     try {
-      final Map<String, Product> productsById = <String, Product>{
-        for (final _CheckoutItem item in data.items)
-          item.product.id: item.product,
-      };
       final String orderId = await orderService.placeOrder(
         cartItems: data.cartItems,
-        productsById: productsById,
         checkoutInfo: CheckoutInfo(
           customerName: _nameController.text,
           phone: _phoneController.text,
           address: _addressController.text,
         ),
+        checkoutRequestId: _checkoutRequestId ??= orderService
+            .createCheckoutRequestId(),
       );
 
       if (widget.buyNowProduct == null) {

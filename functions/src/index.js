@@ -6,6 +6,13 @@ const {
   onDocumentDeleted,
   onDocumentUpdated,
 } = require('firebase-functions/v2/firestore');
+const {
+  recordOrderFinancialEvent,
+} = require('./financial-reporting');
+const {
+  cancelCustomerOrder: cancelCustomerOrderRecord,
+  createCustomerOrder: createCustomerOrderRecord,
+} = require('./order-operations');
 
 admin.initializeApp();
 setGlobalOptions({ maxInstances: 10, region: 'us-central1' });
@@ -316,6 +323,20 @@ exports.setUserAdminAccess = onCall(async (request) => {
   };
 });
 
+exports.createCustomerOrder = onCall(async (request) =>
+  createCustomerOrderRecord({
+    db,
+    uid: request.auth?.uid,
+    data: request.data,
+  }));
+
+exports.cancelCustomerOrder = onCall(async (request) =>
+  cancelCustomerOrderRecord({
+    db,
+    uid: request.auth?.uid,
+    data: request.data,
+  }));
+
 exports.onFollowCreated = onDocumentCreated(
   'users/{targetUid}/followers/{followerUid}',
   async (event) => {
@@ -499,5 +520,49 @@ exports.onProductUpdated = onDocumentUpdated(
     if (tasks.length > 0) {
       await Promise.allSettled(tasks);
     }
+  },
+);
+
+exports.onOrderCreatedFinancialReporting = onDocumentCreated(
+  'orders/{orderId}',
+  async (event) => {
+    const order = event.data?.data();
+    if (!order) return;
+
+    const occurredAt = event.data.createTime?.toDate?.()
+      || new Date(event.time);
+    await recordOrderFinancialEvent({
+      db,
+      orderId: event.params.orderId,
+      order,
+      eventType: 'order_created',
+      occurredAt,
+    });
+  },
+);
+
+exports.onOrderCancelledFinancialReporting = onDocumentUpdated(
+  'orders/{orderId}',
+  async (event) => {
+    const before = event.data.before.data();
+    const after = event.data.after.data();
+    if (
+      !before
+      || !after
+      || before.status === 'cancelled'
+      || after.status !== 'cancelled'
+    ) {
+      return;
+    }
+
+    const occurredAt = event.data.after.updateTime?.toDate?.()
+      || new Date(event.time);
+    await recordOrderFinancialEvent({
+      db,
+      orderId: event.params.orderId,
+      order: after,
+      eventType: 'order_cancelled',
+      occurredAt,
+    });
   },
 );

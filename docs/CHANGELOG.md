@@ -2,6 +2,24 @@
 
 ## 2026-09-20
 
+### SEC-03 - Trusted Checkout & Order State
+- Replaced Flutter order creation and cancellation transactions with authenticated `createCustomerOrder` and `cancelCustomerOrder` callables.
+- Made the backend load official-store products, validate availability, derive item snapshots/prices/totals, and atomically decrement ready stock before creating a pending order.
+- Added UID-scoped deterministic checkout identities so repeated requests return one order without duplicate stock decrement or SEC-02 financial creation events.
+- Made trusted cancellation verify ownership and pending state, restore applicable stock once, and treat repeated cancellation as an idempotent success.
+- Denied all Firestore client create/update/delete operations on `orders` while preserving own-order and authorized operational reads; ordinary customer stock writes remain denied.
+- Added focused Rules and backend tests for direct-write denial, privacy, server price authority, invalid inventory, stock safety, idempotency, cancellation authorization, and SEC-02 integration.
+- Kept legacy pending orders readable but blocked trusted cancellation when their client-authored stock snapshot cannot be safely restored without operator reconciliation.
+- Kept SEC-01 at 7/8 and SEC-02 implemented/tested; no Functions/Rules deployment or production data migration was performed.
+
+### SEC-02 - Trusted Financial Reporting
+- Removed the Flutter `SalesReportingService` and `JournalEntry` model so customer clients no longer write `journal_entries` or `sales_reports`.
+- Added trusted order-created and order-cancelled Cloud Functions that derive journals and UTC daily report increments from order snapshots.
+- Made each financial event idempotent with deterministic `order_created_{orderId}` and `order_cancelled_{orderId}` journal identities and a transactional duplicate guard.
+- Preserved finance-scope reads while denying every client create, update, and delete on both financial collections.
+- Added focused Rules coverage for blocked finance writes and retained customer order create/cancel behavior, plus unit coverage proving retries do not double-count either event.
+- Kept SEC-01 at 7/8, made no production deployment, and left client-authoritative order totals and stock mutation for SEC-03.
+
 ### MOB-01 - Customer-Only Mobile Surface
 - Declared Flutter customer-facing only for ordinary, admin, and developer identities; privileged management belongs to a separate future backend website.
 - Removed the mobile admin dashboard, access management, developer console, community moderation, sales/finance reports, seller order operations, product management, and Firebase health-check surfaces plus their dedicated client services/routes.

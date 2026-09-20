@@ -4,6 +4,10 @@
 
 > **MOB-01 alignment:** Flutter is customer-facing only. Every product, order, finance, moderation, user, and role administration target below belongs to the separate backend website; it must not be restored as a Flutter route.
 
+> **SEC-02 alignment:** Flutter cannot write financial collections. Trusted Cloud Functions now derive idempotent creation/cancellation journals and daily reports from order documents. Production deployment is intentionally pending; SEC-03 is next for authoritative order totals and inventory mutation.
+
+> **SEC-03 alignment:** Flutter now requests checkout and cancellation through trusted callables. New orders use server-loaded prices/snapshots, transactional stock mutation, pending-only cancellation, and UID-scoped idempotency. Source and tests are complete but not deployed; legacy pending orders require operator reconciliation before trusted cancellation.
+
 Dokumen ini menjadi peta pengembangan tingkat tinggi agar AI dan developer berikutnya mudah memahami prioritas proyek.
 
 ## Current State
@@ -14,7 +18,8 @@ SincerelySea saat ini adalah:
 - mobile surface tanpa management UI untuk ordinary, admin, maupun developer account
 - official `SincerelySea Store` yang dikelola dari backend website terpisah
 - memiliki scope backend terpisah untuk `products`, `orders`, `finance`, `community`, dan `roles`
-- memiliki dasar reporting melalui `sales_reports` dan `journal_entries`
+- memiliki trusted reporting untuk event order dibuat/dibatalkan melalui `sales_reports` dan `journal_entries`
+- memiliki trusted callable checkout/cancellation untuk order baru, authoritative pricing, dan stock mutation
 
 ## Product Roadmap
 
@@ -93,11 +98,12 @@ Target:
 - pertahankan MOB-01 customer-only route boundary dengan source tests
 - tambah migrasi data untuk product/order lama agar konsisten dengan `SincerelySea Store`
 - selesaikan SEC-01 fresh-token production smoke matrix
+- rekonsiliasi pending legacy order sebelum deployment SEC-03
 
 ### Mid Term
 
 - bangun dashboard backend website per scope
-- tambah Cloud Functions untuk reporting automation
+- perluas Cloud Functions reporting di luar event order dibuat/dibatalkan setelah lifecycle order backend tersedia
 - tambah export service untuk finance
 
 ### Long Term

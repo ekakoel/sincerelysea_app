@@ -8,8 +8,10 @@ const {
   initializeTestEnvironment,
 } = require('@firebase/rules-unit-testing');
 const {
+  deleteDoc,
   deleteField,
   doc,
+  getDoc,
   setDoc,
   updateDoc,
 } = require('firebase/firestore');
@@ -63,6 +65,49 @@ function validProduct(uid) {
     availableForPurchase: true,
     stock: 1,
     images: [],
+  };
+}
+
+function validOrder(uid) {
+  return {
+    userId: uid,
+    storeId: 'sincerelysea',
+    storeName: 'SincerelySea Store',
+    fulfillmentMode: 'admin_managed',
+    items: [],
+    totalPrice: 100,
+    status: 'pending',
+    sellerIds: [],
+    customerName: 'Customer',
+    phone: '0800000000',
+    address: 'Test address',
+    createdAt: 1,
+  };
+}
+
+function validJournalEntry() {
+  return {
+    storeId: 'sincerelysea',
+    storeName: 'SincerelySea Store',
+    orderId: 'order-1',
+    entryType: 'order_created',
+    memo: 'Customer order created for SincerelySea Store.',
+    lines: [],
+  };
+}
+
+function validSalesReport() {
+  return {
+    storeId: 'sincerelysea',
+    storeName: 'SincerelySea Store',
+    reportDateKey: '2026-09-20',
+    orderCount: 1,
+    paidOrderCount: 0,
+    completedOrderCount: 0,
+    cancelledOrderCount: 0,
+    grossSales: 100,
+    cancelledSales: 0,
+    netSales: 100,
   };
 }
 
@@ -185,4 +230,68 @@ test('legacy Firestore role is non-authoritative', async () => {
     doc(db, 'products/product-1'),
     validProduct('customer'),
   ));
+});
+
+test('SEC-02: customer cannot create or update financial records', async () => {
+  const db = testEnv.authenticatedContext('customer').firestore();
+  const journalRef = doc(db, 'journal_entries/order_created_order-1');
+  const reportRef = doc(db, 'sales_reports/2026-09-20');
+
+  await assertFails(setDoc(journalRef, validJournalEntry()));
+  await assertFails(setDoc(reportRef, validSalesReport()));
+
+  await testEnv.withSecurityRulesDisabled(async (context) => {
+    await setDoc(
+      doc(context.firestore(), 'journal_entries/order_created_order-1'),
+      validJournalEntry(),
+    );
+    await setDoc(
+      doc(context.firestore(), 'sales_reports/2026-09-20'),
+      validSalesReport(),
+    );
+  });
+
+  await assertFails(updateDoc(journalRef, { memo: 'forged' }));
+  await assertFails(updateDoc(reportRef, { netSales: 999999 }));
+});
+
+test('SEC-03: customer cannot create, mutate, or delete orders directly', async () => {
+  const db = testEnv.authenticatedContext('customer').firestore();
+  const orderRef = doc(db, 'orders/order-1');
+
+  await assertFails(setDoc(orderRef, validOrder('customer')));
+  await testEnv.withSecurityRulesDisabled(async (context) => {
+    await setDoc(
+      doc(context.firestore(), 'orders/order-1'),
+      validOrder('customer'),
+    );
+  });
+  await assertFails(updateDoc(orderRef, { status: 'cancelled' }));
+  await assertFails(deleteDoc(orderRef));
+});
+
+test('SEC-03: customer can read only their own order', async () => {
+  await testEnv.withSecurityRulesDisabled(async (context) => {
+    await setDoc(
+      doc(context.firestore(), 'orders/order-1'),
+      validOrder('customer'),
+    );
+  });
+
+  const ownerDb = testEnv.authenticatedContext('customer').firestore();
+  const otherDb = testEnv.authenticatedContext('other-customer').firestore();
+  await assertSucceeds(getDoc(doc(ownerDb, 'orders/order-1')));
+  await assertFails(getDoc(doc(otherDb, 'orders/order-1')));
+});
+
+test('SEC-03: customer cannot mutate product stock directly', async () => {
+  await testEnv.withSecurityRulesDisabled(async (context) => {
+    await setDoc(
+      doc(context.firestore(), 'products/product-1'),
+      validProduct('catalog-admin'),
+    );
+  });
+
+  const db = testEnv.authenticatedContext('customer').firestore();
+  await assertFails(updateDoc(doc(db, 'products/product-1'), { stock: 999 }));
 });

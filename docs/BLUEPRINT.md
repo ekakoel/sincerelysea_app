@@ -12,7 +12,7 @@ Users are visitors/registered customers, verified customers, verified owners, hi
 
 ## Repository evidence: current state
 
-Flutter/Firebase currently provides email and Google authentication, email activation for password users, username reservation, posts/comments/replies/likes/follows, block/report/hide controls, discovery/map, product catalog, product wishlists, cart, client-created orders, official-store presentation, notifications, support tickets, App Check client activation, post sharing, and post-only deep links. MOB-01 removes all mobile management UI and privileged callable clients; admin/developer accounts receive the same customer surface as ordinary accounts.
+Flutter/Firebase currently provides email and Google authentication, email activation for password users, username reservation, posts/comments/replies/likes/follows, block/report/hide controls, discovery/map, product catalog, product wishlists, cart, trusted callable checkout/cancellation, official-store presentation, notifications, support tickets, App Check client activation, post sharing, and post-only deep links. MOB-01 removes all mobile management UI and privileged callable clients; admin/developer accounts receive the same customer surface as ordinary accounts. SEC-02 removes Flutter finance writes and derives order-created and order-cancelled journals/reports in trusted Cloud Functions with deterministic event identities. SEC-03 moves new order creation, authoritative product snapshots/totals, stock mutation, and pending-order cancellation to trusted callable transactions.
 
 Current primary navigation is **Home, Search, Explore (map), Shop, Profile**. The create-post action creates community posts only; existing official product posts remain readable. The separate backend website is the target management plane. The repository includes MOB-01 source-boundary tests plus SEC-01 emulator tests; broader integration, Android device, and iOS device coverage remains incomplete.
 
@@ -61,7 +61,7 @@ Historical claim -> validation -> Product instance/ownership -> Collection/histo
 | Authorization | Firestore role/scopes | custom claims/server authority | P0 refactor |
 | Community | basic social system | product experience, privacy, moderation | partial |
 | Catalog | official-store catalog | variants/material/care/inventory authority | partial |
-| Commerce | client orders/reporting | backend checkout/payment state machine | P0 refactor |
+| Commerce | trusted checkout/cancellation and create/cancel reporting; payment gateway absent | backend payment state machine and legacy-order reconciliation | SEC-02/SEC-03 source implemented and tested, not deployed |
 | Collection | user-editable post collections | verified physical ownership | transformation required |
 | Ratings/claims/history/DMs | absent | target domains | not implemented |
 | Rewards/attribution/endorsement/resale | absent | future domains | deferred |

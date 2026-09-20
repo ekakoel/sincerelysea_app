@@ -8,8 +8,8 @@
   "scripts": {
     "serve": "firebase emulators:start --only functions",
     "deploy": "firebase deploy --only functions",
-    "lint": "node --check src/index.js && node --check scripts/set-admin-claims.js && node --check scripts/inventory-legacy-admins.js && node --check scripts/verify-sec01-production.js",
-    "test": "node --test test/firestore.rules.test.js",
+    "lint": "node --check src/index.js && node --check src/financial-reporting.js && node --check src/order-operations.js && node --check scripts/set-admin-claims.js && node --check scripts/inventory-legacy-admins.js && node --check scripts/verify-sec01-production.js && node --check test/financial-reporting.test.js && node --check test/order-operations.test.js",
+    "test": "node --test --test-concurrency=1 test/firestore.rules.test.js test/financial-reporting.test.js test/order-operations.test.js",
     "inventory:legacy-admins": "node scripts/inventory-legacy-admins.js",
     "claims:set": "node scripts/set-admin-claims.js",
     "verify:sec01-production": "node scripts/verify-sec01-production.js"

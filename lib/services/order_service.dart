@@ -1,10 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:sincerelysea/config/official_store.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:sincerelysea/models/cart_item.dart';
-import 'package:sincerelysea/models/order.dart' as app_order;
-import 'package:sincerelysea/models/product.dart';
-import 'package:sincerelysea/services/sales_reporting_service.dart';
 
 class CheckoutInfo {
   const CheckoutInfo({
@@ -21,7 +18,7 @@ class CheckoutInfo {
 class OrderService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseAuth _auth = FirebaseAuth.instance;
-  final SalesReportingService _salesReportingService = SalesReportingService();
+  final FirebaseFunctions _functions = FirebaseFunctions.instance;
 
   CollectionReference<Map<String, dynamic>> get _ordersRef =>
       _firestore.collection('orders');
@@ -38,168 +35,55 @@ class OrderService {
   }
 
   Future<void> cancelOrder(String orderId) async {
-    final User? user = _auth.currentUser;
-    if (user == null) {
+    if (_auth.currentUser == null) {
       throw Exception('User not authenticated');
     }
-
-    final DocumentReference<Map<String, dynamic>> orderRef = _ordersRef.doc(
-      orderId,
+    final HttpsCallable callable = _functions.httpsCallable(
+      'cancelCustomerOrder',
     );
-
-    await _firestore.runTransaction((Transaction tx) async {
-      final DocumentSnapshot<Map<String, dynamic>> orderSnapshot = await tx.get(
-        orderRef,
-      );
-      if (!orderSnapshot.exists) {
-        throw Exception('Order not found.');
-      }
-
-      final app_order.Order order = app_order.Order.fromFirestore(
-        orderSnapshot,
-      );
-      if (order.userId != user.uid) {
-        throw Exception('Only the buyer can cancel this order.');
-      }
-      if (order.status != 'pending') {
-        throw Exception('Only pending orders can be cancelled.');
-      }
-
-      for (final app_order.OrderItem item in order.items) {
-        if (item.inventoryType == 'preorder' ||
-            item.productId.trim().isEmpty ||
-            item.quantity <= 0) {
-          continue;
-        }
-        final DocumentReference<Map<String, dynamic>> productRef = _firestore
-            .collection('products')
-            .doc(item.productId);
-        final DocumentSnapshot<Map<String, dynamic>> productSnapshot = await tx
-            .get(productRef);
-        if (!productSnapshot.exists) {
-          continue;
-        }
-
-        final int currentStock = productSnapshot.data()?['stock'] is num
-            ? (productSnapshot.data()!['stock'] as num).toInt()
-            : 0;
-        tx.update(productRef, <String, dynamic>{
-          'stock': currentStock + item.quantity,
-        });
-      }
-
-      tx.update(orderRef, <String, dynamic>{
-        'status': 'cancelled',
-        'updatedAt': FieldValue.serverTimestamp(),
-      });
-      _salesReportingService.recordOrderCancelled(
-        tx: tx,
-        orderId: order.id,
-        totalPrice: order.totalPrice,
-        occurredAt: DateTime.now(),
-      );
-    });
+    await callable.call(<String, dynamic>{'orderId': orderId});
   }
+
+  String createCheckoutRequestId() => _ordersRef.doc().id;
 
   Future<String> placeOrder({
     required List<CartItem> cartItems,
-    required Map<String, Product> productsById,
     required CheckoutInfo checkoutInfo,
+    required String checkoutRequestId,
   }) async {
-    final User? user = _auth.currentUser;
-    if (user == null) {
+    if (_auth.currentUser == null) {
       throw Exception('User not authenticated');
     }
     if (cartItems.isEmpty) {
       throw Exception('Cart is empty.');
     }
-
-    final DocumentReference<Map<String, dynamic>> orderRef = _ordersRef.doc();
-    await _firestore.runTransaction((Transaction tx) async {
-      final List<app_order.OrderItem> orderItems = <app_order.OrderItem>[];
-      double totalPrice = 0;
-
-      for (final CartItem cartItem in cartItems) {
-        final Product? product = productsById[cartItem.productId];
-        if (product == null) {
-          throw Exception('Product not found for ${cartItem.productId}.');
-        }
-        if (!product.availableForPurchase) {
-          throw Exception('${product.name} is currently unavailable.');
-        }
-        if (product.isReadyStock && product.stock < cartItem.quantity) {
-          throw Exception('Not enough stock for ${product.name}.');
-        }
-
-        final DocumentReference<Map<String, dynamic>> productRef = _firestore
-            .collection('products')
-            .doc(product.id);
-        final DocumentSnapshot<Map<String, dynamic>> freshProduct = await tx
-            .get(productRef);
-        final String inventoryType =
-            freshProduct.data()?['inventoryType']?.toString() == 'preorder'
-            ? 'preorder'
-            : 'ready_stock';
-        final bool availableForPurchase =
-            freshProduct.data()?['availableForPurchase'] is bool
-            ? freshProduct.data()!['availableForPurchase'] as bool
-            : true;
-        final int currentStock = freshProduct.data()?['stock'] is num
-            ? (freshProduct.data()!['stock'] as num).toInt()
-            : 0;
-        if (!availableForPurchase) {
-          throw Exception('${product.name} is currently unavailable.');
-        }
-        if (inventoryType == 'ready_stock' &&
-            currentStock < cartItem.quantity) {
-          throw Exception('Not enough stock for ${product.name}.');
-        }
-        if (inventoryType == 'ready_stock') {
-          tx.update(productRef, <String, dynamic>{
-            'stock': currentStock - cartItem.quantity,
-          });
-        }
-
-        final app_order.OrderItem orderItem = app_order.OrderItem(
-          productId: product.id,
-          sellerId: product.userId,
-          productName: product.name,
-          productImageUrl: product.images.isNotEmpty
-              ? product.images.first
-              : '',
-          inventoryType: product.inventoryType,
-          preorderDays: product.preorderDays,
-          quantity: cartItem.quantity,
-          price: product.price,
-        );
-        orderItems.add(orderItem);
-        totalPrice += product.price * cartItem.quantity;
-      }
-
-      tx.set(orderRef, <String, dynamic>{
-        'userId': user.uid,
-        'storeId': OfficialStore.id,
-        'storeName': OfficialStore.name,
-        'items': orderItems
-            .map((app_order.OrderItem item) => item.toMap())
-            .toList(),
-        'totalPrice': totalPrice,
-        'status': 'pending',
-        'createdAt': FieldValue.serverTimestamp(),
-        'sellerIds': <String>[],
+    final HttpsCallable callable = _functions.httpsCallable(
+      'createCustomerOrder',
+    );
+    final HttpsCallableResult<dynamic> result = await callable.call(
+      <String, dynamic>{
+        'checkoutRequestId': checkoutRequestId,
+        'items': cartItems
+            .map(
+              (CartItem item) => <String, dynamic>{
+                'productId': item.productId,
+                'quantity': item.quantity,
+              },
+            )
+            .toList(growable: false),
         'customerName': checkoutInfo.customerName.trim(),
         'phone': checkoutInfo.phone.trim(),
         'address': checkoutInfo.address.trim(),
-        'fulfillmentMode': OfficialStore.fulfillmentMode,
-      });
-      _salesReportingService.recordOrderPlaced(
-        tx: tx,
-        orderId: orderRef.id,
-        totalPrice: totalPrice,
-        occurredAt: DateTime.now(),
-      );
-    });
-
-    return orderRef.id;
+      },
+    );
+    final dynamic response = result.data;
+    if (response is! Map) {
+      throw Exception('Invalid create-order response.');
+    }
+    final String orderId = response['orderId']?.toString() ?? '';
+    if (orderId.isEmpty) {
+      throw Exception('Create-order response did not include an order ID.');
+    }
+    return orderId;
   }
 }

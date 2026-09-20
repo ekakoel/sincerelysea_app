@@ -30,6 +30,24 @@ This product boundary does not replace authorization. Claim-aware Firestore Rule
 
 A target user must exist in both Firebase Auth and `users/{uid}`. A changed user must sign out and back in, or otherwise force an ID-token refresh, before the new authorization is visible to Flutter and Firestore Rules.
 
+## Trusted financial reporting (SEC-02)
+
+Flutter no longer writes `journal_entries` or `sales_reports`. Order creation and the first transition into `cancelled` are observed by Cloud Functions, which use the Admin SDK to create the journal event and increment the UTC daily report in one Firestore transaction.
+
+Each event uses a deterministic journal ID, `order_created_{orderId}` or `order_cancelled_{orderId}`. An existing event document makes a retried invocation a no-op, preventing duplicate report increments. Firestore Rules retain the existing `finance`-scope read policy and deny every client create, update, and delete on both financial collections.
+
+At the SEC-02 checkpoint, checkout totals and inventory remained client-driven debt for SEC-03. SEC-02 reporting has not been deployed to production. SEC-01 remains 7/8 with its existing fresh-session smoke blocker.
+
+## Trusted checkout and order state (SEC-03)
+
+Flutter now submits only product IDs, quantities, shipping/contact input, and a per-attempt `checkoutRequestId` to `createCustomerOrder`. The callable loads official-store product documents, validates availability and inventory, calculates authoritative item snapshots and totals, decrements ready stock, and creates the pending order in one transaction. A UID-scoped deterministic order ID makes retries return the same logical order without another stock decrement or another SEC-02 create event.
+
+`cancelCustomerOrder` verifies authentication, ownership, trusted order provenance, and pending status before restoring ready stock and changing the order to `cancelled` in one transaction. A repeated cancellation returns the existing cancelled result without restoring stock again. The existing SEC-02 document triggers remain the only financial reporting implementation.
+
+Firestore Rules preserve own-order and scoped backend-admin reads but deny every client create, update, and delete on `orders`. Ordinary customers remain unable to mutate products or stock. Existing legacy orders remain readable; pending legacy orders are intentionally rejected by trusted cancellation because their item and stock snapshots were client-authored and cannot be safely restored without operator reconciliation. No production Rules or Functions deployment or production-data migration occurred.
+
+SEC-01 remains 7/8 with its production fresh-token smoke pending. SEC-02 and SEC-03 are implemented and tested in the current source tree but are not deployed.
+
 ## First admin bootstrap
 
 Run bootstrap only from a trusted operator workstation or CI environment with Google Application Default Credentials authorized for the intended Firebase project. Never place a service-account key in this repository.
