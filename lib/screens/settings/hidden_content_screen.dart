@@ -17,6 +17,7 @@ class _HiddenContentScreenState extends State<HiddenContentScreen> {
   bool _loadingPreferences = true;
   bool _hideTextOnlyPosts = false;
   bool _hidePostsWithMutedKeywords = true;
+  String? _preferencesError;
   final TextEditingController _mutedKeywordsController =
       TextEditingController();
 
@@ -55,7 +56,14 @@ class _HiddenContentScreenState extends State<HiddenContentScreen> {
                       padding: EdgeInsets.symmetric(vertical: 12),
                       child: Center(child: CircularProgressIndicator()),
                     )
-                  else ...<Widget>[
+                  else if (_preferencesError != null) ...<Widget>[
+                    const Text('Content preferences are unavailable.'),
+                    const SizedBox(height: 8),
+                    FilledButton.tonal(
+                      onPressed: _loadPreferences,
+                      child: const Text('Retry'),
+                    ),
+                  ] else ...<Widget>[
                     SwitchListTile(
                       contentPadding: EdgeInsets.zero,
                       title: const Text('Hide text-only posts'),
@@ -134,6 +142,23 @@ class _HiddenContentScreenState extends State<HiddenContentScreen> {
                       child: Padding(
                         padding: EdgeInsets.all(16),
                         child: Center(child: CircularProgressIndicator()),
+                      ),
+                    );
+                  }
+                  if (snapshot.hasError) {
+                    return Card(
+                      child: Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: Column(
+                          children: <Widget>[
+                            const Text('Hidden posts are unavailable.'),
+                            const SizedBox(height: 8),
+                            FilledButton.tonal(
+                              onPressed: () => setState(() {}),
+                              child: const Text('Retry'),
+                            ),
+                          ],
+                        ),
                       ),
                     );
                   }
@@ -217,9 +242,22 @@ class _HiddenContentScreenState extends State<HiddenContentScreen> {
                                       ),
                                       trailing: TextButton(
                                         onPressed: () async {
-                                          await context
-                                              .read<ModerationService>()
-                                              .unhidePost(postId);
+                                          try {
+                                            await context
+                                                .read<ModerationService>()
+                                                .unhidePost(postId);
+                                          } catch (_) {
+                                            if (!context.mounted) return;
+                                            ScaffoldMessenger.of(
+                                              context,
+                                            ).showSnackBar(
+                                              const SnackBar(
+                                                content: Text(
+                                                  'Could not unhide this post. Please try again.',
+                                                ),
+                                              ),
+                                            );
+                                          }
                                         },
                                         child: const Text('Unhide'),
                                       ),
@@ -241,16 +279,28 @@ class _HiddenContentScreenState extends State<HiddenContentScreen> {
   }
 
   Future<void> _loadPreferences() async {
-    final HiddenContentPreferences preferences = await _preferencesService
-        .load();
-    if (!mounted) {
-      return;
-    }
-    _mutedKeywordsController.text = preferences.mutedKeywords.join(', ');
     setState(() {
-      _hideTextOnlyPosts = preferences.hideTextOnlyPosts;
-      _hidePostsWithMutedKeywords = preferences.hidePostsWithMutedKeywords;
-      _loadingPreferences = false;
+      _loadingPreferences = true;
+      _preferencesError = null;
     });
+    try {
+      final HiddenContentPreferences preferences = await _preferencesService
+          .load();
+      if (!mounted) {
+        return;
+      }
+      _mutedKeywordsController.text = preferences.mutedKeywords.join(', ');
+      setState(() {
+        _hideTextOnlyPosts = preferences.hideTextOnlyPosts;
+        _hidePostsWithMutedKeywords = preferences.hidePostsWithMutedKeywords;
+        _loadingPreferences = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _preferencesError = 'unavailable';
+        _loadingPreferences = false;
+      });
+    }
   }
 }

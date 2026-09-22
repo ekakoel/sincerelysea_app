@@ -4,8 +4,10 @@ import 'package:sincerelysea/theme/app_semantic_colors.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:provider/provider.dart';
 import 'package:sincerelysea/widgets/app_check_network_image.dart';
+import 'package:sincerelysea/utils/auth_exception_handler.dart';
 
 import '../../services/auth_service.dart';
+import 'forgot_password_screen.dart';
 import 'register_screen.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -52,10 +54,15 @@ class _LoginScreenState extends State<LoginScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(message), backgroundColor: AppColors.black),
       );
-    } catch (e) {
+    } catch (_) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error: $e'), backgroundColor: AppColors.black),
+        const SnackBar(
+          content: Text(
+            'Could not sign in. Check your connection and try again.',
+          ),
+          backgroundColor: AppColors.black,
+        ),
       );
     } finally {
       if (mounted) {
@@ -74,23 +81,21 @@ class _LoginScreenState extends State<LoginScreen> {
           .signInWithGoogle();
       if (credential == null && mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text(
-              'Google sign-in cancelled. If this keeps happening after choosing an account, check SHA-1/SHA-256 in Firebase.',
-            ),
-          ),
+          const SnackBar(content: Text('Google sign-in was cancelled.')),
         );
       }
     } on FirebaseAuthException catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(e.message ?? 'Error')));
-    } on FirebaseException catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(AuthExceptionHandler.handleException(e))),
+      );
+    } on FirebaseException catch (_) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(e.message ?? 'Permission denied')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Google sign-in is unavailable. Please try again.'),
+        ),
+      );
     } finally {
       if (mounted) {
         setState(() => _isLoading = false);
@@ -218,9 +223,9 @@ class _LoginScreenState extends State<LoginScreen> {
                   // FORGOT PASSWORD
                   TextButton(
                     onPressed: () {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text('Forgot password is not available yet'),
+                      Navigator.of(context).push(
+                        MaterialPageRoute<void>(
+                          builder: (_) => const ForgotPasswordScreen(),
                         ),
                       );
                     },

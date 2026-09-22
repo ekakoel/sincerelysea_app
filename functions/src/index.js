@@ -21,6 +21,7 @@ const db = admin.firestore();
 const storage = admin.storage();
 const RECENT_AUTH_MAX_AGE_SECONDS = 5 * 60;
 const ADMIN_SCOPES = ['products', 'orders', 'finance', 'community', 'roles'];
+const MOBILE_CALLABLE_OPTIONS = { enforceAppCheck: true };
 
 function normalizedAdminScopes(value) {
   if (!Array.isArray(value)) return [];
@@ -119,11 +120,39 @@ async function deleteCollection(path, batchSize = 200) {
   }
 }
 
+async function deleteCollectionWithChildCollection(path, childCollection) {
+  while (true) {
+    const snapshot = await db.collection(path).limit(100).get();
+    if (snapshot.empty) {
+      break;
+    }
+
+    for (const doc of snapshot.docs) {
+      await deleteCollection(`${path}/${doc.id}/${childCollection}`);
+      await doc.ref.delete();
+    }
+  }
+}
+
+async function deleteQueryDocuments(query) {
+  const snapshot = await query.get();
+  for (let offset = 0; offset < snapshot.docs.length; offset += 400) {
+    const batch = db.batch();
+    snapshot.docs.slice(offset, offset + 400).forEach((doc) => {
+      batch.delete(doc.ref);
+    });
+    await batch.commit();
+  }
+}
+
 async function deletePostsOwnedBy(uid) {
   const postSnapshot = await db.collection('posts').where('uid', '==', uid).get();
 
   for (const postDoc of postSnapshot.docs) {
-    await deleteCollection(`posts/${postDoc.id}/comments`);
+    await deleteCollectionWithChildCollection(
+      `posts/${postDoc.id}/comments`,
+      'replies',
+    );
 
     const imageUrl = postDoc.data().imageUrl;
     const objectPath = extractStoragePathFromUrl(imageUrl);
@@ -138,18 +167,30 @@ async function deletePostsOwnedBy(uid) {
 }
 
 async function deleteUserCommentsAndFixCount(uid) {
-  const comments = await db.collectionGroup('comments').where('uid', '==', uid).get();
-  await Promise.all(comments.docs.map((commentDoc) => commentDoc.ref.delete()));
+  await deleteQueryDocuments(
+    db.collectionGroup('comments').where('uid', '==', uid),
+  );
+  await deleteQueryDocuments(
+    db.collectionGroup('replies').where('uid', '==', uid),
+  );
+}
+
+async function deleteCustomerReviews(uid) {
+  await deleteQueryDocuments(
+    db.collectionGroup('reviews').where('userId', '==', uid),
+  );
 }
 
 async function deleteCrossFollowDocs(uid) {
-  const followerDocs = await db.collectionGroup('followers').where('uid', '==', uid).get();
-  const followingDocs = await db.collectionGroup('following').where('uid', '==', uid).get();
-
-  const batch = db.batch();
-  followerDocs.docs.forEach((d) => batch.delete(d.ref));
-  followingDocs.docs.forEach((d) => batch.delete(d.ref));
-  await batch.commit();
+  await deleteQueryDocuments(
+    db.collectionGroup('followers').where('uid', '==', uid),
+  );
+  await deleteQueryDocuments(
+    db.collectionGroup('following').where('uid', '==', uid),
+  );
+  await deleteQueryDocuments(
+    db.collectionGroup('follow_requests').where('uid', '==', uid),
+  );
 }
 
 async function deleteUsernameReservation(uid) {
@@ -167,9 +208,14 @@ async function deleteUserStorage(uid) {
   const [files] = await storage.bucket().getFiles({ prefix: 'post_images/' });
   const ownFiles = files.filter((file) => file.name.startsWith(`post_images/${uid}_`));
   await Promise.allSettled(ownFiles.map((file) => file.delete()));
+
+  const [supportFiles] = await storage.bucket().getFiles({
+    prefix: `support_attachments/${uid}/`,
+  });
+  await Promise.allSettled(supportFiles.map((file) => file.delete()));
 }
 
-exports.hardDeleteAccount = onCall(async (request) => {
+exports.hardDeleteAccount = onCall(MOBILE_CALLABLE_OPTIONS, async (request) => {
   if (!request.auth) {
     throw new HttpsError('unauthenticated', 'You must be signed in.');
   }
@@ -187,6 +233,7 @@ exports.hardDeleteAccount = onCall(async (request) => {
 
   await deletePostsOwnedBy(uid);
   await deleteUserCommentsAndFixCount(uid);
+  await deleteCustomerReviews(uid);
   await deleteCrossFollowDocs(uid);
   await deleteUsernameReservation(uid);
 
@@ -194,12 +241,20 @@ exports.hardDeleteAccount = onCall(async (request) => {
   await deleteCollection(`users/${uid}/following`);
   await deleteCollection(`users/${uid}/saved_posts`);
   await deleteCollection(`users/${uid}/wishlists`);
+  await deleteCollection(`users/${uid}/cart`);
+  await deleteCollection(`users/${uid}/collections`);
   await deleteCollection(`users/${uid}/blocks`);
   await deleteCollection(`users/${uid}/hidden_posts`);
   await deleteCollection(`users/${uid}/notifications`);
   await deleteCollection(`users/${uid}/follow_requests`);
+  await deleteCollectionWithChildCollection(
+    `users/${uid}/support_tickets`,
+    'messages',
+  );
 
   await db.collection('users').doc(uid).delete();
+  await db.collection('users_public').doc(uid).delete();
+  await db.collection('users_private').doc(uid).delete();
   await deleteUserStorage(uid);
 
   await admin.auth().deleteUser(uid);
@@ -268,8 +323,9 @@ exports.setUserAdminAccess = onCall(async (request) => {
     nextClaims.adminScopes = [...ADMIN_SCOPES];
   }
 
-  const targetRef = db.collection('users').doc(targetUid);
-  const actorRef = db.collection('users').doc(request.auth.uid);
+  const targetRef = db.collection('users_public').doc(targetUid);
+  const actorRef = db.collection('users_public').doc(request.auth.uid);
+  const targetPrivateRef = db.collection('users_private').doc(targetUid);
   const [targetSnapshot, actorSnapshot] = await Promise.all([
     targetRef.get(),
     actorRef.get(),
@@ -292,7 +348,8 @@ exports.setUserAdminAccess = onCall(async (request) => {
   await admin.auth().setCustomUserClaims(targetUid, nextClaims);
 
   const batch = db.batch();
-  batch.set(targetRef, {
+  batch.set(targetPrivateRef, {
+    uid: targetUid,
     role: requestedRole,
     adminScopes: requestedRole === 'user' ? [] : nextClaims.adminScopes,
     authorizationSource: 'firebase_auth_custom_claims',
@@ -323,14 +380,14 @@ exports.setUserAdminAccess = onCall(async (request) => {
   };
 });
 
-exports.createCustomerOrder = onCall(async (request) =>
+exports.createCustomerOrder = onCall(MOBILE_CALLABLE_OPTIONS, async (request) =>
   createCustomerOrderRecord({
     db,
     uid: request.auth?.uid,
     data: request.data,
   }));
 
-exports.cancelCustomerOrder = onCall(async (request) =>
+exports.cancelCustomerOrder = onCall(MOBILE_CALLABLE_OPTIONS, async (request) =>
   cancelCustomerOrderRecord({
     db,
     uid: request.auth?.uid,
@@ -433,7 +490,7 @@ exports.onPostUpdated = onDocumentUpdated('posts/{postId}', async (event) => {
   const addedLikes = afterLikes.filter((uid) => !beforeLikes.includes(uid));
 
   for (const likerUid of addedLikes) {
-    const likerSnap = await db.collection('users').doc(likerUid).get();
+    const likerSnap = await db.collection('users_public').doc(likerUid).get();
     const likerUsername = likerSnap.data()?.username || 'user';
     await createNotification({
       targetUid: postOwnerUid,
@@ -451,7 +508,7 @@ exports.onPostUpdated = onDocumentUpdated('posts/{postId}', async (event) => {
   if (afterShare > beforeShare) {
     const actorUid = after.lastShareActorUid || null;
     if (actorUid) {
-      const actorSnap = await db.collection('users').doc(actorUid).get();
+      const actorSnap = await db.collection('users_public').doc(actorUid).get();
       const actorUsername = actorSnap.data()?.username || 'user';
       await createNotification({
         targetUid: postOwnerUid,
@@ -484,7 +541,7 @@ exports.onProductUpdated = onDocumentUpdated(
       return;
     }
 
-    const ownerSnap = await db.collection('users').doc(ownerUid).get();
+    const ownerSnap = await db.collection('users_public').doc(ownerUid).get();
     const ownerUsername = ownerSnap.data()?.username || 'seller';
     const productName = after.name || 'Product';
 

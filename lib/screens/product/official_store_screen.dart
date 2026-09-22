@@ -6,10 +6,16 @@ import 'package:sincerelysea/screens/product/product_detail_screen.dart';
 import 'package:sincerelysea/services/product_service.dart';
 import 'package:sincerelysea/services/wishlist_service.dart';
 import 'package:sincerelysea/widgets/product_card.dart';
+import 'package:sincerelysea/widgets/customer_state_view.dart';
 
-class OfficialStoreScreen extends StatelessWidget {
+class OfficialStoreScreen extends StatefulWidget {
   const OfficialStoreScreen({super.key});
 
+  @override
+  State<OfficialStoreScreen> createState() => _OfficialStoreScreenState();
+}
+
+class _OfficialStoreScreenState extends State<OfficialStoreScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -21,8 +27,12 @@ class OfficialStoreScreen extends StatelessWidget {
             return const Center(child: CircularProgressIndicator());
           }
           if (snapshot.hasError) {
-            return Center(
-              child: Text('Failed to load store products: ${snapshot.error}'),
+            return CustomerStateView(
+              icon: Icons.cloud_off_outlined,
+              title: 'Store unavailable',
+              message: 'Check your connection and try again.',
+              actionLabel: 'Retry',
+              onAction: () => setState(() {}),
             );
           }
           final List<Product> products = snapshot.data ?? <Product>[];
@@ -120,13 +130,15 @@ class OfficialStoreScreen extends StatelessWidget {
           ),
         ),
       );
-    } catch (e) {
+    } catch (_) {
       if (!context.mounted) {
         return;
       }
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Failed to update wishlist: $e')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Could not update saved products. Please try again.'),
+        ),
+      );
     }
   }
 }

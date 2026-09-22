@@ -22,7 +22,19 @@ class AppCheckHeaderService {
     return _isFirebaseStorageHttpUrl(imageUrl);
   }
 
-  Future<void> initialize() async {
+  static AndroidAppCheckProvider androidProviderFor({required bool isDebug}) {
+    return isDebug
+        ? const AndroidDebugProvider()
+        : const AndroidPlayIntegrityProvider();
+  }
+
+  static AppleAppCheckProvider appleProviderFor({required bool isDebug}) {
+    return isDebug
+        ? const AppleDebugProvider()
+        : const AppleAppAttestWithDeviceCheckFallbackProvider();
+  }
+
+  Future<void> initialize({bool? debugMode}) async {
     if (_initialized || _disabled) {
       return;
     }
@@ -30,7 +42,7 @@ class AppCheckHeaderService {
       return _initializing!;
     }
 
-    _initializing = _initializeInternal();
+    _initializing = _initializeInternal(isDebug: debugMode ?? kDebugMode);
     try {
       await _initializing!;
     } finally {
@@ -38,28 +50,22 @@ class AppCheckHeaderService {
     }
   }
 
-  Future<void> _initializeInternal() async {
+  Future<void> _initializeInternal({required bool isDebug}) async {
     try {
       await FirebaseAppCheck.instance.activate(
-        providerAndroid: kDebugMode
-            ? const AndroidDebugProvider()
-            : const AndroidPlayIntegrityProvider(),
-        providerApple: kDebugMode
-            ? const AppleDebugProvider()
-            : const AppleAppAttestWithDeviceCheckFallbackProvider(),
+        providerAndroid: androidProviderFor(isDebug: isDebug),
+        providerApple: appleProviderFor(isDebug: isDebug),
       );
 
       await FirebaseAppCheck.instance.setTokenAutoRefreshEnabled(true);
       _initialized = true;
       await _refreshToken(force: true);
     } on FirebaseException catch (e) {
-      if (_isUnsupportedFirebaseAppCheckError(e)) {
+      if (isDebug && _isUnsupportedFirebaseAppCheckError(e)) {
         _disableService();
-        if (kDebugMode) {
-          debugPrint(
-            'AppCheckHeaderService disabled: App Check provider unsupported on this platform/OS.',
-          );
-        }
+        debugPrint(
+          'AppCheckHeaderService disabled: App Check provider unsupported on this platform/OS.',
+        );
         return;
       }
       rethrow;
@@ -83,7 +89,7 @@ class AppCheckHeaderService {
     try {
       token = await FirebaseAppCheck.instance.getToken(force);
     } on FirebaseException catch (e) {
-      if (_isUnsupportedFirebaseAppCheckError(e)) {
+      if (kDebugMode && _isUnsupportedFirebaseAppCheckError(e)) {
         _disableService();
         if (kDebugMode) {
           debugPrint(

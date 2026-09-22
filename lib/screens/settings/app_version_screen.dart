@@ -203,7 +203,7 @@ class _AppVersionScreenState extends State<AppVersionScreen> {
         'Introduced full Settings hub with centralized controls.',
         'Added Notification Preferences with per-event toggles.',
         'Improved App Permissions flow with clear allowed/denied states.',
-        'Expanded legal/support pages and account management tools.',
+        'Expanded legal, support, account, and profile tools.',
       ],
     };
     return notes[version] ??

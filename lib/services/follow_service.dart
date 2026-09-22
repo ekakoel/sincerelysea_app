@@ -87,13 +87,12 @@ class FollowService {
     }
 
     final DocumentSnapshot<Map<String, dynamic>> currentUserProfile =
-        await _firestore.collection('users').doc(user.uid).get();
+        await _firestore.collection('users_public').doc(user.uid).get();
     final DocumentSnapshot<Map<String, dynamic>> targetProfile =
-        await _firestore.collection('users').doc(targetUid).get();
+        await _firestore.collection('users_public').doc(targetUid).get();
     final String currentUsername =
         currentUserProfile.data()?['username']?.toString() ??
         user.displayName ??
-        user.email?.split('@').first ??
         'user';
     final bool targetIsPrivate = targetProfile.data()?['isPrivate'] == true;
 
@@ -166,14 +165,13 @@ class FollowService {
     }
 
     final DocumentSnapshot<Map<String, dynamic>> currentUserProfile =
-        await _firestore.collection('users').doc(user.uid).get();
+        await _firestore.collection('users_public').doc(user.uid).get();
     final DocumentSnapshot<Map<String, dynamic>> requesterProfile =
-        await _firestore.collection('users').doc(requesterUid).get();
+        await _firestore.collection('users_public').doc(requesterUid).get();
 
     final String currentUsername =
         currentUserProfile.data()?['username']?.toString() ??
         user.displayName ??
-        user.email?.split('@').first ??
         'user';
     final String requesterUsername =
         requesterProfile.data()?['username']?.toString() ?? 'user';

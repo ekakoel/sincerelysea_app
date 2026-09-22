@@ -9,6 +9,7 @@ import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:sincerelysea/config/media_upload_policy.dart';
 import 'package:sincerelysea/l10n/app_localizations.dart';
 import 'package:sincerelysea/services/account_lifecycle_service.dart';
 import 'package:sincerelysea/services/auth_service.dart';
@@ -16,6 +17,7 @@ import 'package:sincerelysea/services/user_profile_service.dart';
 import 'package:sincerelysea/utils/auth_exception_handler.dart';
 import 'package:sincerelysea/utils/username_text_input_formatter.dart';
 import 'package:sincerelysea/widgets/app_check_network_image.dart';
+import 'package:sincerelysea/widgets/customer_state_view.dart';
 
 class ProfileSettingsScreen extends StatefulWidget {
   const ProfileSettingsScreen({super.key});
@@ -32,6 +34,7 @@ class _ProfileSettingsScreenState extends State<ProfileSettingsScreen> {
   bool _initialized = false;
   bool _saving = false;
   bool _uploadingAvatar = false;
+  bool _exportingData = false;
   bool _deletingAccount = false;
 
   @override
@@ -58,11 +61,13 @@ class _ProfileSettingsScreenState extends State<ProfileSettingsScreen> {
           context,
         ).showSnackBar(const SnackBar(content: Text('Profile updated')));
       }
-    } catch (e) {
+    } catch (_) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Failed to update profile: $e')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Could not update your profile. Please try again.'),
+          ),
+        );
       }
     } finally {
       if (mounted) {
@@ -214,10 +219,12 @@ class _ProfileSettingsScreenState extends State<ProfileSettingsScreen> {
                           messenger.showSnackBar(
                             const SnackBar(content: Text('Username updated')),
                           );
-                        } catch (e) {
+                        } catch (_) {
                           messenger.showSnackBar(
-                            SnackBar(
-                              content: Text('Failed to change username: $e'),
+                            const SnackBar(
+                              content: Text(
+                                'Could not change your username. Please try again.',
+                              ),
                             ),
                           );
                         } finally {
@@ -261,9 +268,10 @@ class _ProfileSettingsScreenState extends State<ProfileSettingsScreen> {
       }
     } catch (e) {
       if (mounted) {
-        messenger.showSnackBar(
-          SnackBar(content: Text('Failed to upload profile photo: $e')),
-        );
+        final String message = e is MediaValidationException
+            ? e.message
+            : 'Upload failed. Check your connection and try again.';
+        messenger.showSnackBar(SnackBar(content: Text(message)));
       }
     } finally {
       if (mounted) {
@@ -317,19 +325,36 @@ class _ProfileSettingsScreenState extends State<ProfileSettingsScreen> {
             BuildContext context,
             AsyncSnapshot<DocumentSnapshot<Map<String, dynamic>>> snapshot,
           ) {
+            if (snapshot.connectionState == ConnectionState.waiting &&
+                !snapshot.hasData) {
+              return const Scaffold(
+                body: Center(child: CircularProgressIndicator()),
+              );
+            }
+            if (snapshot.hasError && !snapshot.hasData) {
+              return Scaffold(
+                appBar: AppBar(title: const Text('Profile Settings')),
+                body: CustomerStateView(
+                  icon: Icons.cloud_off_outlined,
+                  title: 'Profile settings unavailable',
+                  message: 'Check your connection and try again.',
+                  actionLabel: 'Retry',
+                  onAction: () => setState(() {}),
+                ),
+              );
+            }
             final Map<String, dynamic> data =
                 snapshot.data?.data() ?? <String, dynamic>{};
             final String displayName =
                 data['displayName']?.toString() ??
                 user.displayName ??
-                user.email?.split('@').first ??
-                'User';
+                'SincerelySea customer';
             final String bio = data['bio']?.toString() ?? '';
             final String location = data['location']?.toString() ?? '';
             final String username =
-                data['username']?.toString() ??
-                _emailPrefixLower(user.email) ??
-                'user';
+                data['username']?.toString().trim().isNotEmpty == true
+                ? data['username'].toString()
+                : 'your-profile';
             final bool changedOnce = data['usernameChangedOnce'] == true;
             final String? avatarUrl =
                 data['photoUrl']?.toString().isNotEmpty == true
@@ -463,19 +488,48 @@ class _ProfileSettingsScreenState extends State<ProfileSettingsScreen> {
                       children: <Widget>[
                         Expanded(
                           child: OutlinedButton.icon(
-                            icon: const Icon(Icons.download_outlined),
+                            icon: _exportingData
+                                ? const SizedBox(
+                                    width: 14,
+                                    height: 14,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                    ),
+                                  )
+                                : const Icon(Icons.download_outlined),
                             label: const Text('Export my data'),
-                            onPressed: () async {
-                              final String json = await context
-                                  .read<AccountLifecycleService>()
-                                  .exportMyDataAsJson();
-                              await SharePlus.instance.share(
-                                ShareParams(
-                                  text: json,
-                                  subject: 'SincerelySea data export',
-                                ),
-                              );
-                            },
+                            onPressed: _exportingData
+                                ? null
+                                : () async {
+                                    setState(() => _exportingData = true);
+                                    try {
+                                      final String json = await context
+                                          .read<AccountLifecycleService>()
+                                          .exportMyDataAsJson();
+                                      await SharePlus.instance.share(
+                                        ShareParams(
+                                          text: json,
+                                          subject: 'SincerelySea data export',
+                                        ),
+                                      );
+                                    } catch (_) {
+                                      if (context.mounted) {
+                                        ScaffoldMessenger.of(
+                                          context,
+                                        ).showSnackBar(
+                                          const SnackBar(
+                                            content: Text(
+                                              'Could not export your data. Please try again.',
+                                            ),
+                                          ),
+                                        );
+                                      }
+                                    } finally {
+                                      if (context.mounted) {
+                                        setState(() => _exportingData = false);
+                                      }
+                                    }
+                                  },
                           ),
                         ),
                       ],
@@ -602,11 +656,4 @@ class _ProfileSettingsScreenState extends State<ProfileSettingsScreen> {
           },
     );
   }
-}
-
-String? _emailPrefixLower(String? email) {
-  if (email == null || email.isEmpty) {
-    return null;
-  }
-  return email.split('@').first.toLowerCase();
 }

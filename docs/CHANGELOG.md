@@ -1,6 +1,96 @@
 # SincerelySea Change Log
 
+## 2026-09-22
+
+### QA-01 - End-to-End Customer & Firebase Quality Assurance
+- Fixed account export failures caused by Firestore Timestamp and GeoPoint values and added safe customer-facing failure recovery.
+- Expanded export coverage to active customer profile, community, saved, shopping, support, review, order, report, and notification data while preserving the public/private profile split.
+- Completed trusted account-deletion cleanup for cart, collections, support tickets/messages/attachments, product reviews, replies, and cross-user follow requests; retained orders/reports where technically or legally required.
+- Declared the collection-group indexes required by lifecycle cleanup, review export, and back-in-stock wishlist notification queries; no index was deployed.
+- Added focused lifecycle regression tests; Flutter analysis, 45 Flutter tests, and a fail-closed Auth/Firestore/Storage hard-delete integration test pass.
+- Confirmed 51 Functions, Firestore Rules, and Storage Rules emulator tests plus Functions lint pass without production deployment.
+- Built the Android debug APK successfully; iOS static configuration is present, while build/signing and real-device permission/App Check validation remain blocked by the Windows platform and production setup.
+- Preserved the frozen SEC-01 through SEC-07 boundaries, customer-only navigation, trusted checkout authority, and absence of mobile management UI.
+
+## 2026-09-21
+
+### MOB-03A - Product Reviews Completion
+- Added deterministic product review documents keyed by customer UID, enforcing one review per authenticated customer and product.
+- Added Product Detail loading, empty, safe error/retry, author/date/rating/text presentation, plus Write, Edit, and Delete Review flows.
+- Resolved review author identity exclusively from users_public with a neutral SincerelySea Member fallback and no private identity copied into review records.
+- Added owner-only Firestore Rules with product existence, exact field allowlist, immutable ownership/product/creation identity, 1-5 rating, and bounded text validation.
+- Denied cross-user and claimed admin moderation mutations; no approval, rejection, feature, official, or hidden-by-admin customer fields are accepted.
+- Kept reviews text-only with no Storage path, verified-purchase badge, client product-rating aggregate, new notification infrastructure, or mobile moderation UI.
+- Added focused Flutter source-boundary coverage and Firestore emulator regression cases; no production deployment or migration was performed.
+
+### MOB-03 - Customer Feature Completeness
+- Connected Forgot Password to the existing reset flow and replaced technical/raw authentication failures with customer-safe messages.
+- Hardened cart and checkout against deleted, unavailable, stale-price, and over-stock products while preserving trusted callable order authority.
+- Made Buy Again resolve current catalog products before adding them, normalized order status labels, and continued successful checkout into the created order detail when readable.
+- Removed non-functional notification category toggles and retained only truthful system-permission controls plus the in-app notification center.
+- Added resilient retry/unavailable states for profile settings, hidden content, shared-post details, linked products, and notification actions without exposing backend exceptions.
+- Removed the unused direct account-data deletion helper and retained the trusted hardDeleteAccount lifecycle boundary.
+- Kept product reviews intentionally disabled because no review data/service/UI domain exists; no misleading review action is exposed.
+- Added ten focused MOB-03 source-boundary tests and a customer feature matrix. No production deployment, migration, Firebase service change, management UI, or security-boundary weakening was introduced.
+
+### MOB-02 - Customer Navigation & UX Finalization
+- Finalized the customer navigation as Home, Search, Explore, Shop, and Profile, preserving tab state and returning root-level back navigation from secondary tabs to Home.
+- Kept Create Post prominent on Home as a labeled community-only action without adding a permanent navigation tab or restoring product-post creation.
+- Renamed customer destinations consistently to Search, Explore, and SincerelySea Store and retained existing secure queries, checkout authority, and official-store boundaries.
+- Reorganized Settings into Account, Privacy & Security, Notifications, Shopping, Support, Legal, and Application; added Cart access and removed the duplicate Export Data route.
+- Added customer-oriented Support categories for products, technical issues, and account deletion while preserving the existing private ticket flow and legal routes.
+- Added a reusable neutral customer state view and applied loading/empty/error/retry handling across feed, search, explore, store, profile, notifications, orders, saved products, and support without exposing raw backend exceptions.
+- Removed email-derived own-profile fallback identity and retained public profile reads through `users_public`; no Rules, Storage, callable authority, App Check policy, financial write, or order write was weakened.
+- Added seven focused MOB-02 source-boundary tests. No production deployment, migration, Firebase service change, or management UI was introduced.
+
+### Security Checkpoint - Frozen Baseline & Production Rollout Plan
+- Froze SEC-01 through SEC-07 as the security baseline for later mobile work: Flutter remains customer-only and privileged management remains in trusted backend/operator infrastructure.
+- Added `docs/PRODUCTION_ROLLOUT.md` as the single authority for canonical phase status, production prerequisites, ordered deployment, rollback boundaries, acceptance gates, smoke coverage, STOP conditions, and MOB-02 constraints.
+- Classified pending-order reconciliation, public/private profile backfill, legacy post-visibility normalization, and Storage/media remediation as requiring scripts and operator review; no migration script was invented without production inventory and mapping approval.
+- Preserved the existing SEC-01 operator scripts according to their narrow capabilities and kept SEC-01 at PARTIAL 7/8 pending fresh-token production smoke.
+- Recorded the current pre-deploy gate as NOT READY because migrations/inventories, release artifacts, provider registration, real-device App Check validation, and the final SEC-01 session are outstanding.
+- Performed no production inventory/export, migration, deployment, data mutation, service-enforcement change, or console operation.
+
+### SEC-07 - App Check Production Enforcement Readiness
+- Made Flutter App Check initialization Firebase-first and build-mode controlled: debug providers remain local-development tolerant, while profile/release providers fail closed.
+- Selected Play Integrity for Android production and App Attest with DeviceCheck fallback for iOS production; added the Runner App Attest entitlement and removed Android release fallback to debug signing.
+- Applied Firebase Functions SDK-native App Check enforcement to `hardDeleteAccount`, `createCustomerOrder`, and `cancelCustomerOrder` without removing authentication, authorization, validation, or idempotency checks.
+- Kept `setUserAdminAccess` on its trusted claim-based operator/backend boundary and left Firestore/Storage Rules independent of App Check.
+- Added neutral customer-facing handling for callable attestation/authentication failures and found no hardcoded App Check debug token.
+- Added focused Flutter and Functions source/configuration tests; genuine production attestation still requires registered providers and real Android/iOS devices.
+- Performed no deployment and did not enable Firebase Console enforcement. Firestore and Storage production enforcement remain staged operator actions after the existing migration/remediation prerequisites.
+
+### SEC-06 - Storage & Media Security
+- Classified active profile, post, support, and legacy product-gallery paths; review media is not implemented.
+- Restricted profile/post writes and deletes to authenticated UID-bound namespaces, made support attachments owner-private, and changed community/official reads from anonymous to signed-in Rules access.
+- Denied all customer writes/deletes to official legacy product media while preserving authenticated catalog reads for `SincerelySea Store`.
+- Enforced exact JPG/PNG/WebP MIME values and 5 MiB profile, 10 MiB post, and 8 MiB support size limits in Storage Rules, with aligned Flutter validation and clear failures.
+- Stopped storing new support download URLs; new tickets retain validated private Storage paths while legacy token URLs are flagged for rollout remediation.
+- Added seven Storage Emulator tests, a Firestore support-path regression, and Flutter media-policy coverage; the combined Firestore/Storage/backend suite passes 41/41 and Flutter passes 17/17.
+- Documented that flat post paths and existing tokenized profile/post URLs cannot fully enforce SEC-05 visibility/blocking at the media layer; no proxy/CDN redesign was introduced.
+- Performed no production deployment, Storage deletion, object migration, or App Check enforcement change.
+
 ## 2026-09-20
+
+### SEC-05 - Post Visibility & Block Enforcement
+- Added one Firestore post-read policy for authenticated public, approved-follower, private-owner, legacy official-product, and conservative legacy community behavior.
+- Enforced symmetric blocks on direct post reads, parent comment/reply reads, and new likes, shares, comments, or replies.
+- Restricted customer creation to self-owned community posts, allowlisted owner edits, protected ownership/type/counters, and validated caller-only like toggles.
+- Corrected follower approval Rules so public follows remain direct while private-account followers require the owner's pending-request acceptance; pending requests grant no post access.
+- Validated deterministic owner-controlled block records and retained owner-only hidden/saved post state.
+- Replaced unsafe broad feed/search/map/profile post queries with a shared author-scoped query service compatible with Rules; no new composite index is required.
+- Kept legacy community posts without `visibility` owner-only pending normalization while retaining signed-in reads of legacy official product posts, subject to blocks.
+- Added focused emulator coverage; no production deployment or social/profile/order migration was performed.
+
+### SEC-04 - User Data Privacy and Legal/Support Alignment
+- Split customer records into signed-in-readable allowlisted `users_public` profiles and owner-only `users_private` account/contact data; made mixed legacy `users` documents owner-only.
+- Routed profile/community reads, checkout prefill, account export/deletion, notification identity, and trusted role metadata to the correct visibility boundary.
+- Removed email-prefix fallbacks from public community identity writes so private authentication email is not reused as a public handle.
+- Extended trusted account deletion to remove both new profile documents while preserving legacy subcollection cleanup.
+- Aligned active Terms & Conditions, Privacy Policy, and in-app Support content with the customer-only community and official-store architecture, without claiming external legal review.
+- Added shared legal/support metadata, preserved registration acceptance and canonical registration/settings routes, and removed unsupported contact-response promises.
+- Added focused source tests plus Firestore Emulator coverage for public-field allowlisting, cross-user public reads, private-read denial, owner private access, and owner-only legacy records.
+- Kept SEC-01 at 7/8 and SEC-02/SEC-03 implemented/tested but not deployed. SEC-04 is also not deployed; production user-data backfill and coordinated app/Rules release remain required.
 
 ### SEC-03 - Trusted Checkout & Order State
 - Replaced Flutter order creation and cancellation transactions with authenticated `createCustomerOrder` and `cancelCustomerOrder` callables.

@@ -1,17 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:sincerelysea/models/order.dart' as app_order;
+import 'package:sincerelysea/screens/cart/cart_screen.dart';
 import 'package:sincerelysea/screens/product/product_detail_screen.dart';
 import 'package:sincerelysea/services/cart_service.dart';
 import 'package:sincerelysea/services/order_service.dart';
+import 'package:sincerelysea/services/product_service.dart';
 import 'package:sincerelysea/theme/app_colors.dart';
+import 'package:sincerelysea/utils/auth_exception_handler.dart';
 import 'package:sincerelysea/widgets/app_check_network_image.dart';
 
 class OrderDetailScreen extends StatefulWidget {
-  const OrderDetailScreen({
-    super.key,
-    required this.order,
-  });
+  const OrderDetailScreen({super.key, required this.order});
 
   final app_order.Order order;
 
@@ -123,19 +123,60 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
       _submittingBuyerAction = true;
     });
     try {
-      await context.read<CartService>().addOrderItemsToCart(order.items);
+      final CartService cartService = context.read<CartService>();
+      final ProductService productService = context.read<ProductService>();
+      int added = 0;
+      int unavailable = 0;
+      for (final app_order.OrderItem item in order.items) {
+        final product = await productService.getProductOnce(item.productId);
+        final bool canAdd =
+            product != null &&
+            product.canPurchase &&
+            item.quantity > 0 &&
+            (product.isPreorder || item.quantity <= product.stock);
+        if (!canAdd) {
+          unavailable++;
+          continue;
+        }
+        await cartService.addToCart(
+          productId: product.id,
+          quantity: item.quantity,
+        );
+        added++;
+      }
       if (!context.mounted) {
         return;
       }
+      if (added == 0) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('No items from this order are currently available.'),
+          ),
+        );
+        return;
+      }
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Items added back to cart.')),
+        SnackBar(
+          content: Text(
+            unavailable == 0
+                ? 'Current products were added to your cart.'
+                : '$added item(s) added. $unavailable unavailable item(s) were skipped.',
+          ),
+        ),
       );
-    } catch (e) {
+      await Navigator.of(
+        context,
+      ).push(MaterialPageRoute<void>(builder: (_) => const CartScreen()));
+    } catch (_) {
       if (!context.mounted) {
         return;
       }
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to add items to cart: $e')),
+        const SnackBar(
+          content: Text(
+            'Could not add these items to your cart. Please try again.',
+          ),
+        ),
       );
     } finally {
       if (mounted) {
@@ -194,9 +235,9 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
       if (!context.mounted) {
         return;
       }
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Failed to cancel order: $e')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(AuthExceptionHandler.handleException(e))),
+      );
     } finally {
       if (mounted) {
         setState(() {
@@ -214,10 +255,21 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
   }
 
   static String _toTitleCase(String value) {
-    if (value.trim().isEmpty) {
+    final List<String> words = value
+        .trim()
+        .replaceAll(RegExp(r'[_-]+'), ' ')
+        .split(RegExp(r'\s+'))
+        .where((String word) => word.isNotEmpty)
+        .toList(growable: false);
+    if (words.isEmpty) {
       return 'Unknown';
     }
-    return value[0].toUpperCase() + value.substring(1).toLowerCase();
+    return words
+        .map(
+          (String word) =>
+              word[0].toUpperCase() + word.substring(1).toLowerCase(),
+        )
+        .join(' ');
   }
 }
 

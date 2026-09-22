@@ -9,6 +9,7 @@ import 'package:sincerelysea/services/cart_service.dart';
 import 'package:sincerelysea/services/product_service.dart';
 import 'package:sincerelysea/services/wishlist_service.dart';
 import 'package:sincerelysea/theme/app_colors.dart';
+import 'package:sincerelysea/widgets/customer_state_view.dart';
 import 'package:sincerelysea/widgets/product_card.dart';
 
 class ProductCatalogScreen extends StatefulWidget {
@@ -36,6 +37,7 @@ class _ProductCatalogScreenState extends State<ProductCatalogScreen> {
   double? _minPrice;
   double? _maxPrice;
   bool _wishlistOnly = false;
+  String? _loadErrorMessage;
   List<String> _categories = const <String>['All'];
 
   @override
@@ -82,6 +84,7 @@ class _ProductCatalogScreenState extends State<ProductCatalogScreen> {
         _categories = const <String>['All'];
         _lastDocument = null;
         _hasMore = true;
+        _loadErrorMessage = null;
       });
     }
 
@@ -98,6 +101,13 @@ class _ProductCatalogScreenState extends State<ProductCatalogScreen> {
         });
       }
       await _fetchProducts();
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _loadErrorMessage =
+              'The store could not be loaded. Check your connection and try again.';
+        });
+      }
     } finally {
       if (mounted) {
         setState(() => _isLoading = false);
@@ -111,6 +121,14 @@ class _ProductCatalogScreenState extends State<ProductCatalogScreen> {
     }
     try {
       await _fetchProducts();
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Could not load more products. Please try again.'),
+          ),
+        );
+      }
     } finally {
       if (mounted) {
         setState(() => _isLoadingMore = false);
@@ -155,7 +173,7 @@ class _ProductCatalogScreenState extends State<ProductCatalogScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Shop'),
+        title: const Text('SincerelySea Store'),
         actions: <Widget>[
           IconButton(
             tooltip: 'Saved Products',
@@ -253,6 +271,26 @@ class _ProductCatalogScreenState extends State<ProductCatalogScreen> {
                     ),
                   );
                 },
+              ),
+            ],
+          );
+        }
+
+        if (_loadErrorMessage != null && _products.isEmpty) {
+          return ListView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+            children: <Widget>[
+              _buildToolbar(),
+              SizedBox(
+                height: 320,
+                child: CustomerStateView(
+                  icon: Icons.storefront_outlined,
+                  title: 'Store is unavailable',
+                  message: _loadErrorMessage!,
+                  actionLabel: 'Retry',
+                  onAction: _fetchInitialProducts,
+                ),
               ),
             ],
           );
@@ -366,12 +404,12 @@ class _ProductCatalogScreenState extends State<ProductCatalogScreen> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
         const Text(
-          'Discover Products',
+          'Official products',
           style: TextStyle(fontSize: 22, fontWeight: FontWeight.w700),
         ),
         const SizedBox(height: 4),
         Text(
-          '${_products.length} items available',
+          '${_products.length} items from SincerelySea Store',
           style: const TextStyle(color: AppColors.black54),
         ),
         const SizedBox(height: 12),
@@ -648,13 +686,15 @@ class _ProductCatalogScreenState extends State<ProductCatalogScreen> {
           ),
         ),
       );
-    } catch (e) {
+    } catch (_) {
       if (!mounted) {
         return;
       }
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Failed to update wishlist: $e')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Could not update your wishlist. Please try again.'),
+        ),
+      );
     }
   }
 }

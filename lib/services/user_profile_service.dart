@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_storage/firebase_storage.dart';
+import 'package:sincerelysea/config/media_upload_policy.dart';
 
 class UserProfileService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
@@ -10,7 +11,7 @@ class UserProfileService {
   final FirebaseStorage _storage = FirebaseStorage.instance;
 
   Stream<DocumentSnapshot<Map<String, dynamic>>> profileStream(String uid) {
-    return _firestore.collection('users').doc(uid).snapshots();
+    return _firestore.collection('users_public').doc(uid).snapshots();
   }
 
   String normalizeUsername(String raw) {
@@ -52,7 +53,7 @@ class UserProfileService {
     }
 
     final DocumentReference<Map<String, dynamic>> userRef = _firestore
-        .collection('users')
+        .collection('users_public')
         .doc(user.uid);
     final Map<String, dynamic> payload = <String, dynamic>{
       'displayName': displayName.trim(),
@@ -78,7 +79,7 @@ class UserProfileService {
     if (user == null) {
       throw Exception('User not authenticated');
     }
-    await _firestore.collection('users').doc(user.uid).set({
+    await _firestore.collection('users_public').doc(user.uid).set({
       'isPrivate': isPrivate,
       'allowComments': allowComments.trim().isEmpty
           ? 'everyone'
@@ -101,7 +102,7 @@ class UserProfileService {
     }
 
     final DocumentReference<Map<String, dynamic>> userRef = _firestore
-        .collection('users')
+        .collection('users_public')
         .doc(user.uid);
     final DocumentReference<Map<String, dynamic>> newUsernameRef = _firestore
         .collection('usernames')
@@ -177,13 +178,18 @@ class UserProfileService {
     if (user == null) {
       throw Exception('User not authenticated');
     }
+    final String contentType = await MediaUploadPolicy.validateImage(
+      imageFile,
+      maxBytes: MediaUploadPolicy.profileMaxBytes,
+      label: 'Profile image',
+    );
     final Reference ref = _storage.ref().child(
       'profile_images/${user.uid}.jpg',
     );
     await ref.putFile(
       imageFile,
       SettableMetadata(
-        contentType: 'image/jpeg',
+        contentType: contentType,
         cacheControl: 'public,max-age=300',
       ),
     );
@@ -194,7 +200,7 @@ class UserProfileService {
       'v': DateTime.now().millisecondsSinceEpoch.toString(),
     };
     final String versionedUrl = uri.replace(queryParameters: query).toString();
-    await _firestore.collection('users').doc(user.uid).set({
+    await _firestore.collection('users_public').doc(user.uid).set({
       'photoUrl': versionedUrl,
       'updatedAt': FieldValue.serverTimestamp(),
     }, SetOptions(merge: true));

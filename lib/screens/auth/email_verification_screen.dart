@@ -2,6 +2,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:sincerelysea/services/auth_service.dart';
+import 'package:sincerelysea/utils/auth_exception_handler.dart';
 import 'dart:async';
 
 class EmailVerificationScreen extends StatefulWidget {
@@ -63,7 +64,7 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
       final String message = switch (e.code) {
         'too-many-requests' =>
           'Too many requests. Please wait a moment and try again.',
-        _ => e.message ?? 'Failed to send verification email.',
+        _ => AuthExceptionHandler.handleException(e),
       };
       ScaffoldMessenger.of(
         context,

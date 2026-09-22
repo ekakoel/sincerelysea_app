@@ -7,6 +7,7 @@ import 'package:sincerelysea/services/follow_service.dart';
 import 'package:sincerelysea/services/moderation_service.dart';
 import 'package:sincerelysea/services/post_service.dart';
 import 'package:sincerelysea/widgets/app_check_network_image.dart';
+import 'package:sincerelysea/widgets/customer_state_view.dart';
 
 class UserProfilePreviewScreen extends StatelessWidget {
   const UserProfilePreviewScreen({
@@ -25,7 +26,7 @@ class UserProfilePreviewScreen extends StatelessWidget {
 
     return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
       stream: FirebaseFirestore.instance
-          .collection('users')
+          .collection('users_public')
           .doc(userId)
           .snapshots(),
       builder:
@@ -33,6 +34,21 @@ class UserProfilePreviewScreen extends StatelessWidget {
             BuildContext context,
             AsyncSnapshot<DocumentSnapshot<Map<String, dynamic>>> snapshot,
           ) {
+            if (snapshot.connectionState == ConnectionState.waiting &&
+                !snapshot.hasData) {
+              return const Scaffold(
+                body: Center(child: CircularProgressIndicator()),
+              );
+            }
+            if (snapshot.hasError && !snapshot.hasData) {
+              return const Scaffold(
+                body: CustomerStateView(
+                  icon: Icons.cloud_off_outlined,
+                  title: 'Profile unavailable',
+                  message: 'Check your connection and try again.',
+                ),
+              );
+            }
             final Map<String, dynamic> data =
                 snapshot.data?.data() ?? <String, dynamic>{};
             final String username =
@@ -245,91 +261,90 @@ class _FollowButtonState extends State<_FollowButton> {
             final bool isRequested = requestSnapshot.data ?? false;
             return StreamBuilder<bool>(
               stream: followService.isFollowingYouStream(widget.targetUid),
-              builder:
-                  (
-                    BuildContext context,
-                    AsyncSnapshot<bool> followBackSnapshot,
-                  ) {
-                    final bool isFollowingYou =
-                        followBackSnapshot.data ?? false;
-                    final String followLabel = isRequested
-                        ? 'Requested'
-                        : (isFollowingYou ? 'Follow back' : 'Follow');
-                    return SizedBox(
-                      height: 42,
-                      child: isFollowing
-                          ? OutlinedButton(
-                              onPressed: _isSubmitting
-                                  ? null
-                                  : () async {
-                                      setState(() => _isSubmitting = true);
-                                      try {
-                                        await followService.unfollowUser(
-                                          widget.targetUid,
-                                        );
-                                      } catch (e) {
-                                        if (!context.mounted) {
-                                          return;
-                                        }
-                                        ScaffoldMessenger.of(
-                                          context,
-                                        ).showSnackBar(
-                                          SnackBar(content: Text('Failed: $e')),
-                                        );
-                                      } finally {
-                                        if (mounted) {
-                                          setState(() => _isSubmitting = false);
-                                        }
-                                      }
-                                    },
-                              child: _isSubmitting
-                                  ? const SizedBox(
-                                      width: 16,
-                                      height: 16,
-                                      child: CircularProgressIndicator(
-                                        strokeWidth: 2,
+              builder: (BuildContext context, AsyncSnapshot<bool> followBackSnapshot) {
+                final bool isFollowingYou = followBackSnapshot.data ?? false;
+                final String followLabel = isRequested
+                    ? 'Requested'
+                    : (isFollowingYou ? 'Follow back' : 'Follow');
+                return SizedBox(
+                  height: 42,
+                  child: isFollowing
+                      ? OutlinedButton(
+                          onPressed: _isSubmitting
+                              ? null
+                              : () async {
+                                  setState(() => _isSubmitting = true);
+                                  try {
+                                    await followService.unfollowUser(
+                                      widget.targetUid,
+                                    );
+                                  } catch (_) {
+                                    if (!context.mounted) {
+                                      return;
+                                    }
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(
+                                        content: Text(
+                                          'Could not update follow status. Please try again.',
+                                        ),
                                       ),
-                                    )
-                                  : const Text('Unfollow'),
-                            )
-                          : FilledButton(
-                              onPressed: _isSubmitting || isRequested
-                                  ? null
-                                  : () async {
-                                      setState(() => _isSubmitting = true);
-                                      try {
-                                        await followService.followUser(
-                                          targetUid: widget.targetUid,
-                                          targetUsername: widget.targetUsername,
-                                        );
-                                      } catch (e) {
-                                        if (!context.mounted) {
-                                          return;
-                                        }
-                                        ScaffoldMessenger.of(
-                                          context,
-                                        ).showSnackBar(
-                                          SnackBar(content: Text('Failed: $e')),
-                                        );
-                                      } finally {
-                                        if (mounted) {
-                                          setState(() => _isSubmitting = false);
-                                        }
-                                      }
-                                    },
-                              child: _isSubmitting
-                                  ? const SizedBox(
-                                      width: 16,
-                                      height: 16,
-                                      child: CircularProgressIndicator(
-                                        strokeWidth: 2,
-                                        color: AppColors.white,
+                                    );
+                                  } finally {
+                                    if (mounted) {
+                                      setState(() => _isSubmitting = false);
+                                    }
+                                  }
+                                },
+                          child: _isSubmitting
+                              ? const SizedBox(
+                                  width: 16,
+                                  height: 16,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                  ),
+                                )
+                              : const Text('Unfollow'),
+                        )
+                      : FilledButton(
+                          onPressed: _isSubmitting || isRequested
+                              ? null
+                              : () async {
+                                  setState(() => _isSubmitting = true);
+                                  try {
+                                    await followService.followUser(
+                                      targetUid: widget.targetUid,
+                                      targetUsername: widget.targetUsername,
+                                    );
+                                  } catch (_) {
+                                    if (!context.mounted) {
+                                      return;
+                                    }
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(
+                                        content: Text(
+                                          'Could not update follow status. Please try again.',
+                                        ),
                                       ),
-                                    )
-                                  : Text(followLabel),
-                            ),
-                    );
-                  },
+                                    );
+                                  } finally {
+                                    if (mounted) {
+                                      setState(() => _isSubmitting = false);
+                                    }
+                                  }
+                                },
+                          child: _isSubmitting
+                              ? const SizedBox(
+                                  width: 16,
+                                  height: 16,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: AppColors.white,
+                                  ),
+                                )
+                              : Text(followLabel),
+                        ),
+                );
+              },
             );
           },
         );
@@ -351,19 +366,23 @@ class _StatsRow extends StatelessWidget {
     return Row(
       children: <Widget>[
         Expanded(
-          child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-            stream: postService.getUserPosts(userId),
-            builder:
-                (
-                  BuildContext context,
-                  AsyncSnapshot<QuerySnapshot<Map<String, dynamic>>> snapshot,
-                ) {
-                  return _StatChip(
-                    label: 'Posts',
-                    value: snapshot.data?.docs.length ?? 0,
-                  );
-                },
-          ),
+          child:
+              StreamBuilder<List<QueryDocumentSnapshot<Map<String, dynamic>>>>(
+                stream: postService.getUserPosts(userId),
+                builder:
+                    (
+                      BuildContext context,
+                      AsyncSnapshot<
+                        List<QueryDocumentSnapshot<Map<String, dynamic>>>
+                      >
+                      snapshot,
+                    ) {
+                      return _StatChip(
+                        label: 'Posts',
+                        value: snapshot.data?.length ?? 0,
+                      );
+                    },
+              ),
         ),
         const SizedBox(width: 8),
         Expanded(
@@ -421,25 +440,27 @@ class _UserPostsGrid extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final PostService postService = context.read<PostService>();
-    return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+    return StreamBuilder<List<QueryDocumentSnapshot<Map<String, dynamic>>>>(
       stream: postService.getUserPosts(userId),
       builder:
           (
             BuildContext context,
-            AsyncSnapshot<QuerySnapshot<Map<String, dynamic>>> snapshot,
+            AsyncSnapshot<List<QueryDocumentSnapshot<Map<String, dynamic>>>>
+            snapshot,
           ) {
             if (snapshot.connectionState == ConnectionState.waiting) {
               return const Center(child: CircularProgressIndicator());
             }
             if (snapshot.hasError) {
-              return Padding(
-                padding: const EdgeInsets.symmetric(vertical: 20),
-                child: Text('Failed to load posts: ${snapshot.error}'),
+              return const CustomerStateView(
+                icon: Icons.cloud_off_outlined,
+                title: 'Posts unavailable',
+                message: 'Check your connection and try again.',
               );
             }
             final List<QueryDocumentSnapshot<Map<String, dynamic>>> docs =
                 List<QueryDocumentSnapshot<Map<String, dynamic>>>.from(
-                  snapshot.data?.docs ??
+                  snapshot.data ??
                       <QueryDocumentSnapshot<Map<String, dynamic>>>[],
                 );
             docs.sort((a, b) {

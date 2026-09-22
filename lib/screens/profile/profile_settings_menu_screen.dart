@@ -5,7 +5,7 @@ import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:permission_handler/permission_handler.dart' as ph;
 import 'package:provider/provider.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:sincerelysea/screens/cart/cart_screen.dart';
 import 'package:sincerelysea/screens/legal/privacy_policy_screen.dart';
 import 'package:sincerelysea/screens/orders/order_history_screen.dart';
 import 'package:sincerelysea/screens/product/saved_products_screen.dart';
@@ -37,7 +37,6 @@ class _ProfileSettingsMenuScreenState extends State<ProfileSettingsMenuScreen> {
   int _estimatedCacheBytes = 0;
   String _privacyBadge = 'Checking...';
   String _permissionsBadge = 'Checking...';
-  String _notificationsBadge = 'Checking...';
 
   @override
   void initState() {
@@ -61,7 +60,7 @@ class _ProfileSettingsMenuScreenState extends State<ProfileSettingsMenuScreen> {
               _SettingsItem(
                 icon: Icons.person_outline,
                 title: 'Edit Profile',
-                subtitle: 'Name, bio, username, profile photo',
+                subtitle: 'Profile, data export, and account deletion',
                 onTap: () => Navigator.of(context).push(
                   MaterialPageRoute<void>(
                     builder: (_) => const ProfileSettingsScreen(),
@@ -82,8 +81,8 @@ class _ProfileSettingsMenuScreenState extends State<ProfileSettingsMenuScreen> {
               Divider(height: 1, color: semantic.divider),
               _SettingsItem(
                 icon: Icons.devices_outlined,
-                title: 'Session Management',
-                subtitle: 'Review active sessions and device access',
+                title: 'Session & Sign-in',
+                subtitle: 'Review this device and sign-in status',
                 onTap: () => Navigator.of(context).push(
                   MaterialPageRoute<void>(
                     builder: (_) => const SessionManagementScreen(),
@@ -94,7 +93,7 @@ class _ProfileSettingsMenuScreenState extends State<ProfileSettingsMenuScreen> {
           ),
           const SizedBox(height: 14),
           _SectionCard(
-            title: 'Privacy',
+            title: 'Privacy & Security',
             items: <Widget>[
               _SettingsItem(
                 icon: Icons.privacy_tip_outlined,
@@ -148,9 +147,8 @@ class _ProfileSettingsMenuScreenState extends State<ProfileSettingsMenuScreen> {
             items: <Widget>[
               _SettingsItem(
                 icon: Icons.notifications_outlined,
-                title: 'Notification Preferences',
-                subtitle:
-                    'Likes, comments, follows, shares • $_notificationsBadge',
+                title: 'Notification Settings',
+                subtitle: 'Manage system notification permission',
                 onTap: () async {
                   await Navigator.of(context).push(
                     MaterialPageRoute<void>(
@@ -166,35 +164,17 @@ class _ProfileSettingsMenuScreenState extends State<ProfileSettingsMenuScreen> {
           ),
           const SizedBox(height: 14),
           _SectionCard(
-            title: 'Data & Storage',
+            title: 'Shopping',
             items: <Widget>[
               _SettingsItem(
-                icon: Icons.download_outlined,
-                title: 'Export Data',
-                subtitle: 'Download your account data',
+                icon: Icons.shopping_cart_outlined,
+                title: 'Cart',
+                subtitle: 'Review products before checkout',
                 onTap: () => Navigator.of(context).push(
-                  MaterialPageRoute<void>(
-                    builder: (_) => const ProfileSettingsScreen(),
-                  ),
+                  MaterialPageRoute<void>(builder: (_) => const CartScreen()),
                 ),
               ),
               Divider(height: 1, color: semantic.divider),
-              _SettingsItem(
-                icon: Icons.cleaning_services_outlined,
-                title: 'Clear Media Cache',
-                subtitle: _clearingCache
-                    ? 'Clearing media cache...'
-                    : _loadingCacheEstimate
-                    ? 'Calculating cache usage...'
-                    : 'Cached media: ${_formatMegabytes(_estimatedCacheBytes)}',
-                onTap: _clearingCache ? null : _confirmAndClearMediaCache,
-              ),
-            ],
-          ),
-          const SizedBox(height: 14),
-          _SectionCard(
-            title: 'Commerce',
-            items: <Widget>[
               _SettingsItem(
                 icon: Icons.receipt_long_outlined,
                 title: 'My Orders',
@@ -220,34 +200,12 @@ class _ProfileSettingsMenuScreenState extends State<ProfileSettingsMenuScreen> {
           ),
           const SizedBox(height: 14),
           _SectionCard(
-            title: 'Support & Legal',
+            title: 'Support',
             items: <Widget>[
-              _SettingsItem(
-                icon: Icons.policy_outlined,
-                title: 'Privacy Policy',
-                subtitle: 'Read how your data is handled',
-                onTap: () => Navigator.of(context).push(
-                  MaterialPageRoute<void>(
-                    builder: (_) => const PrivacyPolicyScreen(),
-                  ),
-                ),
-              ),
-              Divider(height: 1, color: semantic.divider),
-              _SettingsItem(
-                icon: Icons.description_outlined,
-                title: 'Terms of Service',
-                subtitle: 'Understand rules and terms of use',
-                onTap: () => Navigator.of(context).push(
-                  MaterialPageRoute<void>(
-                    builder: (_) => const TermsOfServiceScreen(),
-                  ),
-                ),
-              ),
-              Divider(height: 1, color: semantic.divider),
               _SettingsItem(
                 icon: Icons.support_agent_outlined,
                 title: 'Contact Support',
-                subtitle: 'Report issues or request help',
+                subtitle: 'Get help or review your support tickets',
                 onTap: () => Navigator.of(context).push(
                   MaterialPageRoute<void>(
                     builder: (_) => const ContactSupportScreen(),
@@ -258,12 +216,50 @@ class _ProfileSettingsMenuScreenState extends State<ProfileSettingsMenuScreen> {
           ),
           const SizedBox(height: 14),
           _SectionCard(
-            title: 'About',
+            title: 'Legal',
             items: <Widget>[
+              _SettingsItem(
+                icon: Icons.description_outlined,
+                title: 'Terms & Conditions',
+                subtitle: 'Understand the community and store terms',
+                onTap: () => Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                    builder: (_) => const TermsOfServiceScreen(),
+                  ),
+                ),
+              ),
+              Divider(height: 1, color: semantic.divider),
+              _SettingsItem(
+                icon: Icons.policy_outlined,
+                title: 'Privacy Policy',
+                subtitle: 'Read how your data is handled',
+                onTap: () => Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                    builder: (_) => const PrivacyPolicyScreen(),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          _SectionCard(
+            title: 'Application',
+            items: <Widget>[
+              _SettingsItem(
+                icon: Icons.cleaning_services_outlined,
+                title: 'Clear Media Cache',
+                subtitle: _clearingCache
+                    ? 'Clearing media cache...'
+                    : _loadingCacheEstimate
+                    ? 'Calculating cache usage...'
+                    : 'Cached media: ${_formatMegabytes(_estimatedCacheBytes)}',
+                onTap: _clearingCache ? null : _confirmAndClearMediaCache,
+              ),
+              Divider(height: 1, color: semantic.divider),
               _SettingsItem(
                 icon: Icons.info_outline,
                 title: 'App Version',
-                subtitle: 'Version, build, and diagnostics',
+                subtitle: 'Version and release information',
                 onTap: () => Navigator.of(context).push(
                   MaterialPageRoute<void>(
                     builder: (_) => const AppVersionScreen(),
@@ -305,7 +301,6 @@ class _ProfileSettingsMenuScreenState extends State<ProfileSettingsMenuScreen> {
     await Future.wait(<Future<void>>[
       _loadPrivacyBadge(),
       _loadPermissionBadge(),
-      _loadNotificationBadge(),
     ]);
   }
 
@@ -319,7 +314,7 @@ class _ProfileSettingsMenuScreenState extends State<ProfileSettingsMenuScreen> {
     }
     final DocumentSnapshot<Map<String, dynamic>> doc = await FirebaseFirestore
         .instance
-        .collection('users')
+        .collection('users_public')
         .doc(user.uid)
         .get();
     final bool privateOn = doc.data()?['isPrivate'] == true;
@@ -363,33 +358,6 @@ class _ProfileSettingsMenuScreenState extends State<ProfileSettingsMenuScreen> {
       return;
     }
     setState(() => _permissionsBadge = label);
-  }
-
-  Future<void> _loadNotificationBadge() async {
-    const String kLikes = 'notif_pref_likes';
-    const String kComments = 'notif_pref_comments';
-    const String kFollows = 'notif_pref_follows';
-    const String kShares = 'notif_pref_shares';
-    const String kInApp = 'notif_pref_in_app';
-
-    final SharedPreferences prefs = await SharedPreferences.getInstance();
-    final List<bool> values = <bool>[
-      prefs.getBool(kLikes) ?? true,
-      prefs.getBool(kComments) ?? true,
-      prefs.getBool(kFollows) ?? true,
-      prefs.getBool(kShares) ?? true,
-      prefs.getBool(kInApp) ?? true,
-    ];
-    final int enabledCount = values.where((bool v) => v).length;
-    final String label = enabledCount == values.length
-        ? 'All on'
-        : enabledCount == 0
-        ? 'Muted'
-        : 'Custom';
-    if (!mounted) {
-      return;
-    }
-    setState(() => _notificationsBadge = label);
   }
 
   String _formatMegabytes(int bytes) {

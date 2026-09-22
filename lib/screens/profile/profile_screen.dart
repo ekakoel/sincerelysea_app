@@ -8,6 +8,7 @@ import 'package:sincerelysea/theme/app_colors.dart';
 import 'package:sincerelysea/theme/app_semantic_colors.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
+import 'package:sincerelysea/config/media_upload_policy.dart';
 import 'package:sincerelysea/l10n/app_localizations.dart';
 import 'package:sincerelysea/screens/product/product_detail_screen.dart';
 import 'package:sincerelysea/screens/profile/profile_settings_menu_screen.dart';
@@ -19,6 +20,7 @@ import 'package:sincerelysea/services/user_profile_service.dart';
 import 'package:sincerelysea/services/wishlist_service.dart';
 import 'package:sincerelysea/utils/post_location_label.dart';
 import 'package:sincerelysea/widgets/app_check_network_image.dart';
+import 'package:sincerelysea/widgets/customer_state_view.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -52,9 +54,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
       }
     } catch (e) {
       if (mounted) {
-        messenger.showSnackBar(
-          SnackBar(content: Text('Failed to update profile image: $e')),
-        );
+        final String message = e is MediaValidationException
+            ? e.message
+            : 'Upload failed. Check your connection and try again.';
+        messenger.showSnackBar(SnackBar(content: Text(message)));
       }
     } finally {
       if (mounted) {
@@ -75,7 +78,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
     return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
       stream: FirebaseFirestore.instance
-          .collection('users')
+          .collection('users_public')
           .doc(currentUser.uid)
           .snapshots(),
       builder:
@@ -83,11 +86,30 @@ class _ProfileScreenState extends State<ProfileScreen> {
             BuildContext context,
             AsyncSnapshot<DocumentSnapshot<Map<String, dynamic>>> snapshot,
           ) {
+            if (snapshot.connectionState == ConnectionState.waiting &&
+                !snapshot.hasData) {
+              return const Scaffold(
+                body: Center(child: CircularProgressIndicator()),
+              );
+            }
+            if (snapshot.hasError && !snapshot.hasData) {
+              return Scaffold(
+                appBar: AppBar(title: const Text('Profile')),
+                body: CustomerStateView(
+                  icon: Icons.cloud_off_outlined,
+                  title: 'Profile unavailable',
+                  message: 'Check your connection and try again.',
+                  actionLabel: 'Retry',
+                  onAction: () => setState(() {}),
+                ),
+              );
+            }
             final Map<String, dynamic> profileData =
                 snapshot.data?.data() ?? <String, dynamic>{};
             final String username =
-                profileData['username']?.toString() ??
-                _emailPrefix(currentUser.email).toLowerCase();
+                profileData['username']?.toString().trim().isNotEmpty == true
+                ? profileData['username'].toString()
+                : 'your-profile';
             final ColorScheme colorScheme = Theme.of(context).colorScheme;
             final AppSemanticColors semantic = context.semanticColors;
 
@@ -197,8 +219,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       },
                   body: TabBarView(
                     children: <Widget>[
-                      _CollectionsTab(userId: currentUser.uid),
-                      _UserPostGrid(userId: currentUser.uid),
+                      _CollectionsTab(
+                        userId: currentUser.uid,
+                        onRetry: () => setState(() {}),
+                      ),
+                      _UserPostGrid(
+                        userId: currentUser.uid,
+                        onRetry: () => setState(() {}),
+                      ),
                       _WishlistManager(userId: currentUser.uid),
                     ],
                   ),
@@ -261,13 +289,16 @@ class _ProfileHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final String displayName =
-        profileData['displayName']?.toString() ??
-        user.displayName ??
-        _emailPrefix(user.email);
+        profileData['displayName']?.toString().trim().isNotEmpty == true
+        ? profileData['displayName'].toString()
+        : user.displayName?.trim().isNotEmpty == true
+        ? user.displayName!
+        : 'SincerelySea customer';
     final String bio = profileData['bio']?.toString().trim() ?? '';
     final String username =
-        profileData['username']?.toString() ??
-        _emailPrefix(user.email).toLowerCase();
+        profileData['username']?.toString().trim().isNotEmpty == true
+        ? profileData['username'].toString()
+        : 'your-profile';
     final String? avatarUrl =
         profileData['photoUrl']?.toString().isNotEmpty == true
         ? profileData['photoUrl']?.toString()
@@ -399,17 +430,21 @@ class _ProfileStatsRow extends StatelessWidget {
     return Row(
       children: <Widget>[
         Expanded(
-          child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-            stream: postService.getUserPosts(userId),
-            builder:
-                (
-                  BuildContext context,
-                  AsyncSnapshot<QuerySnapshot<Map<String, dynamic>>> snapshot,
-                ) {
-                  final int count = snapshot.data?.docs.length ?? 0;
-                  return _StatItem(label: 'Posts', value: count);
-                },
-          ),
+          child:
+              StreamBuilder<List<QueryDocumentSnapshot<Map<String, dynamic>>>>(
+                stream: postService.getUserPosts(userId),
+                builder:
+                    (
+                      BuildContext context,
+                      AsyncSnapshot<
+                        List<QueryDocumentSnapshot<Map<String, dynamic>>>
+                      >
+                      snapshot,
+                    ) {
+                      final int count = snapshot.data?.length ?? 0;
+                      return _StatItem(label: 'Posts', value: count);
+                    },
+              ),
         ),
         Expanded(
           child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
@@ -481,9 +516,10 @@ class _StatItem extends StatelessWidget {
 }
 
 class _CollectionsTab extends StatelessWidget {
-  const _CollectionsTab({required this.userId});
+  const _CollectionsTab({required this.userId, required this.onRetry});
 
   final String userId;
+  final VoidCallback onRetry;
 
   @override
   Widget build(BuildContext context) {
@@ -499,8 +535,12 @@ class _CollectionsTab extends StatelessWidget {
             AsyncSnapshot<QuerySnapshot<Map<String, dynamic>>> snapshot,
           ) {
             if (snapshot.hasError) {
-              return Center(
-                child: Text('Failed to load collections: ${snapshot.error}'),
+              return CustomerStateView(
+                icon: Icons.cloud_off_outlined,
+                title: 'Collections unavailable',
+                message: 'Check your connection and try again.',
+                actionLabel: 'Retry',
+                onAction: onRetry,
               );
             }
             if (snapshot.connectionState == ConnectionState.waiting) {
@@ -514,8 +554,11 @@ class _CollectionsTab extends StatelessWidget {
                 );
 
             if (docs.isEmpty) {
-              return const Center(
-                child: Text('No collections yet. Add products you own first.'),
+              return const CustomerStateView(
+                icon: Icons.shopping_bag_outlined,
+                title: 'No collections yet',
+                message:
+                    'Products you add to your collection will appear here.',
               );
             }
 
@@ -676,24 +719,30 @@ class _CollectionsTab extends StatelessWidget {
 }
 
 class _UserPostGrid extends StatelessWidget {
-  const _UserPostGrid({required this.userId});
+  const _UserPostGrid({required this.userId, required this.onRetry});
 
   final String userId;
+  final VoidCallback onRetry;
 
   @override
   Widget build(BuildContext context) {
     final PostService postService = context.read<PostService>();
 
-    return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+    return StreamBuilder<List<QueryDocumentSnapshot<Map<String, dynamic>>>>(
       stream: postService.getUserPosts(userId),
       builder:
           (
             BuildContext context,
-            AsyncSnapshot<QuerySnapshot<Map<String, dynamic>>> snapshot,
+            AsyncSnapshot<List<QueryDocumentSnapshot<Map<String, dynamic>>>>
+            snapshot,
           ) {
             if (snapshot.hasError) {
-              return Center(
-                child: Text('Failed to load posts: ${snapshot.error}'),
+              return CustomerStateView(
+                icon: Icons.cloud_off_outlined,
+                title: 'Posts unavailable',
+                message: 'Check your connection and try again.',
+                actionLabel: 'Retry',
+                onAction: onRetry,
               );
             }
             if (snapshot.connectionState == ConnectionState.waiting) {
@@ -702,7 +751,7 @@ class _UserPostGrid extends StatelessWidget {
 
             final List<QueryDocumentSnapshot<Map<String, dynamic>>> docs =
                 List<QueryDocumentSnapshot<Map<String, dynamic>>>.from(
-                  snapshot.data?.docs ??
+                  snapshot.data ??
                       <QueryDocumentSnapshot<Map<String, dynamic>>>[],
                 );
             docs.sort((a, b) {
@@ -720,7 +769,11 @@ class _UserPostGrid extends StatelessWidget {
               return tsB.compareTo(tsA);
             });
             if (docs.isEmpty) {
-              return const Center(child: Text('No posts yet.'));
+              return const CustomerStateView(
+                icon: Icons.camera_alt_outlined,
+                title: 'No posts yet',
+                message: 'Your community posts will appear here.',
+              );
             }
 
             return GridView.builder(
@@ -1236,9 +1289,13 @@ class _WishlistManagerState extends State<_WishlistManager> {
                     ),
                   );
                 }
-              } catch (e) {
+              } catch (_) {
                 messenger.showSnackBar(
-                  SnackBar(content: Text('Failed to save wishlist: $e')),
+                  const SnackBar(
+                    content: Text(
+                      'Could not save the wishlist. Please try again.',
+                    ),
+                  ),
                 );
               } finally {
                 if (context.mounted) {
@@ -1388,11 +1445,13 @@ class _WishlistManagerState extends State<_WishlistManager> {
           ),
         );
       }
-    } catch (e) {
+    } catch (_) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Failed to update status: $e')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Could not update the wishlist. Please try again.'),
+          ),
+        );
       }
     } finally {
       if (mounted) {
@@ -1433,10 +1492,12 @@ class _WishlistManagerState extends State<_WishlistManager> {
           context,
         ).showSnackBar(const SnackBar(content: Text('Wishlist item deleted')));
       }
-    } catch (e) {
+    } catch (_) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to delete wishlist: $e')),
+          const SnackBar(
+            content: Text('Could not delete the wishlist. Please try again.'),
+          ),
         );
       }
     } finally {
@@ -1456,11 +1517,12 @@ class _WishlistManagerState extends State<_WishlistManager> {
             AsyncSnapshot<QuerySnapshot<Map<String, dynamic>>> snapshot,
           ) {
             if (snapshot.hasError) {
-              return Center(
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Text('Failed to load wishlist: ${snapshot.error}'),
-                ),
+              return CustomerStateView(
+                icon: Icons.cloud_off_outlined,
+                title: 'Wishlist unavailable',
+                message: 'Check your connection and try again.',
+                actionLabel: 'Retry',
+                onAction: () => setState(() {}),
               );
             }
 
@@ -1891,11 +1953,4 @@ String _formatDate(DateTime date) {
   final String day = date.day.toString().padLeft(2, '0');
   final String month = date.month.toString().padLeft(2, '0');
   return '$day/$month/${date.year}';
-}
-
-String _emailPrefix(String? email) {
-  if (email == null || email.isEmpty) {
-    return 'User';
-  }
-  return email.split('@').first;
 }

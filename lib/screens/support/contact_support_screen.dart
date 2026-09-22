@@ -8,9 +8,14 @@ import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:sincerelysea/config/legal_content.dart';
+import 'package:sincerelysea/config/media_upload_policy.dart';
+import 'package:sincerelysea/screens/legal/privacy_policy_screen.dart';
+import 'package:sincerelysea/screens/legal/terms_of_service_screen.dart';
 import 'package:sincerelysea/services/support_service.dart';
 import 'package:sincerelysea/theme/app_semantic_colors.dart';
 import 'package:sincerelysea/utils/auth_exception_handler.dart';
+import 'package:sincerelysea/widgets/customer_state_view.dart';
 
 class ContactSupportScreen extends StatefulWidget {
   const ContactSupportScreen({super.key});
@@ -40,11 +45,6 @@ class _ContactSupportScreenState extends State<ContactSupportScreen> {
 
   static const List<Map<String, String>> _faqItems = <Map<String, String>>[
     <String, String>{
-      'q': 'How long does support response usually take?',
-      'a':
-          'Most tickets receive the first response within 24 to 48 hours depending on volume.',
-    },
-    <String, String>{
       'q': 'How do I reset my password?',
       'a':
           'Use the Forgot Password flow from the login screen, then check your email for reset instructions.',
@@ -52,7 +52,7 @@ class _ContactSupportScreenState extends State<ContactSupportScreen> {
     <String, String>{
       'q': 'Why is my post not visible?',
       'a':
-          'Check your post visibility settings and ensure image upload plus Firestore write completed successfully.',
+          'Check the post visibility setting and your connection, then retry. Submit a technical-support ticket if the problem continues.',
     },
     <String, String>{
       'q': 'How can I report abusive content?',
@@ -135,6 +135,15 @@ class _ContactSupportScreenState extends State<ContactSupportScreen> {
         body: ListView(
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
           children: <Widget>[
+            const Card(
+              child: Padding(
+                padding: EdgeInsets.all(14),
+                child: Text(
+                  'Use ${LegalContent.supportReference} for account, profile, community, shopping, checkout, order, privacy, deletion, or technical issues.',
+                ),
+              ),
+            ),
+            const SizedBox(height: 10),
             TextField(
               controller: _faqSearchController,
               decoration: const InputDecoration(
@@ -164,10 +173,17 @@ class _ContactSupportScreenState extends State<ContactSupportScreen> {
                   ),
                 ),
                 _QuickActionChip(
-                  label: 'Payment/Billing',
+                  label: 'Checkout/Order',
                   onTap: () => _applyQuickAction(
-                    category: 'billing',
-                    subject: 'Billing question: ',
+                    category: 'order',
+                    subject: 'Checkout/order issue: ',
+                  ),
+                ),
+                _QuickActionChip(
+                  label: 'Product question',
+                  onTap: () => _applyQuickAction(
+                    category: 'product',
+                    subject: 'Product question: ',
                   ),
                 ),
                 _QuickActionChip(
@@ -205,6 +221,32 @@ class _ContactSupportScreenState extends State<ContactSupportScreen> {
                 ),
               ),
             const SizedBox(height: 10),
+            Row(
+              children: <Widget>[
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: () => Navigator.of(context).push(
+                      MaterialPageRoute<void>(
+                        builder: (_) => const TermsOfServiceScreen(),
+                      ),
+                    ),
+                    child: const Text('Terms & Conditions'),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: () => Navigator.of(context).push(
+                      MaterialPageRoute<void>(
+                        builder: (_) => const PrivacyPolicyScreen(),
+                      ),
+                    ),
+                    child: const Text('Privacy Policy'),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
             const Divider(),
             const SizedBox(height: 10),
             _SectionLabel('Submit Ticket', semantic: semantic),
@@ -222,13 +264,26 @@ class _ContactSupportScreenState extends State<ContactSupportScreen> {
                         child: Text('Account'),
                       ),
                       DropdownMenuItem(value: 'bug', child: Text('Bug')),
+                      DropdownMenuItem(value: 'order', child: Text('Order')),
                       DropdownMenuItem(
-                        value: 'billing',
-                        child: Text('Billing'),
+                        value: 'product',
+                        child: Text('Product'),
+                      ),
+                      DropdownMenuItem(
+                        value: 'community',
+                        child: Text('Community/Report'),
                       ),
                       DropdownMenuItem(
                         value: 'privacy',
                         child: Text('Privacy'),
+                      ),
+                      DropdownMenuItem(
+                        value: 'account_deletion',
+                        child: Text('Account Deletion'),
+                      ),
+                      DropdownMenuItem(
+                        value: 'technical',
+                        child: Text('Technical'),
                       ),
                       DropdownMenuItem(value: 'other', child: Text('Other')),
                     ],
@@ -486,6 +541,9 @@ class _ContactSupportScreenState extends State<ContactSupportScreen> {
   }
 
   String _mapSupportSubmitError(Object e) {
+    if (e is MediaValidationException) {
+      return e.message;
+    }
     if (e is FirebaseException &&
         (e.code == 'unavailable' || e.code == 'network-request-failed')) {
       return 'No internet connection. Your draft is saved, please retry later.';
@@ -587,11 +645,6 @@ class SupportTicketSubmittedScreen extends StatelessWidget {
               ),
               const SizedBox(height: 10),
               Text('Ticket ID: $ticketNumber', textAlign: TextAlign.center),
-              const SizedBox(height: 4),
-              const Text(
-                'Estimated first response: 24-48 hours',
-                textAlign: TextAlign.center,
-              ),
               const SizedBox(height: 18),
               SizedBox(
                 width: double.infinity,
@@ -673,24 +726,12 @@ class _SupportTicketsScreenState extends State<SupportTicketsScreen> {
                       return const Center(child: CircularProgressIndicator());
                     }
                     if (snapshot.hasError) {
-                      return Padding(
-                        padding: const EdgeInsets.all(16),
-                        child: Center(
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: <Widget>[
-                              Text(
-                                'Failed to load tickets: ${snapshot.error}',
-                                textAlign: TextAlign.center,
-                              ),
-                              const SizedBox(height: 10),
-                              FilledButton.tonal(
-                                onPressed: () => setState(() {}),
-                                child: const Text('Retry'),
-                              ),
-                            ],
-                          ),
-                        ),
+                      return CustomerStateView(
+                        icon: Icons.cloud_off_outlined,
+                        title: 'Tickets unavailable',
+                        message: 'Check your connection and try again.',
+                        actionLabel: 'Retry',
+                        onAction: () => setState(() {}),
                       );
                     }
                     final List<QueryDocumentSnapshot<Map<String, dynamic>>>
@@ -821,24 +862,12 @@ class _SupportTicketDetailScreenState extends State<SupportTicketDetailScreen> {
                 return const Center(child: CircularProgressIndicator());
               }
               if (ticketSnapshot.hasError) {
-                return Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Center(
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: <Widget>[
-                        Text(
-                          'Failed to load ticket: ${ticketSnapshot.error}',
-                          textAlign: TextAlign.center,
-                        ),
-                        const SizedBox(height: 10),
-                        FilledButton.tonal(
-                          onPressed: () => setState(() {}),
-                          child: const Text('Retry'),
-                        ),
-                      ],
-                    ),
-                  ),
+                return CustomerStateView(
+                  icon: Icons.cloud_off_outlined,
+                  title: 'Ticket unavailable',
+                  message: 'Check your connection and try again.',
+                  actionLabel: 'Retry',
+                  onAction: () => setState(() {}),
                 );
               }
               if (!ticketSnapshot.hasData || !ticketSnapshot.data!.exists) {
@@ -869,13 +898,12 @@ class _SupportTicketDetailScreenState extends State<SupportTicketDetailScreen> {
                               );
                             }
                             if (msgSnapshot.hasError) {
-                              return Center(
-                                child: Padding(
-                                  padding: const EdgeInsets.all(16),
-                                  child: Text(
-                                    'Failed to load timeline: ${msgSnapshot.error}',
-                                  ),
-                                ),
+                              return CustomerStateView(
+                                icon: Icons.cloud_off_outlined,
+                                title: 'Conversation unavailable',
+                                message: 'Check your connection and try again.',
+                                actionLabel: 'Retry',
+                                onAction: () => setState(() {}),
                               );
                             }
                             final List<
@@ -1033,7 +1061,10 @@ class _TicketHeader extends StatelessWidget {
     final String status = ticket['status']?.toString() ?? 'open';
     final String ticketNo = ticket['ticketNumber']?.toString() ?? '-';
     final String category = ticket['category']?.toString() ?? 'other';
-    final String attachmentUrl = ticket['attachmentUrl']?.toString() ?? '';
+    final String attachmentName =
+        ticket['attachmentName']?.toString().trim() ?? '';
+    final String legacyAttachmentUrl =
+        ticket['attachmentUrl']?.toString().trim() ?? '';
     return Card(
       margin: const EdgeInsets.fromLTRB(12, 12, 12, 0),
       child: Padding(
@@ -1049,9 +1080,12 @@ class _TicketHeader extends StatelessWidget {
             Text('Ticket: $ticketNo'),
             Text('Category: ${category.toUpperCase()}'),
             Text('Status: ${status.toUpperCase()}'),
-            if (attachmentUrl.isNotEmpty) ...<Widget>[
+            if (attachmentName.isNotEmpty ||
+                legacyAttachmentUrl.isNotEmpty) ...<Widget>[
               const SizedBox(height: 8),
-              SelectableText('Attachment: $attachmentUrl'),
+              Text(
+                'Attachment: ${attachmentName.isEmpty ? 'Legacy attachment' : attachmentName}',
+              ),
             ],
           ],
         ),

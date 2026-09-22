@@ -19,6 +19,7 @@ class MainNavigationScreen extends StatefulWidget {
 
 class _MainNavigationScreenState extends State<MainNavigationScreen> {
   int _currentIndex = 0;
+  bool _exploreInitialized = false;
   DeepLinkService? _deepLinkService;
   bool _isOpeningDeepLink = false;
   static const double _bottomNavIconTopPadding = 4;
@@ -48,6 +49,18 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
     _openPendingSharedPostIfAny();
   }
 
+  void _selectTab(int index) {
+    if (index == _currentIndex) {
+      return;
+    }
+    setState(() {
+      _currentIndex = index;
+      if (index == 2) {
+        _exploreInitialized = true;
+      }
+    });
+  }
+
   Future<void> _openPendingSharedPostIfAny() async {
     if (!mounted || _isOpeningDeepLink || _deepLinkService == null) {
       return;
@@ -75,67 +88,77 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
     final List<Widget> pages = <Widget>[
       const HomeScreen(),
       const DiscoveryScreen(),
-      _currentIndex == 2 ? const MapPostsScreen() : const SizedBox.shrink(),
+      _exploreInitialized || _currentIndex == 2
+          ? const MapPostsScreen()
+          : const SizedBox.shrink(),
       const ProductCatalogScreen(),
       const ProfileScreen(),
     ];
-    return Scaffold(
-      body: IndexedStack(index: _currentIndex, children: pages),
-      bottomNavigationBar: BottomNavigationBar(
-        type: BottomNavigationBarType.fixed,
-        backgroundColor: colorScheme.surface,
-        selectedItemColor: colorScheme.primary,
-        unselectedItemColor: colorScheme.onSurface.withValues(alpha: 0.65),
-        selectedLabelStyle: const TextStyle(fontWeight: FontWeight.w600),
-        currentIndex: _currentIndex,
-        onTap: (int value) => setState(() => _currentIndex = value),
-        items: <BottomNavigationBarItem>[
-          BottomNavigationBarItem(
-            icon: Padding(
-              padding: const EdgeInsets.only(top: _bottomNavIconTopPadding),
-              child: const Icon(Icons.home),
-            ),
-            label: 'Home',
-          ),
-          BottomNavigationBarItem(
-            icon: Padding(
-              padding: const EdgeInsets.only(top: _bottomNavIconTopPadding),
-              child: const Icon(Icons.search),
-            ),
-            label: 'Search',
-          ),
-          BottomNavigationBarItem(
-            icon: Padding(
-              padding: const EdgeInsets.only(top: _bottomNavIconTopPadding),
-              child: const Icon(Icons.explore),
-            ),
-            label: 'Explore',
-          ),
-          BottomNavigationBarItem(
-            icon: Padding(
-              padding: const EdgeInsets.only(top: _bottomNavIconTopPadding),
-              child: StreamBuilder<int>(
-                stream: context.read<CartService>().cartItemCountStream(),
-                builder: (BuildContext context, AsyncSnapshot<int> snapshot) {
-                  final int totalItems = snapshot.data ?? 0;
-                  return Badge(
-                    isLabelVisible: totalItems > 0,
-                    label: Text(totalItems > 99 ? '99+' : '$totalItems'),
-                    child: const Icon(Icons.storefront_outlined),
-                  );
-                },
+    return PopScope(
+      canPop: _currentIndex == 0,
+      onPopInvokedWithResult: (bool didPop, Object? result) {
+        if (!didPop && _currentIndex != 0) {
+          _selectTab(0);
+        }
+      },
+      child: Scaffold(
+        body: IndexedStack(index: _currentIndex, children: pages),
+        bottomNavigationBar: BottomNavigationBar(
+          type: BottomNavigationBarType.fixed,
+          backgroundColor: colorScheme.surface,
+          selectedItemColor: colorScheme.primary,
+          unselectedItemColor: colorScheme.onSurface.withValues(alpha: 0.65),
+          selectedLabelStyle: const TextStyle(fontWeight: FontWeight.w600),
+          currentIndex: _currentIndex,
+          onTap: _selectTab,
+          items: <BottomNavigationBarItem>[
+            BottomNavigationBarItem(
+              icon: Padding(
+                padding: const EdgeInsets.only(top: _bottomNavIconTopPadding),
+                child: const Icon(Icons.home),
               ),
+              label: 'Home',
             ),
-            label: 'Shop',
-          ),
-          BottomNavigationBarItem(
-            icon: Padding(
-              padding: const EdgeInsets.only(top: _bottomNavIconTopPadding),
-              child: const Icon(Icons.person),
+            BottomNavigationBarItem(
+              icon: Padding(
+                padding: const EdgeInsets.only(top: _bottomNavIconTopPadding),
+                child: const Icon(Icons.search),
+              ),
+              label: 'Search',
             ),
-            label: 'Profile',
-          ),
-        ],
+            BottomNavigationBarItem(
+              icon: Padding(
+                padding: const EdgeInsets.only(top: _bottomNavIconTopPadding),
+                child: const Icon(Icons.explore),
+              ),
+              label: 'Explore',
+            ),
+            BottomNavigationBarItem(
+              icon: Padding(
+                padding: const EdgeInsets.only(top: _bottomNavIconTopPadding),
+                child: StreamBuilder<int>(
+                  stream: context.read<CartService>().cartItemCountStream(),
+                  builder: (BuildContext context, AsyncSnapshot<int> snapshot) {
+                    final int totalItems = snapshot.data ?? 0;
+                    return Badge(
+                      isLabelVisible: totalItems > 0,
+                      label: Text(totalItems > 99 ? '99+' : '$totalItems'),
+                      child: const Icon(Icons.storefront_outlined),
+                    );
+                  },
+                ),
+              ),
+              label: 'Shop',
+            ),
+            BottomNavigationBarItem(
+              icon: Padding(
+                padding: const EdgeInsets.only(top: _bottomNavIconTopPadding),
+                child: const Icon(Icons.person),
+              ),
+              label: 'Profile',
+            ),
+          ],
+        ),
       ),
     );
   }

@@ -6,10 +6,16 @@ import 'package:sincerelysea/screens/post/shared_post_detail_screen.dart';
 import 'package:sincerelysea/screens/product/product_detail_screen.dart';
 import 'package:sincerelysea/screens/profile/user_profile_preview_screen.dart';
 import 'package:sincerelysea/services/notification_center_service.dart';
+import 'package:sincerelysea/widgets/customer_state_view.dart';
 
-class NotificationsScreen extends StatelessWidget {
+class NotificationsScreen extends StatefulWidget {
   const NotificationsScreen({super.key});
 
+  @override
+  State<NotificationsScreen> createState() => _NotificationsScreenState();
+}
+
+class _NotificationsScreenState extends State<NotificationsScreen> {
   @override
   Widget build(BuildContext context) {
     final NotificationCenterService service = context
@@ -21,7 +27,7 @@ class NotificationsScreen extends StatelessWidget {
         title: const Text('Notifications'),
         actions: <Widget>[
           TextButton(
-            onPressed: () => service.markAllAsRead(),
+            onPressed: () => _markAllAsRead(service),
             child: const Text('Mark all read'),
           ),
         ],
@@ -37,10 +43,12 @@ class NotificationsScreen extends StatelessWidget {
                 return const Center(child: CircularProgressIndicator());
               }
               if (snapshot.hasError) {
-                return Center(
-                  child: Text(
-                    'Failed to load notifications: ${snapshot.error}',
-                  ),
+                return CustomerStateView(
+                  icon: Icons.cloud_off_outlined,
+                  title: 'Notifications unavailable',
+                  message: 'Check your connection and try again.',
+                  actionLabel: 'Retry',
+                  onAction: () => setState(() {}),
                 );
               }
 
@@ -48,7 +56,11 @@ class NotificationsScreen extends StatelessWidget {
                   snapshot.data?.docs ??
                   <QueryDocumentSnapshot<Map<String, dynamic>>>[];
               if (docs.isEmpty) {
-                return const Center(child: Text('No notifications yet.'));
+                return const CustomerStateView(
+                  icon: Icons.notifications_none,
+                  title: 'No notifications yet',
+                  message: 'New community and store updates will appear here.',
+                );
               }
 
               return ListView.separated(
@@ -91,7 +103,19 @@ class NotificationsScreen extends StatelessWidget {
                     ),
                     subtitle: Text(_timeLabel(data['createdAt'])),
                     onTap: () async {
-                      await service.markAsRead(docs[index].id);
+                      try {
+                        await service.markAsRead(docs[index].id);
+                      } catch (_) {
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text(
+                                'Could not update notification status.',
+                              ),
+                            ),
+                          );
+                        }
+                      }
                       if (!context.mounted) {
                         return;
                       }
@@ -130,6 +154,19 @@ class NotificationsScreen extends StatelessWidget {
             },
       ),
     );
+  }
+
+  Future<void> _markAllAsRead(NotificationCenterService service) async {
+    try {
+      await service.markAllAsRead();
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Could not mark notifications as read. Try again.'),
+        ),
+      );
+    }
   }
 
   String _defaultMessage(String type, String actor) {

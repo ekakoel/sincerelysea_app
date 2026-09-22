@@ -1,7 +1,9 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:sincerelysea/services/social_post_query_service.dart';
 
 class DiscoveryService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final SocialPostQueryService _socialQueries = SocialPostQueryService();
 
   Future<QuerySnapshot<Map<String, dynamic>>> searchUsersPage(
     String query, {
@@ -14,7 +16,7 @@ class DiscoveryService {
     }
 
     Query<Map<String, dynamic>> queryRef = _firestore
-        .collection('users')
+        .collection('users_public')
         .orderBy('usernameLower')
         .startAt(<String>[normalized])
         .endAt(<String>['$normalized\uf8ff'])
@@ -41,9 +43,9 @@ class DiscoveryService {
     return snapshot.docs;
   }
 
-  Future<QuerySnapshot<Map<String, dynamic>>> searchByHashtagPage(
+  Future<List<SocialPostDocument>> searchByHashtagPage(
     String hashtag, {
-    DocumentSnapshot<Map<String, dynamic>>? startAfter,
+    int offset = 0,
     int limit = 20,
   }) async {
     final String normalized = hashtag.trim().isEmpty
@@ -55,15 +57,11 @@ class DiscoveryService {
       throw Exception('Hashtag query cannot be empty');
     }
 
-    Query<Map<String, dynamic>> queryRef = _firestore
-        .collection('posts')
-        .where('hashtags', arrayContains: normalized)
-        .limit(limit);
-
-    if (startAfter != null) {
-      queryRef = queryRef.startAfterDocument(startAfter);
-    }
-    return queryRef.get();
+    return _socialQueries.loadVisiblePosts(
+      hashtag: normalized,
+      offset: offset,
+      limit: limit,
+    );
   }
 
   Future<List<QueryDocumentSnapshot<Map<String, dynamic>>>> searchByHashtag(
@@ -78,14 +76,12 @@ class DiscoveryService {
       return <QueryDocumentSnapshot<Map<String, dynamic>>>[];
     }
 
-    final QuerySnapshot<Map<String, dynamic>> snapshot =
-        await searchByHashtagPage(normalized, limit: 30);
-    return snapshot.docs;
+    return searchByHashtagPage(normalized, limit: 30);
   }
 
-  Future<QuerySnapshot<Map<String, dynamic>>> searchByLocationPage(
+  Future<List<SocialPostDocument>> searchByLocationPage(
     String locationQuery, {
-    DocumentSnapshot<Map<String, dynamic>>? startAfter,
+    int offset = 0,
     int limit = 20,
   }) async {
     final String normalized = locationQuery.trim().toLowerCase();
@@ -93,15 +89,11 @@ class DiscoveryService {
       throw Exception('Location query cannot be empty');
     }
 
-    Query<Map<String, dynamic>> queryRef = _firestore
-        .collection('posts')
-        .where('locationKeywords', arrayContains: normalized)
-        .limit(limit);
-
-    if (startAfter != null) {
-      queryRef = queryRef.startAfterDocument(startAfter);
-    }
-    return queryRef.get();
+    return _socialQueries.loadVisiblePosts(
+      locationKeyword: normalized,
+      offset: offset,
+      limit: limit,
+    );
   }
 
   Future<List<QueryDocumentSnapshot<Map<String, dynamic>>>> searchByLocation(
@@ -112,15 +104,13 @@ class DiscoveryService {
       return <QueryDocumentSnapshot<Map<String, dynamic>>>[];
     }
 
-    final QuerySnapshot<Map<String, dynamic>> snapshot =
-        await searchByLocationPage(normalized, limit: 30);
-    return snapshot.docs;
+    return searchByLocationPage(normalized, limit: 30);
   }
 
   Future<List<QueryDocumentSnapshot<Map<String, dynamic>>>>
   suggestedUsers() async {
     final QuerySnapshot<Map<String, dynamic>> snapshot = await _firestore
-        .collection('users')
+        .collection('users_public')
         .orderBy('updatedAt', descending: true)
         .limit(12)
         .get();

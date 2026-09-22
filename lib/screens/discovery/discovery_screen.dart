@@ -7,6 +7,7 @@ import 'package:sincerelysea/theme/app_semantic_colors.dart';
 import 'package:sincerelysea/screens/post/shared_post_detail_screen.dart';
 import 'package:sincerelysea/screens/profile/user_profile_preview_screen.dart';
 import 'package:sincerelysea/services/discovery_service.dart';
+import 'package:sincerelysea/widgets/customer_state_view.dart';
 
 class DiscoveryScreen extends StatefulWidget {
   const DiscoveryScreen({super.key});
@@ -29,12 +30,13 @@ class _DiscoveryScreenState extends State<DiscoveryScreen> {
   List<QueryDocumentSnapshot<Map<String, dynamic>>> _suggestedUsers =
       <QueryDocumentSnapshot<Map<String, dynamic>>>[];
   DocumentSnapshot<Map<String, dynamic>>? _lastUserDoc;
-  DocumentSnapshot<Map<String, dynamic>>? _lastHashtagDoc;
+  int _hashtagOffset = 0;
   bool _hasMoreUsers = true;
   bool _hasMoreHashtags = true;
   bool _loadingUsersMore = false;
   bool _loadingHashtagsMore = false;
   bool _isLoading = false;
+  String? _errorMessage;
 
   @override
   void initState() {
@@ -62,13 +64,30 @@ class _DiscoveryScreenState extends State<DiscoveryScreen> {
   }
 
   Future<void> _loadSuggestions() async {
-    final DiscoveryService service = context.read<DiscoveryService>();
-    final List<QueryDocumentSnapshot<Map<String, dynamic>>> data = await service
-        .suggestedUsers();
-    if (!mounted) {
-      return;
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
+    try {
+      final DiscoveryService service = context.read<DiscoveryService>();
+      final List<QueryDocumentSnapshot<Map<String, dynamic>>> data =
+          await service.suggestedUsers();
+      if (!mounted) {
+        return;
+      }
+      setState(() => _suggestedUsers = data);
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _errorMessage =
+              'Suggested people could not be loaded. Check your connection.';
+        });
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
     }
-    setState(() => _suggestedUsers = data);
   }
 
   Future<void> _search() async {
@@ -80,7 +99,7 @@ class _DiscoveryScreenState extends State<DiscoveryScreen> {
         _userResults = <QueryDocumentSnapshot<Map<String, dynamic>>>[];
         _hashtagResults = <QueryDocumentSnapshot<Map<String, dynamic>>>[];
         _lastUserDoc = null;
-        _lastHashtagDoc = null;
+        _hashtagOffset = 0;
         _hasMoreUsers = true;
         _hasMoreHashtags = true;
       });
@@ -93,9 +112,10 @@ class _DiscoveryScreenState extends State<DiscoveryScreen> {
       _userResults = <QueryDocumentSnapshot<Map<String, dynamic>>>[];
       _hashtagResults = <QueryDocumentSnapshot<Map<String, dynamic>>>[];
       _lastUserDoc = null;
-      _lastHashtagDoc = null;
+      _hashtagOffset = 0;
       _hasMoreUsers = true;
       _hasMoreHashtags = true;
+      _errorMessage = null;
     });
     final DiscoveryService service = context.read<DiscoveryService>();
     final String userBackendQuery = _backendSeedQuery(query);
@@ -104,28 +124,40 @@ class _DiscoveryScreenState extends State<DiscoveryScreen> {
       isHashtag: true,
     );
     try {
-      final List<QuerySnapshot<Map<String, dynamic>>> pages =
-          await Future.wait(<Future<QuerySnapshot<Map<String, dynamic>>>>[
-            service.searchUsersPage(userBackendQuery, limit: _pageSize),
-            service.searchByHashtagPage(hashtagBackendQuery, limit: _pageSize),
-          ]);
+      final Future<QuerySnapshot<Map<String, dynamic>>> userFuture = service
+          .searchUsersPage(userBackendQuery, limit: _pageSize);
+      final Future<List<QueryDocumentSnapshot<Map<String, dynamic>>>>
+      hashtagFuture = service.searchByHashtagPage(
+        hashtagBackendQuery,
+        limit: _pageSize,
+      );
+      final QuerySnapshot<Map<String, dynamic>> userPage = await userFuture;
+      final List<QueryDocumentSnapshot<Map<String, dynamic>>> hashtagPage =
+          await hashtagFuture;
       if (!mounted ||
           requestId != _searchRequestId ||
           _queryController.text.trim() != query) {
         return;
       }
       final List<QueryDocumentSnapshot<Map<String, dynamic>>> filteredUsers =
-          _rankUsersByRelevance(pages[0].docs, query);
+          _rankUsersByRelevance(userPage.docs, query);
       final List<QueryDocumentSnapshot<Map<String, dynamic>>> filteredHashtags =
-          _rankHashtagPostsByRelevance(pages[1].docs, query);
+          _rankHashtagPostsByRelevance(hashtagPage, query);
       setState(() {
         _userResults = filteredUsers;
         _hashtagResults = filteredHashtags;
-        _lastUserDoc = pages[0].docs.isNotEmpty ? pages[0].docs.last : null;
-        _lastHashtagDoc = pages[1].docs.isNotEmpty ? pages[1].docs.last : null;
-        _hasMoreUsers = pages[0].docs.length >= _pageSize;
-        _hasMoreHashtags = pages[1].docs.length >= _pageSize;
+        _lastUserDoc = userPage.docs.isNotEmpty ? userPage.docs.last : null;
+        _hashtagOffset = hashtagPage.length;
+        _hasMoreUsers = userPage.docs.length >= _pageSize;
+        _hasMoreHashtags = hashtagPage.length >= _pageSize;
       });
+    } catch (_) {
+      if (mounted && requestId == _searchRequestId) {
+        setState(() {
+          _errorMessage =
+              'Search is temporarily unavailable. Check your connection and try again.';
+        });
+      }
     } finally {
       if (mounted && requestId == _searchRequestId) {
         setState(() => _isLoading = false);
@@ -160,6 +192,14 @@ class _DiscoveryScreenState extends State<DiscoveryScreen> {
         _lastUserDoc = page.docs.isNotEmpty ? page.docs.last : _lastUserDoc;
         _hasMoreUsers = page.docs.length >= _pageSize;
       });
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Could not load more people. Please try again.'),
+          ),
+        );
+      }
     } finally {
       if (mounted) {
         setState(() => _loadingUsersMore = false);
@@ -180,25 +220,30 @@ class _DiscoveryScreenState extends State<DiscoveryScreen> {
         _activeQuery,
         isHashtag: true,
       );
-      final QuerySnapshot<Map<String, dynamic>> page = await context
-          .read<DiscoveryService>()
-          .searchByHashtagPage(
+      final List<QueryDocumentSnapshot<Map<String, dynamic>>> page =
+          await context.read<DiscoveryService>().searchByHashtagPage(
             backendQuery,
-            startAfter: _lastHashtagDoc,
+            offset: _hashtagOffset,
             limit: _pageSize,
           );
       if (!mounted) {
         return;
       }
       final List<QueryDocumentSnapshot<Map<String, dynamic>>> filteredHashtags =
-          _rankHashtagPostsByRelevance(page.docs, _activeQuery);
+          _rankHashtagPostsByRelevance(page, _activeQuery);
       setState(() {
         _hashtagResults.addAll(filteredHashtags);
-        _lastHashtagDoc = page.docs.isNotEmpty
-            ? page.docs.last
-            : _lastHashtagDoc;
-        _hasMoreHashtags = page.docs.length >= _pageSize;
+        _hashtagOffset += page.length;
+        _hasMoreHashtags = page.length >= _pageSize;
       });
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Could not load more posts. Please try again.'),
+          ),
+        );
+      }
     } finally {
       if (mounted) {
         setState(() => _loadingHashtagsMore = false);
@@ -353,7 +398,7 @@ class _DiscoveryScreenState extends State<DiscoveryScreen> {
       length: 2,
       child: Scaffold(
         appBar: AppBar(
-          title: const Text('Discover'),
+          title: const Text('Search'),
           bottom: const TabBar(
             tabs: <Tab>[
               Tab(text: 'Users'),
@@ -404,12 +449,24 @@ class _DiscoveryScreenState extends State<DiscoveryScreen> {
               ),
             ),
             Expanded(
-              child: TabBarView(
-                children: <Widget>[
-                  _buildUserTab(context),
-                  _buildPostTab(context, _hashtagResults),
-                ],
-              ),
+              child: _isLoading
+                  ? const Center(child: CircularProgressIndicator())
+                  : _errorMessage != null
+                  ? CustomerStateView(
+                      icon: Icons.cloud_off_outlined,
+                      title: 'Search is unavailable',
+                      message: _errorMessage!,
+                      actionLabel: 'Retry',
+                      onAction: _activeQuery.isEmpty
+                          ? _loadSuggestions
+                          : _search,
+                    )
+                  : TabBarView(
+                      children: <Widget>[
+                        _buildUserTab(context),
+                        _buildPostTab(context, _hashtagResults),
+                      ],
+                    ),
             ),
           ],
         ),
@@ -424,7 +481,13 @@ class _DiscoveryScreenState extends State<DiscoveryScreen> {
         ? _userResults
         : _suggestedUsers;
     if (list.isEmpty) {
-      return const Center(child: Text('No users found.'));
+      return CustomerStateView(
+        icon: Icons.person_search_outlined,
+        title: isSearching ? 'No people found' : 'No suggestions yet',
+        message: isSearching
+            ? 'Try another username or display name.'
+            : 'Search for a username to find people in the community.',
+      );
     }
 
     final bool showBottomLoader =
@@ -478,7 +541,15 @@ class _DiscoveryScreenState extends State<DiscoveryScreen> {
     final bool hasMore = _hasMoreHashtags;
 
     if (posts.isEmpty) {
-      return const Center(child: Text('No posts found.'));
+      return CustomerStateView(
+        icon: Icons.tag_outlined,
+        title: _activeQuery.isEmpty
+            ? 'Search community hashtags'
+            : 'No hashtag posts found',
+        message: _activeQuery.isEmpty
+            ? 'Enter a hashtag or keyword to find community posts.'
+            : 'Try another hashtag or keyword.',
+      );
     }
 
     final bool showBottomLoader =

@@ -16,6 +16,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:http/http.dart' as http;
 import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:sincerelysea/config/media_upload_policy.dart';
 import 'package:sincerelysea/config/share_config.dart';
 import 'package:sincerelysea/l10n/app_localizations.dart';
 import 'package:sincerelysea/models/product.dart';
@@ -34,6 +35,7 @@ import 'package:sincerelysea/services/product_service.dart';
 import 'package:sincerelysea/services/app_check_header_service.dart';
 import 'package:sincerelysea/services/wishlist_service.dart';
 import 'package:sincerelysea/utils/post_location_label.dart';
+import 'package:sincerelysea/widgets/customer_state_view.dart';
 import 'package:sincerelysea/widgets/product_card.dart';
 
 Future<Position> _getCurrentPosition() async {
@@ -371,16 +373,16 @@ Future<void> showCreatePostDialog(
                                         previewTransformController.value =
                                             Matrix4.identity();
                                       });
-                                    } catch (e) {
+                                    } catch (_) {
                                       if (!rootContext.mounted) {
                                         return;
                                       }
                                       ScaffoldMessenger.of(
                                         rootContext,
                                       ).showSnackBar(
-                                        SnackBar(
+                                        const SnackBar(
                                           content: Text(
-                                            'Failed to read image: $e',
+                                            'Could not open this image. Choose another image and try again.',
                                           ),
                                         ),
                                       );
@@ -632,14 +634,14 @@ Future<void> showCreatePostDialog(
                                                     locationController.text =
                                                         resolvedLocation;
                                                   });
-                                                } catch (e) {
+                                                } catch (_) {
                                                   if (rootContext.mounted) {
                                                     ScaffoldMessenger.of(
                                                       rootContext,
                                                     ).showSnackBar(
-                                                      SnackBar(
+                                                      const SnackBar(
                                                         content: Text(
-                                                          'Failed to get location: $e',
+                                                          'Could not get your location. Please try again.',
                                                         ),
                                                       ),
                                                     );
@@ -911,14 +913,14 @@ Future<void> showCreatePostDialog(
                                           if (context.mounted) {
                                             selectedImage = renderedImage;
                                           }
-                                        } catch (e) {
+                                        } catch (_) {
                                           if (rootContext.mounted) {
                                             ScaffoldMessenger.of(
                                               rootContext,
                                             ).showSnackBar(
-                                              SnackBar(
+                                              const SnackBar(
                                                 content: Text(
-                                                  'Failed to apply preview crop. Uploading original image. ($e)',
+                                                  'Preview crop could not be applied. The original image will be uploaded.',
                                                 ),
                                               ),
                                             );
@@ -997,10 +999,11 @@ class HomeScreenState extends State<HomeScreen> {
   bool _isPublishingPost = false;
   bool _hasMore = true;
   bool _isGridView = false;
+  String? _feedErrorMessage;
   double _uploadProgress = 0;
   int _lastNotifiedUploadPercent = -1;
   int _lastDebugLoggedPercent = -1;
-  DocumentSnapshot<Object?>? _lastDocument;
+  int _postOffset = 0;
   static const int _pageSize = 10;
 
   bool _isGeneratedSquarePreview(File file) {
@@ -1039,8 +1042,9 @@ class HomeScreenState extends State<HomeScreen> {
   Future<void> _fetchInitialPosts() async {
     setState(() {
       _isLoading = true;
+      _feedErrorMessage = null;
       _posts.clear();
-      _lastDocument = null;
+      _postOffset = 0;
       _hasMore = true;
     });
 
@@ -1048,9 +1052,10 @@ class HomeScreenState extends State<HomeScreen> {
       await _fetchPosts();
     } catch (_) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Failed to load posts. Pull to retry.')),
-        );
+        setState(() {
+          _feedErrorMessage =
+              'Check your connection, then try loading the community again.';
+        });
       }
     } finally {
       if (mounted) {
@@ -1085,23 +1090,22 @@ class HomeScreenState extends State<HomeScreen> {
         .read<ModerationService>();
     final HiddenContentPreferencesService hiddenContentPreferencesService =
         HiddenContentPreferencesService();
-    final User? currentUser = context.read<User?>();
     final HiddenContentPreferences hiddenPreferences =
         await hiddenContentPreferencesService.load();
-    final QuerySnapshot<Map<String, dynamic>> snapshot = await postService
-        .getPostsPaginated(limit: _pageSize, startAfter: _lastDocument);
+    final List<QueryDocumentSnapshot<Map<String, dynamic>>> page =
+        await postService.getPostsPaginated(
+          limit: _pageSize,
+          offset: _postOffset,
+        );
 
-    if (snapshot.docs.length < _pageSize) {
+    if (page.length < _pageSize) {
       _hasMore = false;
     }
-    if (snapshot.docs.isNotEmpty) {
-      _lastDocument = snapshot.docs.last;
-    }
+    _postOffset += page.length;
 
     final List<QueryDocumentSnapshot<Map<String, dynamic>>> visibleDocs =
         <QueryDocumentSnapshot<Map<String, dynamic>>>[];
-    for (final QueryDocumentSnapshot<Map<String, dynamic>> doc
-        in snapshot.docs) {
+    for (final QueryDocumentSnapshot<Map<String, dynamic>> doc in page) {
       final Map<String, dynamic> data = doc.data();
       final String postOwnerUid = data['uid']?.toString() ?? '';
       if (postOwnerUid.isEmpty) {
@@ -1112,12 +1116,6 @@ class HomeScreenState extends State<HomeScreen> {
         postOwnerUid,
       );
       if (isHidden || isBlocked) {
-        continue;
-      }
-      final String visibility = data['visibility']?.toString() ?? 'public';
-      if (visibility == 'private' &&
-          currentUser != null &&
-          currentUser.uid != postOwnerUid) {
         continue;
       }
       if (hiddenContentPreferencesService.shouldHidePostByPreferences(
@@ -1264,18 +1262,29 @@ class HomeScreenState extends State<HomeScreen> {
         );
       }
       await LocalNotificationService.instance.showPostPublishedNotification();
+    } on MediaValidationException catch (e) {
+      logStage('MediaValidationException (${e.code}): ${e.message}');
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(e.message)));
+      }
+      await LocalNotificationService.instance.showPostFailedNotification();
     } on FirebaseException catch (e) {
       logStage('FirebaseException (${e.code}): ${e.message ?? '-'}');
       if (mounted) {
         String message = switch (e.code) {
           'permission-denied' =>
-            'Permission denied. Please check Firestore/Storage rules.',
+            'You cannot publish this post. Review it and try again.',
+          'unauthorized' => 'You do not have permission to upload this image.',
+          'retry-limit-exceeded' =>
+            'Image upload timed out. Check your connection and retry.',
           'unauthenticated' => 'Please login again and try posting.',
           'failed-precondition' =>
-            'A required Firebase index or config is missing.',
+            'Posting is temporarily unavailable. Please try again later.',
           'upload-empty-url' =>
-            'Upload failed: image URL is empty after upload.',
-          _ => 'Failed to publish post (${e.code}). Please try again.',
+            'The image upload did not finish. Please try again.',
+          _ => 'Failed to publish post. Please try again.',
         };
 
         if (e.code == 'unknown' && (e.message?.contains('412') ?? false)) {
@@ -1283,18 +1292,18 @@ class HomeScreenState extends State<HomeScreen> {
               'Upload failed (412). Please check your device date & time.';
         }
 
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('$message [stage: $currentStage]')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(message)));
       }
       await LocalNotificationService.instance.showPostFailedNotification();
     } on TimeoutException {
       logStage('TimeoutException on stage $currentStage');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
+          const SnackBar(
             content: Text(
-              'Post publish timed out at stage: $currentStage. Firestore may be unavailable or still provisioning. Check connection and retry.',
+              'Publishing timed out. Check your connection and try again.',
             ),
           ),
         );
@@ -1304,10 +1313,8 @@ class HomeScreenState extends State<HomeScreen> {
       logStage('Unknown exception');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              'Failed to publish post. Please try again. [stage: $currentStage]',
-            ),
+          const SnackBar(
+            content: Text('Failed to publish post. Please try again.'),
           ),
         );
       }
@@ -1354,18 +1361,25 @@ class HomeScreenState extends State<HomeScreen> {
       );
     }
 
+    if (_feedErrorMessage != null && _posts.isEmpty) {
+      return CustomerStateView(
+        key: const ValueKey<String>('error'),
+        icon: Icons.cloud_off_outlined,
+        title: 'Community is unavailable',
+        message: _feedErrorMessage!,
+        actionLabel: 'Retry',
+        onAction: _fetchInitialPosts,
+      );
+    }
+
     if (_posts.isEmpty) {
-      return LayoutBuilder(
+      return CustomerStateView(
         key: const ValueKey<String>('empty'),
-        builder: (BuildContext context, BoxConstraints constraints) {
-          return SingleChildScrollView(
-            physics: const AlwaysScrollableScrollPhysics(),
-            child: ConstrainedBox(
-              constraints: BoxConstraints(minHeight: constraints.maxHeight),
-              child: const Center(child: Text('No posts yet. Be the first!')),
-            ),
-          );
-        },
+        icon: Icons.forum_outlined,
+        title: 'No community posts yet',
+        message: 'Share the first update with the SincerelySea Community.',
+        actionLabel: 'Create post',
+        onAction: _openCreatePostComposer,
       );
     }
 
@@ -1481,31 +1495,28 @@ class HomeScreenState extends State<HomeScreen> {
     }
   }
 
+  Future<void> _openCreatePostComposer() async {
+    try {
+      await showCreatePostDialog(context, onSubmit: _submitPostInBackground);
+    } catch (_) {
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Could not open Create Post. Please try again.'),
+        ),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final User? user = context.watch<User?>();
 
     return Scaffold(
       appBar: AppBar(
-        leading: IconButton(
-          icon: const Icon(Icons.add),
-          onPressed: () async {
-            try {
-              await showCreatePostDialog(
-                context,
-                onSubmit: _submitPostInBackground,
-              );
-            } catch (e) {
-              if (!context.mounted) {
-                return;
-              }
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text('Failed to open post composer: $e')),
-              );
-            }
-          },
-        ),
-        title: const Text('Sincerelysea'),
+        title: const Text('SincerelySea'),
         actions: <Widget>[
           IconButton(
             tooltip: 'Cart',
@@ -1547,6 +1558,12 @@ class HomeScreenState extends State<HomeScreen> {
             },
           ),
         ],
+      ),
+      floatingActionButton: FloatingActionButton.extended(
+        tooltip: 'Create a community post',
+        onPressed: _isPublishingPost ? null : _openCreatePostComposer,
+        icon: const Icon(Icons.add),
+        label: const Text('Create post'),
       ),
       body: Column(
         children: <Widget>[
@@ -1743,12 +1760,14 @@ class _PostCardState extends State<PostCard>
           ? 'Share is unavailable on this device right now. Please try Copy link.'
           : 'Failed to share post. Please try Copy link.';
       messenger.showSnackBar(SnackBar(content: Text(message)));
-    } catch (e) {
+    } catch (_) {
       if (!mounted) {
         return;
       }
       messenger.showSnackBar(
-        SnackBar(content: Text('Failed to share post: $e')),
+        const SnackBar(
+          content: Text('Could not share the post. Please try again.'),
+        ),
       );
     } finally {
       if (shareImageFile != null) {
@@ -1878,12 +1897,14 @@ class _PostCardState extends State<PostCard>
       messenger.showSnackBar(
         const SnackBar(content: Text('Post link copied to clipboard')),
       );
-    } catch (e) {
+    } catch (_) {
       if (!mounted) {
         return;
       }
       messenger.showSnackBar(
-        SnackBar(content: Text('Failed to copy link: $e')),
+        const SnackBar(
+          content: Text('Could not copy the link. Please try again.'),
+        ),
       );
     } finally {
       if (mounted) {
@@ -2056,11 +2077,13 @@ class _PostCardState extends State<PostCard>
                           if (context.mounted) {
                             Navigator.pop(context);
                           }
-                        } catch (e) {
+                        } catch (_) {
                           if (context.mounted) {
                             ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text('Failed to edit post: $e'),
+                              const SnackBar(
+                                content: Text(
+                                  'Could not update the post. Please try again.',
+                                ),
                               ),
                             );
                           }
@@ -2364,14 +2387,14 @@ class _PostCardState extends State<PostCard>
                                                                   username,
                                                             );
                                                       }
-                                                    } catch (e) {
+                                                    } catch (_) {
                                                       if (context.mounted) {
                                                         ScaffoldMessenger.of(
                                                           context,
                                                         ).showSnackBar(
-                                                          SnackBar(
+                                                          const SnackBar(
                                                             content: Text(
-                                                              'Failed to update follow: $e',
+                                                              'Could not update follow status. Please try again.',
                                                             ),
                                                           ),
                                                         );
@@ -2819,14 +2842,14 @@ class _PostCardState extends State<PostCard>
                                                   imageUrl: imageUrl,
                                                   timestamp: postTimestamp,
                                                 );
-                                          } catch (e) {
+                                          } catch (_) {
                                             if (context.mounted) {
                                               ScaffoldMessenger.of(
                                                 context,
                                               ).showSnackBar(
-                                                SnackBar(
+                                                const SnackBar(
                                                   content: Text(
-                                                    'Failed to save post: $e',
+                                                    'Could not save the post. Please try again.',
                                                   ),
                                                 ),
                                               );
@@ -2929,18 +2952,20 @@ class _CommentsSheetState extends State<CommentsSheet> {
         'permission-denied' =>
           'You do not have permission to comment on this post.',
         'failed-precondition' =>
-          'Comment failed due to server precondition. Please refresh and try again.',
-        _ => e.message ?? 'Failed to send comment.',
+          'Comments are temporarily unavailable. Please refresh and try again.',
+        _ => 'Failed to send comment. Please try again.',
       };
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text(message)));
-    } on Exception catch (e) {
+    } on Exception {
       if (!mounted) {
         return;
       }
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.toString().replaceFirst('Exception: ', ''))),
+        const SnackBar(
+          content: Text('Failed to send comment. Please try again.'),
+        ),
       );
     } finally {
       if (mounted) {
@@ -3022,7 +3047,13 @@ class _CommentsSheetState extends State<CommentsSheet> {
                     AsyncSnapshot<QuerySnapshot<Map<String, dynamic>>> snapshot,
                   ) {
                     if (snapshot.hasError) {
-                      return Center(child: Text('Error: ${snapshot.error}'));
+                      return CustomerStateView(
+                        icon: Icons.cloud_off_outlined,
+                        title: 'Comments are unavailable',
+                        message: 'Check your connection and try again.',
+                        actionLabel: 'Retry',
+                        onAction: () => setState(() {}),
+                      );
                     }
                     if (snapshot.connectionState == ConnectionState.waiting) {
                       return const Center(child: CircularProgressIndicator());
@@ -3227,18 +3258,14 @@ class _CommentsSheetState extends State<CommentsSheet> {
                                                                 widget.postId,
                                                                 commentId,
                                                               );
-                                                        } catch (e) {
+                                                        } catch (_) {
                                                           if (context.mounted) {
                                                             ScaffoldMessenger.of(
                                                               context,
                                                             ).showSnackBar(
-                                                              SnackBar(
+                                                              const SnackBar(
                                                                 content: Text(
-                                                                  AppLocalizations.of(
-                                                                    context,
-                                                                  ).failedToDelete(
-                                                                    '$e',
-                                                                  ),
+                                                                  'Could not delete the post. Please try again.',
                                                                 ),
                                                               ),
                                                             );
@@ -3799,16 +3826,16 @@ class _PostDetailActionSheet extends StatelessWidget {
                                                     imageUrl: imageUrl,
                                                     timestamp: postTimestamp,
                                                   );
-                                            } catch (e) {
+                                            } catch (_) {
                                               if (!context.mounted) {
                                                 return;
                                               }
                                               ScaffoldMessenger.of(
                                                 context,
                                               ).showSnackBar(
-                                                SnackBar(
+                                                const SnackBar(
                                                   content: Text(
-                                                    'Failed to save post: $e',
+                                                    'Could not save the post. Please try again.',
                                                   ),
                                                 ),
                                               );
@@ -4446,12 +4473,14 @@ Future<void> _toggleProductWishlist(
         ),
       ),
     );
-  } catch (e) {
+  } catch (_) {
     if (!context.mounted) {
       return;
     }
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text('Failed to update wishlist: $e')));
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Could not update the wishlist. Please try again.'),
+      ),
+    );
   }
 }

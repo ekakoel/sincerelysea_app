@@ -3,10 +3,14 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:sincerelysea/models/cart_item.dart';
+import 'package:sincerelysea/models/order.dart' as app_order;
 import 'package:sincerelysea/models/product.dart';
+import 'package:sincerelysea/screens/orders/order_detail_screen.dart';
 import 'package:sincerelysea/services/cart_service.dart';
 import 'package:sincerelysea/services/order_service.dart';
 import 'package:sincerelysea/services/product_service.dart';
+import 'package:sincerelysea/utils/auth_exception_handler.dart';
+import 'package:sincerelysea/widgets/customer_state_view.dart';
 
 class CheckoutScreen extends StatefulWidget {
   const CheckoutScreen.cart({super.key})
@@ -33,12 +37,19 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   final TextEditingController _addressController = TextEditingController();
   bool _placingOrder = false;
   String? _checkoutRequestId;
+  Future<_CheckoutData>? _checkoutFuture;
 
   @override
   void initState() {
     super.initState();
     final User? user = FirebaseAuth.instance.currentUser;
     _loadUserInfo(user);
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _checkoutFuture ??= _loadCheckoutData(context);
   }
 
   @override
@@ -54,20 +65,40 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     return Scaffold(
       appBar: AppBar(title: const Text('Checkout')),
       body: FutureBuilder<_CheckoutData>(
-        future: _loadCheckoutData(context),
+        future: _checkoutFuture,
         builder: (BuildContext context, AsyncSnapshot<_CheckoutData> snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator());
           }
           if (snapshot.hasError) {
-            return Center(
-              child: Text('Failed to load checkout data: ${snapshot.error}'),
+            return CustomerStateView(
+              icon: Icons.cloud_off_outlined,
+              title: 'Checkout unavailable',
+              message: 'Check your connection and try again.',
+              actionLabel: 'Retry',
+              onAction: () {
+                setState(() => _checkoutFuture = _loadCheckoutData(context));
+              },
             );
           }
           final _CheckoutData data =
               snapshot.data ?? const _CheckoutData.empty();
+          if (data.unavailableItems.isNotEmpty) {
+            return CustomerStateView(
+              icon: Icons.inventory_2_outlined,
+              title: 'Review your cart',
+              message:
+                  '${data.unavailableItems.length} item(s) are unavailable or exceed current stock. Remove or adjust them before checkout.',
+              actionLabel: 'Return',
+              onAction: () => Navigator.of(context).pop(),
+            );
+          }
           if (data.items.isEmpty) {
-            return const Center(child: Text('Nothing to checkout.'));
+            return const CustomerStateView(
+              icon: Icons.shopping_cart_outlined,
+              title: 'Nothing to checkout',
+              message: 'Add an available product before continuing.',
+            );
           }
 
           return Form(
@@ -242,37 +273,59 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     if (user == null) {
       return;
     }
-    final DocumentSnapshot<Map<String, dynamic>> doc = await FirebaseFirestore
-        .instance
-        .collection('users')
-        .doc(user.uid)
-        .get();
-    final Map<String, dynamic> data = doc.data() ?? <String, dynamic>{};
-    if (!mounted) {
-      return;
+    try {
+      final DocumentSnapshot<Map<String, dynamic>> doc = await FirebaseFirestore
+          .instance
+          .collection('users_private')
+          .doc(user.uid)
+          .get();
+      final Map<String, dynamic> data = doc.data() ?? <String, dynamic>{};
+      if (!mounted) {
+        return;
+      }
+      _nameController.text =
+          data['displayName']?.toString() ?? user.displayName ?? '';
+      _phoneController.text = data['phone']?.toString() ?? '';
+      _addressController.text = data['address']?.toString() ?? '';
+    } catch (_) {
+      // Shipping details remain editable when private-profile prefill is offline.
     }
-    _nameController.text =
-        data['displayName']?.toString() ?? user.displayName ?? '';
-    _phoneController.text = data['phone']?.toString() ?? '';
-    _addressController.text = data['address']?.toString() ?? '';
   }
 
   Future<_CheckoutData> _loadCheckoutData(BuildContext context) async {
     if (widget.buyNowProduct != null) {
+      final Product? currentProduct = await context
+          .read<ProductService>()
+          .getProductOnce(widget.buyNowProduct!.id);
+      final int quantity = widget.buyNowQuantity;
+      if (currentProduct == null ||
+          !currentProduct.canPurchase ||
+          quantity <= 0 ||
+          (!currentProduct.isPreorder && quantity > currentProduct.stock)) {
+        return _CheckoutData(
+          cartItems: const <CartItem>[],
+          items: const <_CheckoutItem>[],
+          unavailableItems: <CartItem>[
+            CartItem(
+              id: widget.buyNowProduct!.id,
+              productId: widget.buyNowProduct!.id,
+              quantity: quantity,
+            ),
+          ],
+        );
+      }
       return _CheckoutData(
         cartItems: <CartItem>[
           CartItem(
-            id: widget.buyNowProduct!.id,
-            productId: widget.buyNowProduct!.id,
-            quantity: widget.buyNowQuantity,
+            id: currentProduct.id,
+            productId: currentProduct.id,
+            quantity: quantity,
           ),
         ],
         items: <_CheckoutItem>[
-          _CheckoutItem(
-            product: widget.buyNowProduct!,
-            quantity: widget.buyNowQuantity,
-          ),
+          _CheckoutItem(product: currentProduct, quantity: quantity),
         ],
+        unavailableItems: const <CartItem>[],
       );
     }
 
@@ -280,16 +333,25 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     final ProductService productService = context.read<ProductService>();
     final List<CartItem> cartItems = await cartService.getCartItems();
     final List<_CheckoutItem> items = <_CheckoutItem>[];
+    final List<CartItem> unavailableItems = <CartItem>[];
     for (final CartItem cartItem in cartItems) {
       final Product? product = await productService.getProductOnce(
         cartItem.productId,
       );
-      if (product == null) {
+      if (product == null ||
+          !product.canPurchase ||
+          cartItem.quantity <= 0 ||
+          (!product.isPreorder && cartItem.quantity > product.stock)) {
+        unavailableItems.add(cartItem);
         continue;
       }
       items.add(_CheckoutItem(product: product, quantity: cartItem.quantity));
     }
-    return _CheckoutData(cartItems: cartItems, items: items);
+    return _CheckoutData(
+      cartItems: cartItems,
+      items: items,
+      unavailableItems: unavailableItems,
+    );
   }
 
   Future<void> _placeOrder(BuildContext context, _CheckoutData data) async {
@@ -315,20 +377,41 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
       );
 
       if (widget.buyNowProduct == null) {
-        await cartService.clearCart();
+        try {
+          await cartService.clearCart();
+        } catch (_) {
+          // The trusted order already exists; a stale cart can be cleared later.
+        }
+      }
+
+      app_order.Order? order;
+      try {
+        order = await orderService.getMyOrderOnce(orderId);
+      } catch (_) {
+        // Order history remains the canonical fallback if this read is offline.
       }
 
       if (!mounted) {
         return;
       }
-      messenger.showSnackBar(SnackBar(content: Text('Order placed: $orderId')));
-      navigator.popUntil((Route<dynamic> route) => route.isFirst);
+      messenger.showSnackBar(const SnackBar(content: Text('Order placed.')));
+      if (order != null) {
+        navigator.pushAndRemoveUntil(
+          MaterialPageRoute<void>(
+            builder: (_) => OrderDetailScreen(order: order!),
+          ),
+          (Route<dynamic> route) => route.isFirst,
+        );
+      } else {
+        navigator.popUntil((Route<dynamic> route) => route.isFirst);
+      }
     } catch (e) {
       if (!mounted) {
         return;
       }
+      final String message = AuthExceptionHandler.handleException(e);
       messenger.showSnackBar(
-        SnackBar(content: Text('Failed to place order: $e')),
+        SnackBar(content: Text('Failed to place order: $message')),
       );
     } finally {
       if (mounted) {
@@ -339,14 +422,20 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
 }
 
 class _CheckoutData {
-  const _CheckoutData({required this.cartItems, required this.items});
+  const _CheckoutData({
+    required this.cartItems,
+    required this.items,
+    required this.unavailableItems,
+  });
 
   const _CheckoutData.empty()
     : cartItems = const <CartItem>[],
-      items = const <_CheckoutItem>[];
+      items = const <_CheckoutItem>[],
+      unavailableItems = const <CartItem>[];
 
   final List<CartItem> cartItems;
   final List<_CheckoutItem> items;
+  final List<CartItem> unavailableItems;
 
   double get totalPrice => items.fold<double>(
     0,

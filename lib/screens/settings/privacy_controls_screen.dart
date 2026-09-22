@@ -118,13 +118,15 @@ class _PrivacyControlsScreenState extends State<PrivacyControlsScreen> {
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(const SnackBar(content: Text('Privacy updated')));
-    } catch (e) {
+    } catch (_) {
       if (!mounted) {
         return;
       }
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Failed to update privacy: $e')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Could not update privacy settings. Please try again.'),
+        ),
+      );
     } finally {
       if (mounted) {
         setState(() => _saving = false);

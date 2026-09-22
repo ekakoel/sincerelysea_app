@@ -8,10 +8,16 @@ import 'package:sincerelysea/services/cart_service.dart';
 import 'package:sincerelysea/services/product_service.dart';
 import 'package:sincerelysea/theme/app_colors.dart';
 import 'package:sincerelysea/widgets/app_check_network_image.dart';
+import 'package:sincerelysea/widgets/customer_state_view.dart';
 
-class CartScreen extends StatelessWidget {
+class CartScreen extends StatefulWidget {
   const CartScreen({super.key});
 
+  @override
+  State<CartScreen> createState() => _CartScreenState();
+}
+
+class _CartScreenState extends State<CartScreen> {
   @override
   Widget build(BuildContext context) {
     final CartService cartService = context.read<CartService>();
@@ -28,8 +34,12 @@ class CartScreen extends StatelessWidget {
                 return const Center(child: CircularProgressIndicator());
               }
               if (snapshot.hasError) {
-                return Center(
-                  child: Text('Failed to load cart: ${snapshot.error}'),
+                return CustomerStateView(
+                  icon: Icons.cloud_off_outlined,
+                  title: 'Cart unavailable',
+                  message: 'Check your connection and try again.',
+                  actionLabel: 'Retry',
+                  onAction: () => setState(() {}),
                 );
               }
 
@@ -41,29 +51,52 @@ class CartScreen extends StatelessWidget {
                       .toList(growable: false);
 
               if (items.isEmpty) {
-                return const Center(child: Text('Your cart is empty.'));
+                return const CustomerStateView(
+                  icon: Icons.shopping_cart_outlined,
+                  title: 'Your cart is empty',
+                  message:
+                      'Products you add from SincerelySea Store will appear here.',
+                );
               }
 
-              return FutureBuilder<List<_CartEntry>>(
+              return FutureBuilder<_CartLoadResult>(
                 future: _loadEntries(context, items),
                 builder:
                     (
                       BuildContext context,
-                      AsyncSnapshot<List<_CartEntry>> entriesSnapshot,
+                      AsyncSnapshot<_CartLoadResult> entriesSnapshot,
                     ) {
                       if (entriesSnapshot.connectionState ==
                           ConnectionState.waiting) {
                         return const Center(child: CircularProgressIndicator());
                       }
                       if (entriesSnapshot.hasError) {
-                        return Center(
-                          child: Text(
-                            'Failed to load cart products: ${entriesSnapshot.error}',
-                          ),
+                        return CustomerStateView(
+                          icon: Icons.cloud_off_outlined,
+                          title: 'Cart products unavailable',
+                          message: 'Check your connection and try again.',
+                          actionLabel: 'Retry',
+                          onAction: () => setState(() {}),
                         );
                       }
-                      final List<_CartEntry> entries =
-                          entriesSnapshot.data ?? <_CartEntry>[];
+                      final _CartLoadResult result =
+                          entriesSnapshot.data ?? const _CartLoadResult.empty();
+                      final List<_CartEntry> entries = result.entries;
+                      final List<CartItem> unavailable =
+                          result.unavailableItems;
+                      final bool hasInvalidQuantity = entries.any(
+                        (_CartEntry entry) =>
+                            entry.cartItem.quantity <= 0 ||
+                            (!entry.product.isPreorder &&
+                                entry.cartItem.quantity > entry.product.stock),
+                      );
+                      final bool checkoutEnabled =
+                          entries.isNotEmpty &&
+                          unavailable.isEmpty &&
+                          !hasInvalidQuantity &&
+                          entries.every(
+                            (_CartEntry entry) => entry.product.canPurchase,
+                          );
                       final double total = entries.fold<double>(
                         0,
                         (double sum, _CartEntry entry) =>
@@ -76,13 +109,17 @@ class CartScreen extends StatelessWidget {
                           Expanded(
                             child: ListView.separated(
                               padding: const EdgeInsets.all(16),
-                              itemCount: entries.length,
+                              itemCount: entries.length + unavailable.length,
                               separatorBuilder:
                                   (BuildContext context, int index) =>
                                       const SizedBox(height: 12),
                               itemBuilder: (BuildContext context, int index) {
-                                final _CartEntry entry = entries[index];
-                                return _CartItemTile(entry: entry);
+                                if (index < entries.length) {
+                                  return _CartItemTile(entry: entries[index]);
+                                }
+                                final CartItem item =
+                                    unavailable[index - entries.length];
+                                return _UnavailableCartItemTile(item: item);
                               },
                             ),
                           ),
@@ -123,10 +160,17 @@ class CartScreen extends StatelessWidget {
                                     ],
                                   ),
                                   const SizedBox(height: 12),
+                                  if (!checkoutEnabled) ...<Widget>[
+                                    const Text(
+                                      'Remove unavailable items or adjust quantities before checkout.',
+                                      textAlign: TextAlign.center,
+                                    ),
+                                    const SizedBox(height: 10),
+                                  ],
                                   SizedBox(
                                     width: double.infinity,
                                     child: FilledButton(
-                                      onPressed: entries.isEmpty
+                                      onPressed: !checkoutEnabled
                                           ? null
                                           : () {
                                               Navigator.of(context).push(
@@ -152,22 +196,27 @@ class CartScreen extends StatelessWidget {
     );
   }
 
-  Future<List<_CartEntry>> _loadEntries(
+  Future<_CartLoadResult> _loadEntries(
     BuildContext context,
     List<CartItem> items,
   ) async {
     final ProductService productService = context.read<ProductService>();
     final List<_CartEntry> entries = <_CartEntry>[];
+    final List<CartItem> unavailableItems = <CartItem>[];
     for (final CartItem item in items) {
       final Product? product = await productService.getProductOnce(
         item.productId,
       );
-      if (product == null) {
+      if (product == null || !product.canPurchase) {
+        unavailableItems.add(item);
         continue;
       }
       entries.add(_CartEntry(cartItem: item, product: product));
     }
-    return entries;
+    return _CartLoadResult(
+      entries: entries,
+      unavailableItems: unavailableItems,
+    );
   }
 }
 
@@ -243,12 +292,8 @@ class _CartItemTile extends StatelessWidget {
                   children: <Widget>[
                     IconButton(
                       visualDensity: VisualDensity.compact,
-                      onPressed: () {
-                        context.read<CartService>().updateQuantity(
-                          cartId: entry.cartItem.id,
-                          quantity: entry.cartItem.quantity - 1,
-                        );
-                      },
+                      onPressed: () =>
+                          _updateQuantity(context, entry.cartItem.quantity - 1),
                       icon: const Icon(Icons.remove_circle_outline),
                     ),
                     Text(
@@ -257,29 +302,107 @@ class _CartItemTile extends StatelessWidget {
                     ),
                     IconButton(
                       visualDensity: VisualDensity.compact,
-                      onPressed: entry.cartItem.quantity >= entry.product.stock
+                      onPressed:
+                          !entry.product.isPreorder &&
+                              entry.cartItem.quantity >= entry.product.stock
                           ? null
-                          : () {
-                              context.read<CartService>().updateQuantity(
-                                cartId: entry.cartItem.id,
-                                quantity: entry.cartItem.quantity + 1,
-                              );
-                            },
+                          : () => _updateQuantity(
+                              context,
+                              entry.cartItem.quantity + 1,
+                            ),
                       icon: const Icon(Icons.add_circle_outline),
                     ),
                     const Spacer(),
                     TextButton(
-                      onPressed: () {
-                        context.read<CartService>().removeItem(
-                          entry.cartItem.id,
-                        );
-                      },
+                      onPressed: () => _remove(context),
                       child: const Text('Remove'),
                     ),
                   ],
                 ),
               ],
             ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _updateQuantity(BuildContext context, int quantity) async {
+    try {
+      await context.read<CartService>().updateQuantity(
+        cartId: entry.cartItem.id,
+        quantity: quantity,
+      );
+    } catch (_) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Could not update the cart. Please try again.'),
+        ),
+      );
+    }
+  }
+
+  Future<void> _remove(BuildContext context) async {
+    try {
+      await context.read<CartService>().removeItem(entry.cartItem.id);
+    } catch (_) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Could not remove this item. Please try again.'),
+        ),
+      );
+    }
+  }
+}
+
+class _UnavailableCartItemTile extends StatelessWidget {
+  const _UnavailableCartItemTile({required this.item});
+
+  final CartItem item;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: AppColors.gray300),
+      ),
+      child: Row(
+        children: <Widget>[
+          const Icon(Icons.inventory_2_outlined),
+          const SizedBox(width: 12),
+          const Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                Text(
+                  'Product unavailable',
+                  style: TextStyle(fontWeight: FontWeight.w700),
+                ),
+                SizedBox(height: 4),
+                Text('This saved cart item can no longer be purchased.'),
+              ],
+            ),
+          ),
+          TextButton(
+            onPressed: () async {
+              try {
+                await context.read<CartService>().removeItem(item.id);
+              } catch (_) {
+                if (!context.mounted) return;
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text(
+                      'Could not remove this item. Please try again.',
+                    ),
+                  ),
+                );
+              }
+            },
+            child: const Text('Remove'),
           ),
         ],
       ),
@@ -292,4 +415,18 @@ class _CartEntry {
 
   final CartItem cartItem;
   final Product product;
+}
+
+class _CartLoadResult {
+  const _CartLoadResult({
+    required this.entries,
+    required this.unavailableItems,
+  });
+
+  const _CartLoadResult.empty()
+    : entries = const <_CartEntry>[],
+      unavailableItems = const <CartItem>[];
+
+  final List<_CartEntry> entries;
+  final List<CartItem> unavailableItems;
 }

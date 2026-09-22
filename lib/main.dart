@@ -45,10 +45,15 @@ void main() async {
       'Firebase initialized: projectId=${firebaseApp.options.projectId}, appId=${firebaseApp.options.appId}, platform=${defaultTargetPlatform.name}',
     );
   }
-  try {
-    await AppCheckHeaderService.instance.initialize();
-  } catch (_) {
-    // Keep app booting even when App Check can't initialize.
+  if (kDebugMode) {
+    try {
+      await AppCheckHeaderService.instance.initialize(debugMode: true);
+    } catch (error) {
+      debugPrint('App Check debug initialization failed: $error');
+    }
+  } else {
+    // Release/profile builds fail closed before protected Firebase use.
+    await AppCheckHeaderService.instance.initialize(debugMode: false);
   }
   FlutterError.onError = FirebaseCrashlytics.instance.recordFlutterFatalError;
   await LocalNotificationService.instance.init();

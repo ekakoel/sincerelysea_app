@@ -150,88 +150,6 @@ class _RegisterPageState extends State<RegisterPage> {
     return available;
   }
 
-  // Future<void> _register() async {
-  //   if (!_formKey.currentState!.validate()) return;
-  //   if (!_acceptedPolicies) {
-  //     ScaffoldMessenger.of(context).showSnackBar(
-  //       const SnackBar(
-  //         content: Text(
-  //           'Please accept the Privacy Policy and Terms of Service to continue',
-  //         ),
-  //       ),
-  //     );
-  //     return;
-  //   }
-  //   if (_usernameChecking) {
-  //     ScaffoldMessenger.of(context).showSnackBar(
-  //       const SnackBar(content: Text('Please wait for username check')),
-  //     );
-  //     return;
-  //   }
-  //   if (!await _ensureUsernameAvailableForSubmit()) {
-  //     if (mounted) {
-  //       ScaffoldMessenger.of(context).showSnackBar(
-  //         const SnackBar(content: Text('Please use another username')),
-  //       );
-  //     }
-  //     return;
-  //   }
-
-  //   setState(() => _loading = true);
-  //   try {
-  //     // 1. Create User
-  //     final user = await _auth.signUpWithEmail(
-  //       _emailController.text.trim(),
-  //       _passwordController.text.trim(),
-  //       username: _usernameController.text.trim(),
-  //     );
-
-  //     if (user != null) {
-  //       if (mounted) {
-  //         await showDialog(
-  //           context: context,
-  //           barrierDismissible: false,
-  //           builder: (context) => AlertDialog(
-  //             title: const Text('Verification Sent'),
-  //             content: Text(
-  //               'We have sent a verification link to ${_emailController.text.trim()}.\n\nPlease check your email and click the link to activate your account before logging in.',
-  //             ),
-  //             actions: [
-  //               TextButton(
-  //                 onPressed: () {
-  //                   Navigator.pop(context);
-  //                 },
-  //                 child: const Text('OK'),
-  //               ),
-  //             ],
-  //           ),
-  //         );
-  //         if (!mounted) {
-  //           return;
-  //         }
-  //         _goToLogin();
-  //       }
-  //     }
-  //   } on FirebaseAuthException catch (e) {
-  //     String message = AuthExceptionHandler.handleException(e);
-  //     if (e.code == 'username-already-in-use') {
-  //       message = 'Username already in use.';
-  //     }
-  //     if (mounted) {
-  //       ScaffoldMessenger.of(
-  //         context,
-  //       ).showSnackBar(SnackBar(content: Text(message)));
-  //     }
-  //   } catch (e) {
-  //     if (mounted) {
-  //       ScaffoldMessenger.of(
-  //         context,
-  //       ).showSnackBar(SnackBar(content: Text('Error: $e')));
-  //     }
-  //   } finally {
-  //     if (mounted) setState(() => _loading = false);
-  //   }
-  // }
   Future<void> _register() async {
     if (!_formKey.currentState!.validate()) {
       debugPrint('REGISTER: Form validation failed');
@@ -345,9 +263,13 @@ class _RegisterPageState extends State<RegisterPage> {
       debugPrintStack(stackTrace: stackTrace);
 
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Registration failed: $e')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Registration failed. Check your connection and try again.',
+            ),
+          ),
+        );
       }
     } finally {
       if (mounted) {
@@ -362,23 +284,21 @@ class _RegisterPageState extends State<RegisterPage> {
       final UserCredential? credential = await _auth.signInWithGoogle();
       if (credential == null && mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text(
-              'Google sign-up cancelled. If this repeats after selecting account, check SHA-1/SHA-256 in Firebase.',
-            ),
-          ),
+          const SnackBar(content: Text('Google sign-up was cancelled.')),
         );
       }
     } on FirebaseAuthException catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.message ?? 'Google sign-up failed')),
+        SnackBar(content: Text(AuthExceptionHandler.handleException(e))),
       );
-    } catch (e) {
+    } catch (_) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Error: $e')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Google sign-up is unavailable. Please try again.'),
+        ),
+      );
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -623,7 +543,7 @@ class _RegisterPageState extends State<RegisterPage> {
                                 ),
                                 const TextSpan(text: ' and '),
                                 TextSpan(
-                                  text: 'Terms of Service',
+                                  text: 'Terms & Conditions',
                                   recognizer: _termsOfServiceRecognizer,
                                   style: TextStyle(
                                     color: isDark

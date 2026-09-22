@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_storage/firebase_storage.dart';
+import 'package:sincerelysea/config/media_upload_policy.dart';
 
 class SupportService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
@@ -74,7 +75,7 @@ class SupportService {
     final String safeEmail = contactEmail.trim();
     final String ticketNumber = _generateTicketNumber();
     final DateTime now = DateTime.now();
-    final ({String name, String url})? uploadedAttachment =
+    final ({String name, String path})? uploadedAttachment =
         await _uploadAttachmentIfAny(
           uid: user.uid,
           attachmentPath: attachmentPath,
@@ -99,13 +100,13 @@ class SupportService {
       'status': 'open',
       'priority': 'normal',
       'attachmentName': uploadedAttachment?.name ?? '',
-      'attachmentUrl': uploadedAttachment?.url ?? '',
+      'attachmentPath': uploadedAttachment?.path ?? '',
+      'attachmentUrl': '',
       'deviceInfo': deviceInfo,
       'createdAt': FieldValue.serverTimestamp(),
       'updatedAt': FieldValue.serverTimestamp(),
       'lastMessage': safeDescription,
       'lastMessageAt': FieldValue.serverTimestamp(),
-      'etaHours': 24,
       'searchTokens': _buildSearchTokens(
         '$safeSubject $safeDescription $safeCategory',
       ),
@@ -123,7 +124,7 @@ class SupportService {
     return (ticketId: doc.id, ticketNumber: ticketNumber);
   }
 
-  Future<({String name, String url})?> _uploadAttachmentIfAny({
+  Future<({String name, String path})?> _uploadAttachmentIfAny({
     required String uid,
     required String? attachmentPath,
   }) async {
@@ -132,11 +133,12 @@ class SupportService {
       return null;
     }
     final File file = File(path);
-    if (!await file.exists()) {
-      return null;
-    }
-
-    final String extension = _safeFileExtension(path);
+    final String contentType = await MediaUploadPolicy.validateImage(
+      file,
+      maxBytes: MediaUploadPolicy.supportMaxBytes,
+      label: 'Support attachment',
+    );
+    final String extension = MediaUploadPolicy.extensionForPath(path);
     final String fileName =
         '${DateTime.now().millisecondsSinceEpoch}_${Random().nextInt(9999).toString().padLeft(4, '0')}$extension';
 
@@ -144,24 +146,11 @@ class SupportService {
       'support_attachments/$uid/$fileName',
     );
     final SettableMetadata metadata = SettableMetadata(
-      contentType: 'image/jpeg',
-      customMetadata: <String, String>{'uid': uid},
+      contentType: contentType,
     );
     final UploadTask task = ref.putFile(file, metadata);
     await task;
-    final String url = await ref.getDownloadURL();
-    return (name: file.path.split('/').last, url: url);
-  }
-
-  String _safeFileExtension(String filePath) {
-    final String lower = filePath.toLowerCase();
-    if (lower.endsWith('.png')) {
-      return '.png';
-    }
-    if (lower.endsWith('.webp')) {
-      return '.webp';
-    }
-    return '.jpg';
+    return (name: file.uri.pathSegments.last, path: ref.fullPath);
   }
 
   Future<void> addReply({

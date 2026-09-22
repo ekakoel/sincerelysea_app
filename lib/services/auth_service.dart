@@ -420,8 +420,11 @@ class AuthService {
   // ============================================================
 
   Future<void> _upsertUserProfile(User user, {String? username}) async {
-    final DocumentReference<Map<String, dynamic>> userRef = _firestore
-        .collection('users')
+    final DocumentReference<Map<String, dynamic>> publicUserRef = _firestore
+        .collection('users_public')
+        .doc(user.uid);
+    final DocumentReference<Map<String, dynamic>> privateUserRef = _firestore
+        .collection('users_private')
         .doc(user.uid);
 
     DocumentSnapshot<Map<String, dynamic>> snapshot;
@@ -431,7 +434,7 @@ class AuthService {
     // ----------------------------------------------------------
 
     try {
-      snapshot = await userRef.get();
+      snapshot = await publicUserRef.get();
     } on FirebaseException catch (e, stackTrace) {
       debugPrint('PROFILE READ ERROR: ${e.code} - ${e.message}');
       debugPrintStack(stackTrace: stackTrace);
@@ -511,11 +514,10 @@ class AuthService {
       final String usernameLower = resolvedUsername.toLowerCase();
 
       try {
-        await userRef.set({
+        final WriteBatch batch = _firestore.batch();
+        batch.set(publicUserRef, {
           'uid': user.uid,
-          'email': user.email,
-          'displayName':
-              user.displayName ?? user.email?.split('@').first ?? 'Anonymous',
+          'displayName': user.displayName ?? resolvedUsername,
           'photoUrl': user.photoURL ?? '',
           'username': resolvedUsername,
           'usernameLower': usernameLower,
@@ -523,6 +525,13 @@ class AuthService {
           'createdAt': FieldValue.serverTimestamp(),
           'updatedAt': FieldValue.serverTimestamp(),
         });
+        batch.set(privateUserRef, {
+          'uid': user.uid,
+          'email': user.email ?? '',
+          'createdAt': FieldValue.serverTimestamp(),
+          'updatedAt': FieldValue.serverTimestamp(),
+        }, SetOptions(merge: true));
+        await batch.commit();
       } on FirebaseException catch (e, stackTrace) {
         debugPrint(
           'PROFILE CREATE ERROR: '
@@ -547,13 +556,18 @@ class AuthService {
     // ==========================================================
 
     try {
-      await userRef.set({
-        'email': user.email,
-        'displayName':
-            user.displayName ?? user.email?.split('@').first ?? 'Anonymous',
+      final WriteBatch batch = _firestore.batch();
+      batch.set(publicUserRef, {
+        'displayName': user.displayName ?? existing['username'] ?? 'Customer',
         'photoUrl': user.photoURL ?? existing['photoUrl'] ?? '',
         'updatedAt': FieldValue.serverTimestamp(),
       }, SetOptions(merge: true));
+      batch.set(privateUserRef, {
+        'uid': user.uid,
+        'email': user.email ?? '',
+        'updatedAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+      await batch.commit();
     } on FirebaseException catch (e, stackTrace) {
       debugPrint(
         'PROFILE UPDATE ERROR: '
@@ -621,7 +635,7 @@ class AuthService {
         // _upsertUserProfile() will complete it afterwards.
         // ----------------------------------------------------
 
-        tx.set(_firestore.collection('users').doc(user.uid), {
+        tx.set(_firestore.collection('users_public').doc(user.uid), {
           'uid': user.uid,
           'username': normalized,
           'usernameLower': normalized,
@@ -741,7 +755,10 @@ class AuthService {
     // ----------------------------------------------------------
 
     try {
-      await _firestore.collection('users').doc(user.uid).delete();
+      final WriteBatch batch = _firestore.batch();
+      batch.delete(_firestore.collection('users_public').doc(user.uid));
+      batch.delete(_firestore.collection('users_private').doc(user.uid));
+      await batch.commit();
     } catch (e) {
       debugPrint('Rollback profile delete failed: $e');
     }

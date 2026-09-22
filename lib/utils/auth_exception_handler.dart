@@ -28,27 +28,55 @@ class AuthExceptionHandler {
         case 'network-request-failed':
           return 'Failed to connect to the internet.';
         default:
-          return e.message ?? 'Authentication error occurred.';
+          return 'Authentication failed. Please try again.';
       }
     }
     if (e is FirebaseFunctionsException) {
       switch (e.code) {
         case 'failed-precondition':
-          return 'Please reauthenticate your account, then try again.';
+          return _failedPreconditionMessage(e.message);
         case 'unauthenticated':
-          return 'Session expired. Please sign in again.';
+          return 'Your session could not be verified. Restart the app, sign in, and try again.';
         case 'permission-denied':
           return 'You do not have permission for this action.';
+        case 'invalid-argument':
+          return 'Some submitted information is invalid. Review it and try again.';
         case 'not-found':
-          return 'Data not found.';
+          return 'The requested item is no longer available.';
         case 'resource-exhausted':
           return 'Too many requests. Please try again shortly.';
         case 'deadline-exceeded':
           return 'Request timed out. Check your connection and try again.';
+        case 'unavailable':
+          return 'The service is temporarily unavailable. Please try again.';
         default:
-          return e.message ?? 'Server error occurred.';
+          return 'The request could not be completed. Please try again.';
       }
     }
-    return 'Error: $e';
+    return 'Something went wrong. Please try again.';
+  }
+
+  static String _failedPreconditionMessage(String? rawMessage) {
+    final String message = (rawMessage ?? '').toLowerCase();
+    if (message.contains('recent login') ||
+        message.contains('reauthenticate')) {
+      return 'Please sign in again, then retry this action.';
+    }
+    if (message.contains('only pending')) {
+      return 'Only pending orders can be cancelled.';
+    }
+    if (message.contains('legacy order') || message.contains('restock')) {
+      return 'This order cannot be cancelled in the app. Contact Support for help.';
+    }
+    if (message.contains('stock')) {
+      return 'Some products do not have enough stock. Review your cart and try again.';
+    }
+    if (message.contains('product') ||
+        message.contains('inventory') ||
+        message.contains('price') ||
+        message.contains('order items')) {
+      return 'Some cart items changed or are unavailable. Review your cart and try again.';
+    }
+    return 'This action cannot be completed right now.';
   }
 }

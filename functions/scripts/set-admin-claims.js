@@ -115,9 +115,13 @@ async function main() {
     projectId: request.projectId,
   });
   const user = await admin.auth().getUser(request.uid);
-  const profile = await admin.firestore().collection('users').doc(request.uid).get();
-  if (!profile.exists) {
-    throw new Error(`Firestore profile users/${request.uid} does not exist.`);
+  const firestore = admin.firestore();
+  const [publicProfile, legacyProfile] = await Promise.all([
+    firestore.collection('users_public').doc(request.uid).get(),
+    firestore.collection('users').doc(request.uid).get(),
+  ]);
+  if (!publicProfile.exists && !legacyProfile.exists) {
+    throw new Error(`Firestore profile for ${request.uid} does not exist.`);
   }
 
   const claims = { ...(user.customClaims || {}) };
@@ -153,13 +157,14 @@ async function main() {
   }
 
   await admin.auth().setCustomUserClaims(request.uid, claims);
-  await admin.firestore().collection('users').doc(request.uid).set({
+  await firestore.collection('users_private').doc(request.uid).set({
+    uid: request.uid,
     role: request.role,
     adminScopes: request.role === 'user' ? [] : claims.adminScopes,
     authorizationSource: 'firebase_auth_custom_claims',
     updatedAt: admin.firestore.FieldValue.serverTimestamp(),
   }, { merge: true });
-  await admin.firestore().collection('admin_audit_logs').add({
+  await firestore.collection('admin_audit_logs').add({
     action: 'admin_access_bootstrapped',
     source: 'local_admin_sdk',
     actorUid: 'trusted_local_operator',

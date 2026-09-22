@@ -5,10 +5,16 @@ import 'package:sincerelysea/models/order.dart' as app_order;
 import 'package:sincerelysea/screens/orders/order_detail_screen.dart';
 import 'package:sincerelysea/services/order_service.dart';
 import 'package:sincerelysea/widgets/order_card.dart';
+import 'package:sincerelysea/widgets/customer_state_view.dart';
 
-class OrderHistoryScreen extends StatelessWidget {
+class OrderHistoryScreen extends StatefulWidget {
   const OrderHistoryScreen({super.key});
 
+  @override
+  State<OrderHistoryScreen> createState() => _OrderHistoryScreenState();
+}
+
+class _OrderHistoryScreenState extends State<OrderHistoryScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -24,8 +30,12 @@ class OrderHistoryScreen extends StatelessWidget {
                 return const Center(child: CircularProgressIndicator());
               }
               if (snapshot.hasError) {
-                return Center(
-                  child: Text('Failed to load orders: ${snapshot.error}'),
+                return CustomerStateView(
+                  icon: Icons.cloud_off_outlined,
+                  title: 'Orders unavailable',
+                  message: 'Check your connection and try again.',
+                  actionLabel: 'Retry',
+                  onAction: () => setState(() {}),
                 );
               }
 
@@ -35,7 +45,12 @@ class OrderHistoryScreen extends StatelessWidget {
                       .map(app_order.Order.fromFirestore)
                       .toList(growable: false);
               if (orders.isEmpty) {
-                return const Center(child: Text('No orders yet.'));
+                return const CustomerStateView(
+                  icon: Icons.receipt_long_outlined,
+                  title: 'No orders yet',
+                  message:
+                      'Orders placed through SincerelySea Store will appear here.',
+                );
               }
 
               return ListView.separated(

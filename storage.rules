@@ -5,52 +5,86 @@ service firebase.storage {
       return request.auth != null;
     }
 
-    // Post images are readable by anyone with URL.
-    // Writer is restricted to file name prefixed by own uid: {uid}_{timestamp}.jpg
-    match /post_images/{fileName} {
-      allow read: if true;
-      allow write: if signedIn()
-        && request.resource != null
-        && request.resource.contentType.matches('image/.*')
-        && fileName.matches('^' + request.auth.uid + '_.*$');
-      allow delete: if signedIn()
-        && fileName.matches('^' + request.auth.uid + '_.*$');
+    function isAllowedImage() {
+      return request.resource != null
+        && request.resource.contentType is string
+        && request.resource.contentType in [
+          'image/jpeg',
+          'image/png',
+          'image/webp'
+        ];
     }
 
-    // Profile image path: profile_images/{uid}.jpg
+    function isValidImageSize(maxBytes) {
+      return request.resource != null
+        && request.resource.size > 0
+        && request.resource.size <= maxBytes;
+    }
+
+    function isOwnPostImage(fileName) {
+      return signedIn()
+        && fileName.matches('^' + request.auth.uid + '_[0-9]+[.]jpg$');
+    }
+
+    function isSupportedAttachmentName(fileName) {
+      return fileName.matches(
+        '^[0-9]+_[0-9]{4}[.](jpg|jpeg|png|webp)$'
+      );
+    }
+
+    function attachmentTypeMatchesName(fileName) {
+      return (fileName.matches('.*[.](jpg|jpeg)$')
+          && request.resource.contentType == 'image/jpeg')
+        || (fileName.matches('.*[.]png$')
+          && request.resource.contentType == 'image/png')
+        || (fileName.matches('.*[.]webp$')
+          && request.resource.contentType == 'image/webp');
+    }
+
+    // Community profile media. The object name is fixed to the authenticated
+    // customer, while reads require the same signed-in community boundary as
+    // users_public. The .jpg legacy path is retained for compatibility.
     match /profile_images/{fileName} {
-      allow read: if true;
-      allow write: if signedIn()
+      allow read: if signedIn();
+      allow create, update: if signedIn()
         && fileName == request.auth.uid + '.jpg'
-        && request.resource != null
-        && request.resource.contentType.matches('image/.*');
+        && isAllowedImage()
+        && isValidImageSize(5 * 1024 * 1024);
       allow delete: if signedIn()
         && fileName == request.auth.uid + '.jpg';
     }
 
-    // Support attachment path: support_attachments/{uid}/{fileName}
+    // Community post media. Ownership is bound to the authenticated UID in
+    // the existing flat filename. SEC-05 document visibility cannot be fully
+    // reproduced without a post ID in this legacy Storage path.
+    match /post_images/{fileName} {
+      allow read: if signedIn();
+      allow create, update: if isOwnPostImage(fileName)
+        && isAllowedImage()
+        && isValidImageSize(10 * 1024 * 1024);
+      allow delete: if isOwnPostImage(fileName);
+    }
+
+    // Private customer support evidence. Custom metadata never grants access.
     match /support_attachments/{uid}/{fileName} {
       allow read: if signedIn() && request.auth.uid == uid;
-      allow write: if signedIn()
+      allow create, update: if signedIn()
         && request.auth.uid == uid
-        && request.resource != null
-        && request.resource.contentType.matches('image/.*');
-      allow delete: if signedIn()
-        && request.auth.uid == uid;
+        && isSupportedAttachmentName(fileName)
+        && isAllowedImage()
+        && attachmentTypeMatchesName(fileName)
+        && isValidImageSize(8 * 1024 * 1024);
+      allow delete: if signedIn() && request.auth.uid == uid;
     }
 
-    // Product gallery path: users/{uid}/products/{productId}/{fileName}
+    // Legacy product-gallery path. Catalog/store media is official content:
+    // authenticated customers may read it, but only trusted Admin SDK code may
+    // create, replace, or delete it outside these client Rules.
     match /users/{uid}/products/{productId}/{fileName} {
-      allow read: if true;
-      allow write: if signedIn()
-        && request.auth.uid == uid
-        && request.resource != null
-        && request.resource.contentType.matches('image/.*');
-      allow delete: if signedIn()
-        && request.auth.uid == uid;
+      allow read: if signedIn();
+      allow write: if false;
     }
 
-    // Deny other storage paths by default.
     match /{allPaths=**} {
       allow read, write: if false;
     }

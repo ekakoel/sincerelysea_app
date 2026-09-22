@@ -1,5 +1,9 @@
 # SincerelySea Security Operations
 
+## Security checkpoint authority
+
+SEC-01 through SEC-07 are the frozen security baseline. The canonical phase status, coordinated production prerequisites, rollout sequence, rollback boundaries, acceptance gate, smoke matrix, STOP conditions, and MOB-02 boundary live in [PRODUCTION_ROLLOUT.md](PRODUCTION_ROLLOUT.md). This file retains implementation and SEC-01 production evidence; it must not be interpreted as proof that SEC-02 through SEC-07 migrations, deployments, service enforcement, or production verification are complete.
+
 ## Role authority
 
 Firebase Authentication custom claims are the sole authorization source for privileged application access:
@@ -9,7 +13,7 @@ Firebase Authentication custom claims are the sole authorization source for priv
 - `adminScopes: string[]` limits an admin to `products`, `orders`, `finance`, `community`, and/or `roles`.
 - An admin claim with a missing or empty scope list retains all scopes for compatibility; only trusted Admin SDK code can create that state.
 
-The `role` and `adminScopes` fields in `users/{uid}` are display and migration metadata only. Firestore Rules do not use them for authorization. Clients cannot create privileged values or add, remove, or change `role`, `adminScopes`, `isAdmin`, `isDeveloper`, `permissions`, `official`, `isOfficial`, `endorsement`, `accountVerified`, or `verifiedOwner`.
+The `role` and `adminScopes` fields in `users_private/{uid}` are restricted display and migration metadata only. Firestore Rules do not use them for authorization. Clients cannot create privileged values or add, remove, or change authority metadata.
 
 ## Trusted role changes
 
@@ -28,7 +32,7 @@ Flutter is customer-facing for every Firebase identity. An account with `admin`,
 
 This product boundary does not replace authorization. Claim-aware Firestore Rules, trusted Admin SDK scripts, the deployed callable, and `admin_audit_logs` remain intact for the future backend management plane.
 
-A target user must exist in both Firebase Auth and `users/{uid}`. A changed user must sign out and back in, or otherwise force an ID-token refresh, before the new authorization is visible to Flutter and Firestore Rules.
+A target user must exist in both Firebase Auth and `users_public/{uid}`. A changed user must sign out and back in, or otherwise force an ID-token refresh, before the new authorization is visible to Flutter and Firestore Rules.
 
 ## Trusted financial reporting (SEC-02)
 
@@ -47,6 +51,69 @@ Flutter now submits only product IDs, quantities, shipping/contact input, and a 
 Firestore Rules preserve own-order and scoped backend-admin reads but deny every client create, update, and delete on `orders`. Ordinary customers remain unable to mutate products or stock. Existing legacy orders remain readable; pending legacy orders are intentionally rejected by trusted cancellation because their item and stock snapshots were client-authored and cannot be safely restored without operator reconciliation. No production Rules or Functions deployment or production-data migration occurred.
 
 SEC-01 remains 7/8 with its production fresh-token smoke pending. SEC-02 and SEC-03 are implemented and tested in the current source tree but are not deployed.
+
+## User data privacy (SEC-04)
+
+Customer identity is split by visibility. `users_public/{uid}` contains a strict allowlist of community profile fields and is readable only by signed-in customers. `users_private/{uid}` contains account/contact data and non-authoritative role mirrors and is readable only by its owner; clients cannot change authority metadata. Mixed legacy `users/{uid}` documents are owner-only until migration. Profile, discovery, follow, post, checkout prefill, account export/deletion, notifications, and trusted role-management source paths now use the appropriate collection.
+
+Public community writes no longer fall back to an email prefix when a public profile lookup fails. Account deletion removes public and private documents through the trusted backend. Focused Rules tests cover public-field allowlisting, cross-user public reads, private-read denial, owner private access, and legacy owner-only reads.
+
+Terms & Conditions, Privacy Policy, and Support received application policy/content alignment for the customer-only community and official-store mobile architecture. Shared app/store/support/version metadata lives in `LegalContent`; registration acceptance and settings/support navigation continue to open the canonical screens. This is not an external legal review, and consent-version history remains a future enhancement.
+
+SEC-04 source and tests are complete but are not deployed. Production requires a reviewed backfill from mixed `users` documents into `users_public` and `users_private` before the app and Rules are released together. SEC-01 remains 7/8; SEC-02 and SEC-03 remain implemented/tested and not deployed.
+
+## Post visibility and block enforcement (SEC-05)
+
+Firestore Rules now interpret customer community posts as `public` (authenticated community), `followers` (owner plus approved follower records), or `private` (owner only). Pending follow requests do not grant access. A block in either direction overrides post, comment, reply, like, and share access; the post owner retains access to their own content. Comment and reply reads and new interactions re-evaluate the parent post policy.
+
+Customer post creation is restricted to self-owned normal community posts. Post ownership/type/product linkage and engagement counters are protected; owner edits are allowlisted and like changes are limited to the authenticated caller's own membership. Block documents use deterministic owner/target paths and validated minimal data. Hidden and saved posts remain private owner preferences and do not become authorization relationships.
+
+Because Firestore Rules cannot filter an unsafe broad query, feed, hashtag search, map explore, and profile post surfaces use shared author-scoped queries. Public profiles provide only safe author identities; each post query is constrained by author and allowed visibility, and a reverse-block permission denial removes that author from results without exposing their block document. This avoids a new composite index but is a current-scale strategy that should be replaced by a trusted fan-out/read model before large-scale growth.
+
+Legacy customer community posts without `visibility` are owner-only and excluded from cross-user discovery until a reviewed normalization backfill. Legacy official product posts remain readable to signed-in customers, subject to symmetric blocks. SEC-05 source/tests are complete and not deployed; rollout must retain SEC-03 order reconciliation, SEC-04 profile backfill, post-visibility normalization, and coordinated app/Functions/Rules release prerequisites.
+
+## Storage and media security (SEC-06)
+
+Active Storage paths are classified as follows:
+
+| Path | Classification | Client access |
+| --- | --- | --- |
+| `profile_images/{uid}.jpg` | customer-owned, community-readable | signed-in read; owner create/update/delete |
+| `post_images/{uid}_{timestamp}.jpg` | customer-owned, community-readable | signed-in read; filename-bound owner create/update/delete |
+| `support_attachments/{uid}/{file}` | private customer | owner read/create/update/delete only |
+| `users/{uid}/products/{productId}/{file}` | legacy official/catalog media | signed-in read; all customer writes/deletes denied |
+| review media | not applicable | no implementation exists |
+
+Customer uploads accept only exact `image/jpeg`, `image/png`, or `image/webp` metadata. Rules cap profile media at 5 MiB, post media at 10 MiB, and support attachments at 8 MiB; Flutter uses matching limits and understandable validation failures for unsupported, missing, empty, or oversized media. Custom metadata is never an authority signal. Official product/store media remains customer read-only and preserves `storeId=sincerelysea` and `storeName=SincerelySea Store`; future writes belong to trusted Admin SDK/backend infrastructure.
+
+New support tickets store an owner-bound Storage path and no tokenized `attachmentUrl`. Legacy support records may still contain long-lived download URLs and therefore require a production inventory, safe path backfill, and token revocation before privacy can be considered normalized. No Storage objects were migrated or deleted in SEC-06.
+
+The flat post filename contains no post ID, so Storage Rules cannot reproduce SEC-05 public/follower/private and symmetric-block checks. Storage now enforces authentication, namespace ownership, type, size, and operation boundaries, while Firestore remains authoritative for post visibility. Existing profile/post `getDownloadURL()` values remain bearer-style direct-media links and can bypass the intended signed-in read boundary if shared. Closing that gap requires a separately reviewed path/token or trusted-delivery redesign; SEC-06 does not add a proxy/CDN.
+
+SEC-06 source and tests are complete but are not deployed. App Check client activation is preserved, but SEC-06 does not rely on or claim production App Check enforcement. Rollout retains legacy pending-order reconciliation, `users_public`/`users_private` backfill, legacy community visibility normalization, support-token remediation, and a coordinated app/Functions/Firestore Rules/Storage Rules release. SEC-01 remains 7/8; SEC-02 and SEC-03 remain implemented/tested and not deployed; SEC-04 source/tests remain complete with migration pending; SEC-05 remains implemented/tested with migration pending.
+
+## App Check production readiness (SEC-07)
+
+App Check remains an abuse-reduction layer in addition to Firebase Auth, Firestore Rules, Storage Rules, and trusted backend validation. It is not an identity or authorization source, and SEC-07 makes no Rules decision depend on it.
+
+**Client integration:** Firebase initializes first. Flutter debug builds use the Android and Apple debug providers and keep unsupported local Apple environments usable. Profile/release builds use Play Integrity on Android and App Attest with DeviceCheck fallback on Apple, enable token auto-refresh, and fail closed before protected Firebase use when production activation fails. The repository contains no hardcoded App Check debug token. Android release builds no longer fall back to the debug signing identity; operators must provide a private, gitignored release keystore configuration. The iOS Runner declares the App Attest entitlement as development for Debug and production for Profile/Release.
+
+**Callable enforcement:** `hardDeleteAccount`, `createCustomerOrder`, and `cancelCustomerOrder` declare Firebase Functions SDK-native `enforceAppCheck: true` while retaining `request.auth`, input, ownership, state, and idempotency checks. `setUserAdminAccess` intentionally retains its trusted claim-based operator/backend boundary rather than requiring a customer-mobile attestation. This source configuration is tested but not deployed, so production callable enforcement is pending.
+
+**Firebase service enforcement:** Firestore and Storage production App Check enforcement has not been enabled or verified. Their Rules remain independently secure. Enabling those service settings is a staged operator action after provider registration, compatible app rollout, monitoring, and real Android/iOS device validation. Local tests verify source/configuration only; they do not prove genuine production attestation.
+
+SEC-07 source/test readiness is complete. SEC-01 remains 7/8; SEC-02 and SEC-03 remain implemented/tested and not deployed; SEC-04 source/tests remain complete with migration pending; SEC-05 remains implemented/tested with migration pending; SEC-06 remains implemented/tested with media remediation pending.
+
+Production rollout prerequisites remain ordered:
+
+1. legacy pending-order reconciliation
+2. `users_public`/`users_private` production backfill
+3. legacy community post visibility normalization
+4. support media/token remediation
+5. any confirmed Storage legacy normalization
+6. coordinated app/Functions/Firestore Rules/Storage Rules deployment
+7. production App Check provider registration/configuration
+8. staged App Check enforcement and real-device validation
 
 ## First admin bootstrap
 
@@ -100,7 +167,9 @@ Before deploying claim-authoritative Rules to production:
 
 There are no administrator emails, UID allowlists, or credentials hardcoded in application code. Approved bootstrap UIDs may be retained in this operational record as deployment evidence; authorization still comes only from Firebase Auth custom claims.
 
-## Production activation order
+## Historical SEC-01 activation order
+
+This sequence records the narrow SEC-01 activation already attempted. It is not the coordinated SEC-02 through SEC-07 rollout plan; use [PRODUCTION_ROLLOUT.md](PRODUCTION_ROLLOUT.md) for that authority.
 
 1. Confirm Firebase CLI login and explicit target `gen-lang-client-0026437130`.
 2. Confirm the Cloud Functions API is enabled, enumerate deployed Functions, and ensure a targeted deployment will not delete unrelated resources.
@@ -158,7 +227,7 @@ No suitable normal-customer production session was available, so no customer ide
 
 The smoke attempt performed no production write, deletion, notification, order/product/finance mutation, role/claim change, Rules deployment, or IAM change. SEC-01 remains at 7/8 and blocked until the matrix is executed from a reachable fresh signed-in application session or another pre-approved secure token-signing environment.
 
-## Rollback and recovery
+## SEC-01 rollback and recovery
 
 To revoke a compromised account, use the trusted script with role `user`, revoke the user's refresh tokens in Firebase Auth, and review `admin_audit_logs`. Do not restore Rules that trust the Firestore role mirror. If the callable deployment fails, continue using the local trusted script until the backend is repaired; this preserves the same custom-claim authority boundary.
 

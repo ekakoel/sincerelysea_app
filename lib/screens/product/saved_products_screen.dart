@@ -8,10 +8,16 @@ import 'package:sincerelysea/services/wishlist_service.dart';
 import 'package:sincerelysea/theme/app_colors.dart';
 import 'package:sincerelysea/widgets/app_check_network_image.dart';
 import 'package:sincerelysea/widgets/product_card.dart';
+import 'package:sincerelysea/widgets/customer_state_view.dart';
 
-class SavedProductsScreen extends StatelessWidget {
+class SavedProductsScreen extends StatefulWidget {
   const SavedProductsScreen({super.key});
 
+  @override
+  State<SavedProductsScreen> createState() => _SavedProductsScreenState();
+}
+
+class _SavedProductsScreenState extends State<SavedProductsScreen> {
   @override
   Widget build(BuildContext context) {
     final String? uid = context.read<WishlistService>().currentUserId;
@@ -34,10 +40,12 @@ class SavedProductsScreen extends StatelessWidget {
                 return const Center(child: CircularProgressIndicator());
               }
               if (snapshot.hasError) {
-                return Center(
-                  child: Text(
-                    'Failed to load saved products: ${snapshot.error}',
-                  ),
+                return CustomerStateView(
+                  icon: Icons.cloud_off_outlined,
+                  title: 'Saved products unavailable',
+                  message: 'Check your connection and try again.',
+                  actionLabel: 'Retry',
+                  onAction: () => setState(() {}),
                 );
               }
 
@@ -58,7 +66,11 @@ class SavedProductsScreen extends StatelessWidget {
                       .toList(growable: false);
 
               if (productDocs.isEmpty) {
-                return const Center(child: Text('No saved products yet.'));
+                return const CustomerStateView(
+                  icon: Icons.favorite_border,
+                  title: 'No saved products yet',
+                  message: 'Tap the heart on a product to save it here.',
+                );
               }
 
               return Column(
@@ -158,12 +170,14 @@ class SavedProductsScreen extends StatelessWidget {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Removed from saved products')),
       );
-    } catch (e) {
+    } catch (_) {
       if (!context.mounted) {
         return;
       }
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to update saved products: $e')),
+        const SnackBar(
+          content: Text('Could not update saved products. Please try again.'),
+        ),
       );
     }
   }

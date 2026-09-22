@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:sincerelysea/models/cart_item.dart';
+import 'package:sincerelysea/models/order.dart' as app_order;
 
 class CheckoutInfo {
   const CheckoutInfo({
@@ -32,6 +33,21 @@ class OrderService {
         .where('userId', isEqualTo: user.uid)
         .orderBy('createdAt', descending: true)
         .snapshots();
+  }
+
+  Future<app_order.Order?> getMyOrderOnce(String orderId) async {
+    final User? user = _auth.currentUser;
+    if (user == null || orderId.trim().isEmpty) {
+      return null;
+    }
+    final DocumentSnapshot<Map<String, dynamic>> snapshot = await _ordersRef
+        .doc(orderId)
+        .get();
+    if (!snapshot.exists ||
+        snapshot.data()?['userId']?.toString() != user.uid) {
+      return null;
+    }
+    return app_order.Order.fromFirestore(snapshot);
   }
 
   Future<void> cancelOrder(String orderId) async {

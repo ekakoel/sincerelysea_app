@@ -56,8 +56,8 @@ class ModerationService {
       return Stream<bool>.value(false);
     }
     return _userBlocksRef(
-      uid,
-    ).doc(user.uid).snapshots().map((doc) => doc.exists);
+      user.uid,
+    ).doc(uid).snapshots().map((doc) => doc.exists);
   }
 
   Future<bool> isUserBlocked(String uid) async {

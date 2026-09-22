@@ -1,7 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:sincerelysea/models/cart_item.dart';
-import 'package:sincerelysea/models/order.dart' as app_order;
 
 class CartService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
@@ -120,14 +119,5 @@ class CartService {
       batch.delete(doc.reference);
     }
     await batch.commit();
-  }
-
-  Future<void> addOrderItemsToCart(List<app_order.OrderItem> items) async {
-    for (final app_order.OrderItem item in items) {
-      if (item.productId.trim().isEmpty || item.quantity <= 0) {
-        continue;
-      }
-      await addToCart(productId: item.productId, quantity: item.quantity);
-    }
   }
 }

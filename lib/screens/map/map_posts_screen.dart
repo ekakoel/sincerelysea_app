@@ -11,6 +11,7 @@ import 'package:sincerelysea/services/post_service.dart';
 import 'package:sincerelysea/theme/app_colors.dart';
 import 'package:sincerelysea/utils/post_location_label.dart';
 import 'package:sincerelysea/widgets/app_check_network_image.dart';
+import 'package:sincerelysea/widgets/customer_state_view.dart';
 
 class MapPostsScreen extends StatefulWidget {
   const MapPostsScreen({super.key});
@@ -64,17 +65,23 @@ class _MapPostsScreenState extends State<MapPostsScreen> {
     final PostService postService = context.read<PostService>();
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Explore Map')),
-      body: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+      appBar: AppBar(title: const Text('Explore')),
+      body: StreamBuilder<List<QueryDocumentSnapshot<Map<String, dynamic>>>>(
         stream: postService.getPostsForMap(),
         builder:
             (
               BuildContext context,
-              AsyncSnapshot<QuerySnapshot<Map<String, dynamic>>> snapshot,
+              AsyncSnapshot<List<QueryDocumentSnapshot<Map<String, dynamic>>>>
+              snapshot,
             ) {
               if (snapshot.hasError && _latestDocs.isEmpty) {
-                return Center(
-                  child: Text('Failed to load map posts: ${snapshot.error}'),
+                return CustomerStateView(
+                  icon: Icons.map_outlined,
+                  title: 'Explore is unavailable',
+                  message:
+                      'Check your connection and try loading the map again.',
+                  actionLabel: 'Retry',
+                  onAction: () => setState(() {}),
                 );
               }
 
@@ -83,7 +90,7 @@ class _MapPostsScreenState extends State<MapPostsScreen> {
                   _latestDocs.isNotEmpty;
 
               final List<QueryDocumentSnapshot<Map<String, dynamic>>> docs =
-                  snapshot.data?.docs ?? _latestDocs;
+                  snapshot.data ?? _latestDocs;
 
               if (docs.isEmpty &&
                   snapshot.connectionState == ConnectionState.waiting) {

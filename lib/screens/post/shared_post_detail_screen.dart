@@ -10,19 +10,25 @@ import 'package:sincerelysea/services/wishlist_service.dart';
 import 'package:sincerelysea/utils/post_location_label.dart';
 import 'package:sincerelysea/widgets/app_check_network_image.dart';
 import 'package:sincerelysea/widgets/product_card.dart';
+import 'package:sincerelysea/widgets/customer_state_view.dart';
 
-class SharedPostDetailScreen extends StatelessWidget {
+class SharedPostDetailScreen extends StatefulWidget {
   const SharedPostDetailScreen({super.key, required this.postId});
 
   final String postId;
 
+  @override
+  State<SharedPostDetailScreen> createState() => _SharedPostDetailScreenState();
+}
+
+class _SharedPostDetailScreenState extends State<SharedPostDetailScreen> {
   @override
   Widget build(BuildContext context) {
     final PostService postService = context.read<PostService>();
     return Scaffold(
       appBar: AppBar(title: const Text('Shared Post')),
       body: StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
-        stream: postService.getPost(postId),
+        stream: postService.getPost(widget.postId),
         builder:
             (
               BuildContext context,
@@ -32,13 +38,23 @@ class SharedPostDetailScreen extends StatelessWidget {
                 return const Center(child: CircularProgressIndicator());
               }
               if (snapshot.hasError) {
-                return Center(
-                  child: Text('Failed to load post: ${snapshot.error}'),
+                return CustomerStateView(
+                  icon: Icons.cloud_off_outlined,
+                  title: 'Post unavailable',
+                  message:
+                      'This post may be private, deleted, or temporarily unavailable.',
+                  actionLabel: 'Retry',
+                  onAction: () => setState(() {}),
                 );
               }
               final Map<String, dynamic>? data = snapshot.data?.data();
               if (data == null) {
-                return const Center(child: Text('Post not found.'));
+                return const CustomerStateView(
+                  icon: Icons.article_outlined,
+                  title: 'Post not found',
+                  message:
+                      'This post may have been deleted or is no longer accessible.',
+                );
               }
 
               final String username =
@@ -137,21 +153,28 @@ class SharedPostDetailScreen extends StatelessWidget {
                             BuildContext context,
                             AsyncSnapshot<Product?> productSnapshot,
                           ) {
+                            if (productSnapshot.connectionState ==
+                                ConnectionState.waiting) {
+                              return const Center(
+                                child: CircularProgressIndicator(),
+                              );
+                            }
                             final Product? product = productSnapshot.data;
-                            if (product == null) {
-                              return SizedBox(
-                                width: double.infinity,
-                                child: OutlinedButton(
-                                  onPressed: () {
-                                    Navigator.of(context).push(
-                                      MaterialPageRoute<void>(
-                                        builder: (_) => ProductDetailScreen(
-                                          productId: productId,
+                            if (productSnapshot.hasError || product == null) {
+                              return const Card(
+                                child: Padding(
+                                  padding: EdgeInsets.all(14),
+                                  child: Row(
+                                    children: <Widget>[
+                                      Icon(Icons.inventory_2_outlined),
+                                      SizedBox(width: 10),
+                                      Expanded(
+                                        child: Text(
+                                          'The linked product is no longer available.',
                                         ),
                                       ),
-                                    );
-                                  },
-                                  child: const Text('View Product'),
+                                    ],
+                                  ),
                                 ),
                               );
                             }
@@ -245,13 +268,15 @@ class SharedPostDetailScreen extends StatelessWidget {
           ),
         ),
       );
-    } catch (e) {
+    } catch (_) {
       if (!context.mounted) {
         return;
       }
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Failed to update wishlist: $e')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Could not update saved products. Please try again.'),
+        ),
+      );
     }
   }
 }

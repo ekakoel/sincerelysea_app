@@ -11,7 +11,7 @@ class SessionManagementScreen extends StatelessWidget {
     final User? user = context.watch<User?>();
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Session Management')),
+      appBar: AppBar(title: const Text('Session & Sign-in')),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
         children: <Widget>[
@@ -32,8 +32,8 @@ class SessionManagementScreen extends StatelessWidget {
               leading: Icon(Icons.info_outline),
               title: Text('About sessions'),
               subtitle: Text(
-                'Current release keeps one active session per device. '
-                'Global multi-device revoke can be added using backend token registry.',
+                'This device shows your current sign-in status. Other signed-in '
+                'devices are not listed in this version.',
               ),
             ),
           ),

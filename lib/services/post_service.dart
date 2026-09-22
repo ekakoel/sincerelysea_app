@@ -4,6 +4,8 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter_image_compress/flutter_image_compress.dart';
+import 'package:sincerelysea/config/media_upload_policy.dart';
+import 'package:sincerelysea/services/social_post_query_service.dart';
 import 'package:sincerelysea/services/telemetry_service.dart';
 
 class PostService {
@@ -11,30 +13,17 @@ class PostService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FirebaseStorage _storage = FirebaseStorage.instance;
+  final SocialPostQueryService _socialQueries = SocialPostQueryService();
 
-  // Stream of posts
-  Stream<QuerySnapshot<Map<String, dynamic>>> getPosts() {
-    return _firestore
-        .collection('posts')
-        .orderBy('timestamp', descending: true)
-        .snapshots();
+  Stream<List<SocialPostDocument>> getPosts() {
+    return _socialQueries.watchVisiblePosts();
   }
 
-  // Paginated posts fetch
-  Future<QuerySnapshot<Map<String, dynamic>>> getPostsPaginated({
+  Future<List<SocialPostDocument>> getPostsPaginated({
     required int limit,
-    DocumentSnapshot? startAfter,
-  }) async {
-    Query<Map<String, dynamic>> query = _firestore
-        .collection('posts')
-        .orderBy('timestamp', descending: true)
-        .limit(limit);
-
-    if (startAfter != null) {
-      query = query.startAfterDocument(startAfter);
-    }
-
-    return query.get();
+    required int offset,
+  }) {
+    return _socialQueries.loadVisiblePosts(limit: limit, offset: offset);
   }
 
   // Get single post stream (for real-time updates of likes/comments count)
@@ -42,12 +31,8 @@ class PostService {
     return _firestore.collection('posts').doc(postId).snapshots();
   }
 
-  Stream<QuerySnapshot<Map<String, dynamic>>> getUserPosts(String uid) {
-    // Avoid composite-index requirement (uid + timestamp) by sorting in client.
-    return _firestore
-        .collection('posts')
-        .where('uid', isEqualTo: uid)
-        .snapshots();
+  Stream<List<SocialPostDocument>> getUserPosts(String uid) {
+    return _socialQueries.watchAuthorPosts(uid);
   }
 
   // Add a new post
@@ -65,25 +50,7 @@ class PostService {
           <String>{'public', 'followers', 'private'}.contains(visibility)
           ? visibility
           : 'public';
-      String username = user.displayName?.trim().isNotEmpty == true
-          ? user.displayName!.trim()
-          : (user.email?.split('@')[0] ?? 'Anonymous');
-      try {
-        final DocumentSnapshot<Map<String, dynamic>> userDoc = await _firestore
-            .collection('users')
-            .doc(user.uid)
-            .get()
-            .timeout(const Duration(seconds: 3));
-        final Map<String, dynamic> userData =
-            userDoc.data() ?? <String, dynamic>{};
-        final String? profileUsername = userData['username']?.toString().trim();
-        if (profileUsername != null && profileUsername.isNotEmpty) {
-          username = profileUsername;
-        }
-      } catch (_) {
-        // Firestore profile lookup is best-effort only. Post creation should
-        // still proceed using Firebase Auth fallback identity data.
-      }
+      final String username = await _publicUsername(user);
       final List<String> locationKeywords = _buildLocationKeywords(
         location?.trim() ?? '',
       );
@@ -139,8 +106,14 @@ class PostService {
     final user = _auth.currentUser;
     if (user == null) return null;
 
+    MediaUploadPolicy.contentTypeForPath(imageFile.path);
     final File optimizedFile = await _optimizeImageBeforeUpload(imageFile);
     final bool shouldDeleteTempFile = optimizedFile.path != imageFile.path;
+    final String contentType = await MediaUploadPolicy.validateImage(
+      optimizedFile,
+      maxBytes: MediaUploadPolicy.postMaxBytes,
+      label: 'Post image',
+    );
 
     final String fileName =
         '${user.uid}_${DateTime.now().millisecondsSinceEpoch}.jpg';
@@ -151,7 +124,7 @@ class PostService {
       onProgress?.call(0);
       final UploadTask uploadTask = ref.putFile(
         optimizedFile,
-        SettableMetadata(contentType: 'image/jpeg'),
+        SettableMetadata(contentType: contentType),
       );
 
       subscription = uploadTask.snapshotEvents.listen((TaskSnapshot snapshot) {
@@ -235,6 +208,7 @@ class PostService {
       'content': content.trim(),
       'location': location?.trim() ?? '',
       'locationName': location?.trim() ?? '',
+      'locationKeywords': _buildLocationKeywords(location?.trim() ?? ''),
       'hashtags': sanitizedHashtags,
     });
   }
@@ -298,25 +272,8 @@ class PostService {
     return sanitized;
   }
 
-  Stream<QuerySnapshot<Map<String, dynamic>>> getPostsForMap({
-    String? hashtag,
-  }) {
-    final String normalized = hashtag == null || hashtag.trim().isEmpty
-        ? ''
-        : (hashtag.trim().startsWith('#')
-              ? hashtag.trim()
-              : '#${hashtag.trim()}');
-
-    Query<Map<String, dynamic>> query = _firestore
-        .collection('posts')
-        .orderBy('timestamp', descending: true);
-    if (normalized.isNotEmpty) {
-      query = query.where('hashtags', arrayContains: normalized);
-    }
-
-    // Keep dataset bounded for map performance while still wide enough
-    // to support Top 10/20/50 in the visible area.
-    return query.limit(500).snapshots();
+  Stream<List<SocialPostDocument>> getPostsForMap({String? hashtag}) {
+    return _socialQueries.watchVisiblePosts(hashtag: hashtag, limit: 500);
   }
 
   // Like a post
@@ -362,9 +319,10 @@ class PostService {
       return;
     }
 
+    final String username = await _publicUsername(user);
     final Map<String, dynamic> commentPayload = <String, dynamic>{
       'content': content.trim(),
-      'username': user.displayName ?? user.email?.split('@')[0] ?? 'Anonymous',
+      'username': username,
       'uid': user.uid,
       'timestamp': FieldValue.serverTimestamp(),
       'likes': <String>[],
@@ -449,6 +407,7 @@ class PostService {
   Future<void> addReply(String postId, String commentId, String content) async {
     final User? user = _auth.currentUser;
     if (user != null && content.trim().isNotEmpty) {
+      final String username = await _publicUsername(user);
       await _firestore
           .collection('posts')
           .doc(postId)
@@ -457,13 +416,31 @@ class PostService {
           .collection('replies')
           .add({
             'content': content.trim(),
-            'username':
-                user.displayName ?? user.email?.split('@')[0] ?? 'Anonymous',
+            'username': username,
             'uid': user.uid,
             'timestamp': FieldValue.serverTimestamp(),
             'likes': <String>[],
           });
     }
+  }
+
+  Future<String> _publicUsername(User user) async {
+    try {
+      final DocumentSnapshot<Map<String, dynamic>> userDoc = await _firestore
+          .collection('users_public')
+          .doc(user.uid)
+          .get()
+          .timeout(const Duration(seconds: 3));
+      final String username =
+          userDoc.data()?['username']?.toString().trim() ?? '';
+      if (username.isNotEmpty) {
+        return username;
+      }
+    } catch (_) {
+      // Public profile lookup is best-effort; never fall back to private email.
+    }
+    final String displayName = user.displayName?.trim() ?? '';
+    return displayName.isEmpty ? 'user' : displayName;
   }
 
   // Get replies stream for one comment

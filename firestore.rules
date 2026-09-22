@@ -89,9 +89,39 @@ service cloud.firestore {
             || v.matches('^https://storage.googleapis.com/.*$')));
     }
 
+    function isValidSupportAttachmentPath(uid, value) {
+      return value is string
+        && (value.size() == 0
+          || value.matches(
+            '^support_attachments/' + uid
+              + '/[0-9]+_[0-9]{4}[.](jpg|jpeg|png|webp)$'
+          ));
+    }
+
     function isValidUsername(v) {
       return v is string
         && v.matches('^[a-z0-9_]{3,20}$');
+    }
+
+    function validProductReview(productId) {
+      return request.resource.data.keys().hasOnly([
+          'productId',
+          'userId',
+          'rating',
+          'reviewText',
+          'createdAt',
+          'updatedAt'
+        ])
+        && request.resource.data.productId == productId
+        && request.resource.data.userId is string
+        && request.resource.data.rating is int
+        && request.resource.data.rating >= 1
+        && request.resource.data.rating <= 5
+        && request.resource.data.reviewText is string
+        && request.resource.data.reviewText.size() >= 2
+        && request.resource.data.reviewText.size() <= 1000
+        && request.resource.data.createdAt is timestamp
+        && request.resource.data.updatedAt is timestamp;
     }
 
     function isFollower(ownerUid) {
@@ -99,12 +129,120 @@ service cloud.firestore {
         && exists(/databases/$(database)/documents/users/$(ownerUid)/followers/$(request.auth.uid));
     }
 
+    function isBlockedBetween(firstUid, secondUid) {
+      return isSignedIn()
+        && firstUid != secondUid
+        && (
+          exists(/databases/$(database)/documents/users/$(firstUid)/blocks/$(secondUid))
+          || exists(/databases/$(database)/documents/users/$(secondUid)/blocks/$(firstUid))
+        );
+    }
+
+    function canReadPostData(post) {
+      return isSignedIn()
+        && (
+          post.uid == request.auth.uid
+          || (
+            !isBlockedBetween(post.uid, request.auth.uid)
+            && (
+              post.type == 'product'
+              || post.get('visibility', 'legacy') == 'public'
+              || (
+                post.get('visibility', 'legacy') == 'followers'
+                && isFollower(post.uid)
+              )
+            )
+          )
+        );
+    }
+
     function canReadPost() {
-      return isSignedIn();
+      return canReadPostData(resource.data);
     }
 
     function canReadPostById(postId) {
-      return isSignedIn();
+      return canReadPostData(
+        get(/databases/$(database)/documents/posts/$(postId)).data
+      );
+    }
+
+    function canCommentOnPost(postId) {
+      let post = get(/databases/$(database)/documents/posts/$(postId)).data;
+      return canReadPostData(post)
+        && (
+          post.get('allowComments', 'everyone') == 'everyone'
+          || (
+            post.get('allowComments', 'everyone') == 'followers'
+            && (post.uid == request.auth.uid || isFollower(post.uid))
+          )
+        );
+    }
+
+    function validCommunityPostCreate() {
+      return request.resource.data.keys().hasOnly([
+          'content',
+          'username',
+          'imageUrl',
+          'location',
+          'locationName',
+          'locationKeywords',
+          'geo',
+          'hashtags',
+          'uid',
+          'visibility',
+          'allowComments',
+          'type',
+          'productId',
+          'timestamp',
+          'likes',
+          'commentCount',
+          'shareCount'
+        ])
+        && request.resource.data.type == 'post'
+        && request.resource.data.productId == null
+        && request.resource.data.content is string
+        && request.resource.data.likes is list
+        && request.resource.data.likes.size() == 0
+        && request.resource.data.commentCount == 0
+        && request.resource.data.shareCount == 0;
+    }
+
+    function validPostOwnerUpdate() {
+      return onlyChanges([
+          'content',
+          'imageUrl',
+          'location',
+          'locationName',
+          'locationKeywords',
+          'geo',
+          'hashtags',
+          'visibility',
+          'allowComments',
+          'updatedAt'
+        ])
+        && request.resource.data.visibility in ['public', 'followers', 'private']
+        && request.resource.data.get('allowComments', 'everyone') in ['everyone', 'followers', 'none'];
+    }
+
+    function callerLikeToggleIsValid() {
+      let before = resource.data.get('likes', []);
+      let after = request.resource.data.get('likes', []);
+      return before is list
+        && after is list
+        && (
+          (
+            !(request.auth.uid in before)
+            && request.auth.uid in after
+            && after.size() == before.size() + 1
+            && after.hasAll(before)
+          )
+          || (
+            request.auth.uid in before
+            && !(request.auth.uid in after)
+            && before.size() == after.size() + 1
+            && before.hasAll(after)
+          )
+        );
     }
 
     function validPostType() {
@@ -153,6 +291,76 @@ service cloud.firestore {
         && request.resource.data.get('usernameChangedOnce', false) == true;
     }
 
+    function validPublicProfileKeys() {
+      return request.resource.data.keys().hasOnly([
+        'uid',
+        'username',
+        'usernameLower',
+        'usernameChangedOnce',
+        'displayName',
+        'photoUrl',
+        'bio',
+        'location',
+        'website',
+        'isPrivate',
+        'allowComments',
+        'createdAt',
+        'updatedAt'
+      ]);
+    }
+
+    function publicUsernameUnchanged() {
+      return onlyChanges([
+          'displayName',
+          'bio',
+          'location',
+          'website',
+          'photoUrl',
+          'isPrivate',
+          'allowComments',
+          'updatedAt'
+        ])
+        && request.resource.data.get('username', '') == resource.data.get('username', '')
+        && request.resource.data.get('usernameLower', '') == resource.data.get('usernameLower', '')
+        && request.resource.data.get('usernameChangedOnce', false) == resource.data.get('usernameChangedOnce', false);
+    }
+
+    function publicUsernameChangedOneTime() {
+      return onlyChanges([
+          'username',
+          'usernameLower',
+          'usernameChangedOnce',
+          'updatedAt'
+        ])
+        && isValidUsername(request.resource.data.get('usernameLower', ''))
+        && request.resource.data.get('username', '') == request.resource.data.get('usernameLower', '')
+        && request.resource.data.get('usernameLower', '') != resource.data.get('usernameLower', '')
+        && !(resource.data.get('usernameChangedOnce', false) == true)
+        && request.resource.data.get('usernameChangedOnce', false) == true;
+    }
+
+    function validPrivateProfileKeys() {
+      return request.resource.data.keys().hasOnly([
+        'uid',
+        'email',
+        'phone',
+        'address',
+        'role',
+        'adminScopes',
+        'authorizationSource',
+        'createdAt',
+        'updatedAt'
+      ]);
+    }
+
+    function privateAuthorityFieldsUnchanged() {
+      return !request.resource.data.diff(resource.data).affectedKeys().hasAny([
+        'role',
+        'adminScopes',
+        'authorizationSource'
+      ]);
+    }
+
     function shareCountIncrementedByOne() {
       return request.resource.data.shareCount is int
         && (
@@ -174,25 +382,21 @@ service cloud.firestore {
       allow create: if isSignedIn()
         && request.resource.data.uid == request.auth.uid
         && isValidImageUrl(request.resource.data.imageUrl)
-        && validPostType()
-        && validProductPostLink()
+        && validCommunityPostCreate()
         && (request.resource.data.visibility in ['public', 'followers', 'private'])
         && (
           request.resource.data.allowComments == null
           || request.resource.data.allowComments in ['everyone', 'followers', 'none']
         );
 
-      // Owner can edit any post fields but cannot transfer ownership.
       allow update: if (isOwner(resource.data.uid)
           && request.resource.data.uid == resource.data.uid)
           && isValidImageUrl(request.resource.data.imageUrl)
-          && validPostType()
-          && validProductPostLink()
-        // Non-owner updates are limited to engagement fields.
-        || (isSignedIn()
+          && validPostOwnerUpdate()
+        || (canReadPost()
           && request.resource.data.uid == resource.data.uid
           && (
-            onlyChanges(['likes'])
+            (onlyChanges(['likes']) && callerLikeToggleIsValid())
             || (
               onlyChanges(['shareCount', 'lastShareActorUid'])
               && shareCountIncrementedByOne()
@@ -205,32 +409,50 @@ service cloud.firestore {
       match /comments/{commentId} {
         allow read: if canReadPostById(postId);
 
-        allow create: if isSignedIn()
-          && request.resource.data.uid == request.auth.uid;
+        allow create: if canCommentOnPost(postId)
+          && request.resource.data.uid == request.auth.uid
+          && request.resource.data.keys().hasOnly([
+            'content', 'username', 'uid', 'timestamp', 'likes'
+          ])
+          && request.resource.data.content is string
+          && request.resource.data.content.size() > 0
+          && request.resource.data.content.size() <= 500
+          && request.resource.data.likes is list
+          && request.resource.data.likes.size() == 0;
 
-        // Owner can edit/delete own comment, others can only toggle likes.
         allow update: if (isOwner(resource.data.uid)
-            && request.resource.data.uid == resource.data.uid)
-          || (isSignedIn()
             && request.resource.data.uid == resource.data.uid
-            && onlyChanges(['likes']));
+            && canReadPostById(postId)
+            && onlyChanges(['content']))
+          || (canReadPostById(postId)
+            && request.resource.data.uid == resource.data.uid
+            && onlyChanges(['likes'])
+            && callerLikeToggleIsValid());
 
         allow delete: if isOwner(resource.data.uid);
 
         match /replies/{replyId} {
           allow read: if canReadPostById(postId);
 
-          allow create: if isSignedIn()
+          allow create: if canCommentOnPost(postId)
             && request.resource.data.uid == request.auth.uid
+            && request.resource.data.keys().hasOnly([
+              'content', 'username', 'uid', 'timestamp', 'likes'
+            ])
             && request.resource.data.content is string
             && request.resource.data.content.size() > 0
-            && request.resource.data.content.size() <= 500;
+            && request.resource.data.content.size() <= 500
+            && request.resource.data.likes is list
+            && request.resource.data.likes.size() == 0;
 
           allow update: if (isOwner(resource.data.uid)
-              && request.resource.data.uid == resource.data.uid)
-            || (isSignedIn()
               && request.resource.data.uid == resource.data.uid
-              && onlyChanges(['likes']));
+              && canReadPostById(postId)
+              && onlyChanges(['content']))
+            || (canReadPostById(postId)
+              && request.resource.data.uid == resource.data.uid
+              && onlyChanges(['likes'])
+              && callerLikeToggleIsValid());
 
           allow delete: if isOwner(resource.data.uid);
         }
@@ -267,6 +489,29 @@ service cloud.firestore {
         && resource.data.ownerType == 'business'
         && isOfficialStore(resource.data.ownerId)
         && resource.data.managedByAdmins == true;
+
+      match /reviews/{reviewId} {
+        allow read: if isSignedIn();
+        allow create: if isSignedIn()
+          && reviewId == request.auth.uid
+          && request.resource.data.userId == request.auth.uid
+          && exists(/databases/$(database)/documents/products/$(productId))
+          && validProductReview(productId)
+          && request.resource.data.createdAt == request.time
+          && request.resource.data.updatedAt == request.time;
+        allow update: if isSignedIn()
+          && reviewId == request.auth.uid
+          && resource.data.userId == request.auth.uid
+          && resource.data.productId == productId
+          && exists(/databases/$(database)/documents/products/$(productId))
+          && validProductReview(productId)
+          && onlyChanges(['rating', 'reviewText', 'updatedAt'])
+          && request.resource.data.updatedAt == request.time;
+        allow delete: if isSignedIn()
+          && reviewId == request.auth.uid
+          && resource.data.userId == request.auth.uid
+          && resource.data.productId == productId;
+      }
     }
 
     match /orders/{orderId} {
@@ -320,8 +565,40 @@ service cloud.firestore {
         && resource.data.uid == request.auth.uid;
     }
 
-    match /users/{uid} {
+    match /users_public/{uid} {
       allow read: if isSignedIn();
+      allow create: if isOwner(uid)
+        && request.resource.data.uid == request.auth.uid
+        && validPublicProfileKeys();
+      allow update: if isOwner(uid)
+        && request.resource.data.uid == resource.data.uid
+        && validPublicProfileKeys()
+        && (publicUsernameUnchanged() || publicUsernameChangedOneTime());
+      allow delete: if isOwner(uid);
+    }
+
+    match /users_private/{uid} {
+      allow read: if isOwner(uid);
+      allow create: if isOwner(uid)
+        && request.resource.data.uid == request.auth.uid
+        && validPrivateProfileKeys()
+        && safeCustomerAuthorityFieldsOnCreate();
+      allow update: if isOwner(uid)
+        && request.resource.data.uid == resource.data.uid
+        && validPrivateProfileKeys()
+        && privateAuthorityFieldsUnchanged();
+      allow delete: if isOwner(uid)
+        && !resource.data.keys().hasAny([
+          'role',
+          'adminScopes',
+          'authorizationSource'
+        ]);
+    }
+
+    match /users/{uid} {
+      // Legacy parent documents may contain mixed public/private data.
+      // Keep them owner-only until the required production migration removes them.
+      allow read: if isOwner(uid);
       allow create: if isOwner(uid)
         && request.resource.data.uid == request.auth.uid
         && safeCustomerAuthorityFieldsOnCreate();
@@ -334,12 +611,23 @@ service cloud.firestore {
       match /followers/{followerUid} {
         allow read: if isSignedIn();
         allow create, update: if isSignedIn()
-          && followerUid == request.auth.uid
-          && uid != request.auth.uid
-          && request.resource.data.uid == request.auth.uid;
+          && uid != followerUid
+          && request.resource.data.uid == followerUid
+          && !isBlockedBetween(uid, followerUid)
+          && (
+            (
+              followerUid == request.auth.uid
+              && get(/databases/$(database)/documents/users_public/$(uid)).data.get('isPrivate', false) != true
+            )
+            || (
+              uid == request.auth.uid
+              && exists(/databases/$(database)/documents/users/$(uid)/follow_requests/$(followerUid))
+              && !existsAfter(/databases/$(database)/documents/users/$(uid)/follow_requests/$(followerUid))
+            )
+          );
         allow delete: if isSignedIn()
-          && followerUid == request.auth.uid
-          && uid != request.auth.uid;
+          && uid != followerUid
+          && (followerUid == request.auth.uid || uid == request.auth.uid);
       }
 
       match /follow_requests/{requestUid} {
@@ -354,15 +642,40 @@ service cloud.firestore {
       // uid is the authenticated user, targetUid is who they follow.
       match /following/{targetUid} {
         allow read: if isOwner(uid);
-        allow create, update: if isOwner(uid)
-          && targetUid != request.auth.uid
-          && request.resource.data.uid == targetUid;
-        allow delete: if isOwner(uid)
-          && targetUid != request.auth.uid;
+        allow create, update: if (
+            isOwner(uid)
+            && targetUid != request.auth.uid
+            && request.resource.data.uid == targetUid
+            && !isBlockedBetween(uid, targetUid)
+            && get(/databases/$(database)/documents/users_public/$(targetUid)).data.get('isPrivate', false) != true
+          ) || (
+            isSignedIn()
+            && targetUid == request.auth.uid
+            && uid != targetUid
+            && request.resource.data.uid == targetUid
+            && !isBlockedBetween(uid, targetUid)
+            && exists(/databases/$(database)/documents/users/$(targetUid)/follow_requests/$(uid))
+            && !existsAfter(/databases/$(database)/documents/users/$(targetUid)/follow_requests/$(uid))
+          );
+        allow delete: if (
+            isOwner(uid)
+            && targetUid != request.auth.uid
+          ) || (
+            isSignedIn()
+            && targetUid == request.auth.uid
+            && uid != targetUid
+          );
       }
 
       match /blocks/{targetUid} {
-        allow read, create, update, delete: if isOwner(uid);
+        allow read: if isOwner(uid);
+        allow create, update: if isOwner(uid)
+          && targetUid != request.auth.uid
+          && request.resource.data.keys().hasOnly([
+            'uid', 'username', 'createdAt'
+          ])
+          && request.resource.data.uid == targetUid;
+        allow delete: if isOwner(uid) && targetUid != request.auth.uid;
       }
 
       match /cart/{cartId} {
@@ -370,7 +683,17 @@ service cloud.firestore {
       }
 
       match /hidden_posts/{postId} {
-        allow read, create, update, delete: if isOwner(uid);
+        allow read: if isOwner(uid);
+        allow create, update: if isOwner(uid)
+          && request.resource.data.keys().hasOnly([
+            'postId',
+            'postOwnerUid',
+            'postOwnerUsername',
+            'postCaption',
+            'createdAt'
+          ])
+          && request.resource.data.postId == postId;
+        allow delete: if isOwner(uid);
       }
 
       match /notifications/{notificationId} {
@@ -401,7 +724,11 @@ service cloud.firestore {
           && request.resource.data.priority in ['low', 'normal', 'high']
           && (request.resource.data.attachmentName == null
             || request.resource.data.attachmentName is string)
-          && isValidImageUrl(request.resource.data.attachmentUrl);
+          && request.resource.data.get('attachmentUrl', '') == ''
+          && isValidSupportAttachmentPath(
+            uid,
+            request.resource.data.get('attachmentPath', '')
+          );
 
         allow update: if isOwner(uid)
           && request.resource.data.uid == resource.data.uid
@@ -410,7 +737,10 @@ service cloud.firestore {
           && request.resource.data.description == resource.data.description
           && request.resource.data.contactEmail == resource.data.contactEmail
           && request.resource.data.attachmentName == resource.data.attachmentName
-          && request.resource.data.attachmentUrl == resource.data.attachmentUrl
+          && request.resource.data.get('attachmentUrl', '')
+            == resource.data.get('attachmentUrl', '')
+          && request.resource.data.get('attachmentPath', '')
+            == resource.data.get('attachmentPath', '')
           && request.resource.data.status == resource.data.status
           && request.resource.data.priority == resource.data.priority
           && request.resource.data.createdAt == resource.data.createdAt;
